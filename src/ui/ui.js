@@ -138,8 +138,13 @@ $('#rail').addEventListener('click', e => {
   if (!b) return;
   if (b.dataset.app) {
     const a = appById(b.dataset.app);
-    if (a && !a.url) openSetupApp(a.id);
-    else Z.invoke('app:open', b.dataset.app);
+    if (a && !a.url) { if (ov.open) closeMosaic(); openSetupApp(a.id); return; }
+    if (ov.open) {
+      // no mosaico: fecha-o e mostra logo a app (se já estava aberta, fica aberta)
+      closeMosaic();
+      if (S.fullApp === b.dataset.app || S.openPanel === b.dataset.app) return;
+    }
+    Z.invoke('app:open', b.dataset.app);
   } else if (b.hasAttribute('data-add-app')) openAddApp();
   else openSettings();
 });
@@ -562,7 +567,8 @@ function renderZones() {
     const head = ov.renaming === s.id
       ? `<input id="renameInput" value="${esc(s.name)}" aria-label="Nome do espaço">`
       : `<span data-rename="${s.id}" title="Duplo clique para mudar o nome">${esc(s.name)}</span><em>· ${list.length}</em>${!list.length && S.spaces.length > 1 ? `<button class="zx" type="button" data-rmspace="${s.id}" aria-label="Apagar o espaço ${esc(s.name)}">${ICON.x}</button>` : ''}`;
-    return `<section class="zone" data-zone="${s.id}" style="flex:${basis} 1 ${basis >= 4 ? 460 : 230}px"><div class="zone-h"><i></i>${head}</div><div class="grid">${cards}${f ? '' : `<button class="card newc" type="button" data-newin="${s.id}">${ICON.plus}Separador neste espaço</button>`}</div></section>`;
+    const isCurZone = curTab() && curTab().space === s.id;
+    return `<section class="zone ${isCurZone ? 'cur' : ''}" data-zone="${s.id}" style="flex:${basis} 1 ${basis >= 4 ? 460 : 230}px"><div class="zone-h"><i></i>${head}</div><div class="grid">${cards}${f ? '' : `<button class="card newc" type="button" data-newin="${s.id}">${ICON.plus}Separador neste espaço</button>`}</div></section>`;
   }).join('');
   if (ov.addingSpace) html += `<section class="zone" style="flex:1 1 230px"><div class="zone-h"><i></i><input id="spaceInput" placeholder="Nome do espaço" aria-label="Nome do espaço novo"></div></section>`;
   $('#zones').innerHTML = html || `<div class="empty">Nenhum separador com “${esc($('#mfilter').value.trim())}”. Carrega em Enter para o abrir como endereço ou pesquisa.</div>`;

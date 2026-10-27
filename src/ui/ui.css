@@ -8,6 +8,7 @@
   --fg: #f6f6f4; --soft: #cfcfd2; --muted: #909095;
   --inv-bg: #f6f6f4; --inv-fg: #0b0b0c;
   --veil: rgba(11, 11, 12, .66); --veil-line: rgba(255, 255, 255, .13); --veil-fill: rgba(255, 255, 255, .07);
+  --zone-line: rgba(255, 255, 255, .22); --zone-fill: rgba(255, 255, 255, .035); --zone-cur: rgba(255, 255, 255, .55);
   --shadow: rgba(0, 0, 0, .45);
   --font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -19,6 +20,7 @@
   --fg: #0b0b0c; --soft: #36363a; --muted: #66666b;
   --inv-bg: #0b0b0c; --inv-fg: #ffffff;
   --veil: rgba(246, 246, 247, .72); --veil-line: rgba(0, 0, 0, .1); --veil-fill: rgba(0, 0, 0, .05);
+  --zone-line: rgba(0, 0, 0, .2); --zone-fill: rgba(255, 255, 255, .5); --zone-cur: rgba(0, 0, 0, .55);
   --shadow: rgba(0, 0, 0, .18);
   color-scheme: light;
 }
@@ -196,10 +198,12 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .m-search small { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
 .vbtn { height: 36px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--veil-line); background: var(--veil-fill); font-size: 12.5px; white-space: nowrap; }
 .vbtn.solid { background: var(--inv-bg); color: var(--inv-fg); border-color: var(--inv-bg); font-weight: 600; }
-.zones { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
-.zone { display: flex; flex-direction: column; gap: 10px; min-width: 0; border-radius: 16px; padding: 6px; margin: -6px; transition: background .12s; }
-.zone.drop { background: var(--veil-fill); outline: 1px dashed var(--veil-line); }
-.zone-h { display: flex; align-items: center; gap: 8px; height: 22px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; color: var(--soft); padding-left: 2px; text-transform: uppercase; }
+/* cada espaço é um painel com contorno próprio, para as fronteiras ficarem claras */
+.zones { display: flex; gap: 18px; flex-wrap: wrap; align-items: stretch; }
+.zone { display: flex; flex-direction: column; gap: 12px; min-width: 0; border: 1px solid var(--zone-line); border-radius: 18px; padding: 12px 14px 14px; background: var(--zone-fill); transition: background .12s, border-color .12s; }
+.zone.cur { border-color: var(--zone-cur); }
+.zone.drop { background: var(--veil-fill); border-style: dashed; border-color: var(--fg); }
+.zone-h { display: flex; align-items: center; gap: 8px; height: 30px; padding-bottom: 10px; border-bottom: 1px solid var(--zone-line); font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; color: var(--soft); padding-left: 2px; text-transform: uppercase; }
 .zone-h em { font-style: normal; color: var(--muted); }
 .zone-h i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg); }
 .zone-h .zx { width: 20px; height: 20px; border: 0; background: none; border-radius: 5px; color: var(--muted); display: grid; place-items: center; }
