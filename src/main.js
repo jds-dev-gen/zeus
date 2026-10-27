@@ -282,7 +282,7 @@ function toURL(input) {
 function wireWeb(wc, kind) {
   // Option (Mac) / Alt (Windows): a interface decide se é o mosaico ou uma combinação de teclas
   wc.on('before-input-event', (e, input) => {
-    if (input.key === 'Alt') { ui && ui.send('alt', input.type === 'keyDown' ? 'down' : 'up'); return; }
+    if (input.key === 'Alt') { lastAltWC = wc; ui && ui.send('alt', input.type === 'keyDown' ? 'down' : 'up'); return; }
     if (input.type === 'keyDown' && input.alt) ui && ui.send('alt', 'chord');
     if (input.type === 'keyDown' && (input.meta || input.control) && !input.alt && /^[1-9]$/.test(input.key)) {
       e.preventDefault(); jumpInSpace(+input.key);
@@ -314,6 +314,7 @@ function wireWeb(wc, kind) {
   wc.on('context-menu', (e, p) => contextMenu(wc, p));
 }
 
+let lastAltWC = null;  // página onde se carregou no Option pela última vez
 function spaceForOpener() { const t = cur(); return t ? t.space : S.spaces[0].id; }
 
 function contextMenu(wc, p) {
@@ -885,6 +886,20 @@ function setupIPC() {
   handle('app:update', (id, patch) => updateApp(id, patch || {}));
   handle('app:remove', id => removeApp(id));
   handle('app:menu', id => appMenu(id));
+  handle('app:reorder', ids => {
+    if (!Array.isArray(ids)) return;
+    const byId = new Map(S.apps.map(a => [a.id, a]));
+    const next = ids.map(id => byId.get(id)).filter(Boolean);
+    S.apps.forEach(a => { if (!next.includes(a)) next.push(a); });
+    S.apps = next; saveState(); pushState(true);
+  });
+  handle('page:insertText', text => {
+    const wc = lastAltWC;
+    if (!wc || wc.isDestroyed()) return;
+    const t = String(text || '').slice(0, 4);
+    wc.focus();
+    if (t) wc.insertText(t);
+  });
   handle('app:reload', id => { const v = appViews.get(id); const a = appById(id); if (!v) return; delete appErrors[id]; v.webContents.loadURL(a.url).catch(() => {}); applyLayout(); pushState(); });
   handle('claude:toggle', open => setClaude(open === undefined ? !S.claudeOpen : open));
   handle('claude:sendPage', () => sendPageToClaude());

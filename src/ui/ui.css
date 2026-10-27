@@ -93,6 +93,10 @@ browser-action-list::part(action):hover { background-color: var(--surface); }
 .app-btn .letter { font-size: 18px; font-weight: 700; }
 .badge { position: absolute; top: -5px; right: -6px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: var(--fg); color: var(--bg); font-size: 10.5px; font-weight: 700; display: grid; place-items: center; border: 2px solid var(--rail); pointer-events: none; }
 .mode-tag { position: absolute; bottom: -2px; right: -2px; width: 15px; height: 15px; border-radius: 5px; background: var(--fg); color: var(--bg); display: grid; place-items: center; border: 2px solid var(--rail); pointer-events: none; }
+.app-item.dragging { opacity: .35; }
+.app-item.drop-before::after, .app-item.drop-after::after { content: ""; position: absolute; left: 4px; right: 4px; height: 2px; border-radius: 1px; background: var(--fg); pointer-events: none; }
+.app-item.drop-before::after { top: -6px; }
+.app-item.drop-after::after { bottom: -6px; }
 .app-btn.add { background: transparent; border: 1px dashed var(--line2); color: var(--muted); }
 .cal { display: flex; flex-direction: column; align-items: center; line-height: 1; }
 .cal small { font-size: 8.5px; font-weight: 600; letter-spacing: .08em; opacity: .65; }

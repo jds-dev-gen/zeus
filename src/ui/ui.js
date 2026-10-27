@@ -122,9 +122,9 @@ function renderRail() {
     const on = S.openPanel === a.id || S.fullApp === a.id;
     let inner = a.icon === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>'
       : (ICON[a.icon] && typeof ICON[a.icon] === 'string' ? ICON[a.icon] : `<span class="letter">${esc((a.name || '?').charAt(0).toUpperCase())}</span>`);
-    const tag = a.mode === 'full' ? `<span class="mode-tag" title="Abre em página inteira">${ICON.full}</span>` : '';
+    const tag = '';
     const label = `${a.name}${a.badge ? ', ' + a.badge + ' por ler' : ''}${a.mode === 'full' ? ', abre em página inteira' : ''}`;
-    h += `<div class="app-item ${a.id === 'apolo' ? 'apolo' : ''} ${on ? 'on' : ''}"><button class="app-btn" type="button" data-app="${esc(a.id)}" aria-label="${esc(label)}" title="${esc(a.name)} — clique direito para opções">${inner}${tag}</button>${a.badge ? `<span class="badge">${a.badge > 99 ? '99+' : a.badge}</span>` : ''}<span class="lbl">${esc(a.name)}</span></div>`;
+    h += `<div class="app-item ${a.id === 'apolo' ? 'apolo' : ''} ${on ? 'on' : ''}" data-appid="${esc(a.id)}"><button class="app-btn" type="button" data-app="${esc(a.id)}" aria-label="${esc(label)}" title="${esc(a.name)} — clique direito para opções">${inner}${tag}</button>${a.badge ? `<span class="badge">${a.badge > 99 ? '99+' : a.badge}</span>` : ''}<span class="lbl">${esc(a.name)}</span></div>`;
     if (i === 0) h += '<span class="rail-sep" aria-hidden="true"></span>';
   });
   h += `<div class="app-item"><button class="app-btn add" type="button" data-add-app aria-label="Juntar site como app ou extensão" title="Juntar">${ICON.plus}</button><span class="lbl">Juntar</span></div>`;
@@ -143,6 +143,46 @@ $('#rail').addEventListener('click', e => {
   } else if (b.hasAttribute('data-add-app')) openAddApp();
   else openSettings();
 });
+/* Arrastar os ícones para mudar a ordem (com o rato, sem depender do arrastar do sistema) */
+let railDrag = null, suppressClick = false;
+const clearDrop = () => document.querySelectorAll('.app-item.drop-before,.app-item.drop-after,.app-item.dragging').forEach(x => x.classList.remove('drop-before', 'drop-after', 'dragging'));
+function railTarget(y) {
+  const items = [...document.querySelectorAll('.app-item[data-appid]')];
+  for (const it of items) { const r = it.getBoundingClientRect(); if (y < r.top + r.height / 2) return { it, after: false }; }
+  return items.length ? { it: items[items.length - 1], after: true } : null;
+}
+$('#rail').addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  const it = e.target.closest('.app-item[data-appid]'); if (!it) return;
+  railDrag = { id: it.dataset.appid, el: it, y0: e.clientY, active: false, pid: e.pointerId };
+});
+window.addEventListener('pointermove', e => {
+  if (!railDrag) return;
+  if (!railDrag.active) {
+    if (Math.abs(e.clientY - railDrag.y0) < 6) return;
+    railDrag.active = true; railDrag.el.classList.add('dragging');
+    try { $('#rail').setPointerCapture(railDrag.pid); } catch (_) { /* ok */ }
+  }
+  const t = railTarget(e.clientY);
+  document.querySelectorAll('.app-item.drop-before,.app-item.drop-after').forEach(x => x.classList.remove('drop-before', 'drop-after'));
+  if (t && t.it !== railDrag.el) t.it.classList.add(t.after ? 'drop-after' : 'drop-before');
+});
+window.addEventListener('pointerup', e => {
+  if (!railDrag) return;
+  const d = railDrag; railDrag = null;
+  if (!d.active) return;
+  suppressClick = true; setTimeout(() => { suppressClick = false; }, 50);
+  const t = railTarget(e.clientY);
+  clearDrop();
+  if (!t || t.it === d.el) return;
+  const ids = S.apps.map(a => a.id).filter(id => id !== d.id);
+  let i = ids.indexOf(t.it.dataset.appid);
+  if (i < 0) i = ids.length; else if (t.after) i += 1;
+  ids.splice(i, 0, d.id);
+  Z.invoke('app:reorder', ids);
+});
+$('#rail').addEventListener('click', e => { if (suppressClick) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+$('#rail').addEventListener('dragstart', e => e.preventDefault());
 $('#rail').addEventListener('contextmenu', e => {
   const b = e.target.closest('[data-app]');
   if (b) { e.preventDefault(); Z.invoke('app:menu', b.dataset.app); }
@@ -533,8 +573,9 @@ function renderZones() {
   const si = $('#spaceInput'); if (si) si.focus();
 }
 function renderKeys() {
-  $('#keys').innerHTML = (ov.hold ? `<span><b>${KEY}</b>largar para abrir</span>` : `<span><b>Enter</b>abrir</span><span><b>Esc</b>fechar</span>`)
-    + `<span><b>1–9</b>saltar direto</span><span><b>← → ↑ ↓</b>navegar</span><span><b>${isMac ? 'delete' : 'Backspace'}</b>fechar separador</span><span><b>${ov.hold ? 'L' : KEY + ' L'}</b>mais tarde</span><span>arrastar entre espaços</span>`;
+  $('#keys').innerHTML = ov.hold
+    ? `<span><b>${KEY}</b>largar para abrir</span><span><b>← → ↑ ↓</b>escolher</span><span><b>Esc</b>cancelar</span>`
+    : `<span><b>Enter</b>abrir</span><span><b>Esc</b>fechar</span><span><b>1–9</b>saltar direto</span><span><b>← → ↑ ↓</b>navegar</span><span><b>${isMac ? 'delete' : 'Backspace'}</b>fechar separador</span><span><b>${KEY} L</b>mais tarde</span><span>arrastar entre espaços</span>`;
 }
 function moveSel(d) {
   const v = visible(); if (!v.length) return;
@@ -588,11 +629,21 @@ $('#zones').addEventListener('drop', e => {
 /* Teclado: Option/Alt e atalhos do mosaico                             */
 /* ------------------------------------------------------------------ */
 // Option premido sozinho abre o mosaico; Option + outra tecla (ex.: @ no teclado português) não.
-let altTimer = null, altAt = 0, altChord = false, ignoreUp = false;
-const HOLD_MS = 230;
-function altDown() {
+// Se o mosaico chegar a abrir e a seguir vier um carácter (quem segura o Option mais tempo antes
+// de carregar no 2), o mosaico fecha e o carácter é escrito na página, para nunca se perder o @.
+let altTimer = null, altAt = 0, altChord = false, ignoreUp = false, altFromWeb = false;
+const HOLD_MS = 400;
+function editingInUI() {
+  const el = document.activeElement;
+  if (!el || el.id === 'mfilter') return false;
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+}
+function altDown(fromWeb) {
   if (modal || !S) return;
   if (ov.open) { if (!ov.hold) { ignoreUp = true; closeMosaic(); } return; }
+  // a escrever num campo do próprio Zeus (endereço, pesquisa…): o Option é só para escrever
+  if (!fromWeb && editingInUI()) { altChord = true; return; }
+  altFromWeb = !!fromWeb;
   altChord = false; altAt = Date.now();
   clearTimeout(altTimer);
   altTimer = setTimeout(() => { altTimer = null; if (!altChord) openMosaic(true); }, HOLD_MS);
@@ -610,22 +661,39 @@ function altUp() {
   }
 }
 function altChordFn() { altChord = true; if (altTimer) { clearTimeout(altTimer); altTimer = null; } }
+// estava a escrever: fecha o mosaico e devolve o carácter à página
+function giveBackKey(ch) {
+  const fromWeb = altFromWeb;
+  ov.hold = false; ignoreUp = true;
+  closeMosaic();
+  if (ch && fromWeb) Z.invoke('page:insertText', ch);
+}
 function onBlur() {
   if (altTimer) { clearTimeout(altTimer); altTimer = null; }
   if (ov.open && ov.hold) { ov.hold = false; renderKeys(); $('#mfilter').focus(); }
 }
-Z.on('alt', ev => { if (ev === 'down') altDown(); else if (ev === 'up') altUp(); else if (ev === 'chord') altChordFn(); else if (ev === 'blur') onBlur(); });
+Z.on('alt', ev => { if (ev === 'down') altDown(true); else if (ev === 'up') altUp(); else if (ev === 'chord') altChordFn(); else if (ev === 'blur') onBlur(); });
 window.addEventListener('blur', onBlur);
 
 window.addEventListener('keydown', e => {
-  if (e.key === 'Alt') { if (!e.repeat) altDown(); if (ov.open) e.preventDefault(); return; }
+  if (e.key === 'Alt') { if (!e.repeat) altDown(false); if (ov.open) e.preventDefault(); return; }
   if (e.altKey && !ov.open) altChordFn();
   if (modal) { if (e.key === 'Escape') { e.preventDefault(); closeModal(); } return; }
   if (!ov.open) return;
   const f = $('#mfilter'); const empty = !f.value;
   const inField = e.target && (e.target.id === 'renameInput' || e.target.id === 'spaceInput');
   if (inField) return;
-  if (e.key === 'Escape') { e.preventDefault(); closeMosaic(); return; }
+  if (e.key === 'Escape') { e.preventDefault(); if (ov.hold) giveBackKey(''); else closeMosaic(); return; }
+  if (e.key === 'ArrowRight') { e.preventDefault(); moveSel(1); return; }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); moveSel(-1); return; }
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(3); return; }
+  if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-3); return; }
+  if (ov.hold) {
+    // com o Option ainda premido, qualquer outra tecla quer dizer que se estava a escrever
+    if (e.key === 'Enter') { e.preventDefault(); ov.hold = false; ignoreUp = true; if (ov.sel) openSel(ov.sel); return; }
+    if (e.key.length === 1 || e.key === 'Dead' || e.key === 'Backspace') { e.preventDefault(); giveBackKey(e.key.length === 1 ? e.key : ''); }
+    return;
+  }
   if (e.key === 'Enter') {
     e.preventDefault();
     const v = visible(); const val = f.value.trim();
@@ -633,15 +701,10 @@ window.addEventListener('keydown', e => {
     else if (ov.sel) openSel(ov.sel);
     return;
   }
-  if (e.key === 'ArrowRight') { e.preventDefault(); moveSel(1); return; }
-  if (e.key === 'ArrowLeft') { e.preventDefault(); moveSel(-1); return; }
-  if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(3); return; }
-  if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-3); return; }
   const dm = /^Digit([1-9])$/.exec(e.code);
-  if (dm && (ov.hold || e.altKey || empty)) { e.preventDefault(); const t = visible()[+dm[1] - 1]; if (t) openSel(t.id); return; }
-  if (e.key === 'Backspace' && (ov.hold || empty)) { e.preventDefault(); if (ov.sel) { const id = ov.sel; selNeighbor(id); Z.invoke('tab:close', id); } return; }
-  if (e.code === 'KeyL' && (ov.hold || e.altKey)) { e.preventDefault(); if (ov.sel) { const id = ov.sel; selNeighbor(id); Z.invoke('tab:later', id); toast('Guardado em “Mais tarde”'); } return; }
-  if (ov.hold && e.key.length === 1) e.preventDefault();
+  if (dm && empty && !e.altKey) { e.preventDefault(); const t = visible()[+dm[1] - 1]; if (t) openSel(t.id); return; }
+  if (e.key === 'Backspace' && empty) { e.preventDefault(); if (ov.sel) { const id = ov.sel; selNeighbor(id); Z.invoke('tab:close', id); } return; }
+  if (e.code === 'KeyL' && e.altKey && !e.metaKey) { e.preventDefault(); if (ov.sel) { const id = ov.sel; selNeighbor(id); Z.invoke('tab:later', id); toast('Guardado em “Mais tarde”'); } return; }
 });
 window.addEventListener('keyup', e => { if (e.key === 'Alt') { if (ov.open) e.preventDefault(); altUp(); } });
 

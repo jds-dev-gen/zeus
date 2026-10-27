@@ -14,7 +14,7 @@ const INVOKE = new Set([
   'tab:new', 'tab:open', 'tab:close', 'tab:later', 'tab:move', 'tab:restore', 'tab:reopen',
   'navigate', 'nav', 'find',
   'space:add', 'space:rename', 'space:remove',
-  'app:open', 'app:close', 'app:mode', 'app:add', 'app:update', 'app:remove', 'app:menu', 'app:reload',
+  'app:open', 'app:close', 'app:mode', 'app:add', 'app:update', 'app:remove', 'app:menu', 'app:reload', 'app:reorder', 'page:insertText',
   'claude:toggle', 'claude:sendPage', 'claude:ask', 'claude:new',
   'settings:set', 'permissions:list', 'permissions:forget',
   'ext:list', 'ext:store', 'ext:remove', 'data:clear', 'ui:focusPage',
