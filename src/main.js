@@ -12,7 +12,7 @@ const {
 const path = require('path');
 const fs = require('fs');
 const { ElectronChromeExtensions } = require('electron-chrome-extensions');
-const { installChromeWebStore, uninstallExtension } = require('electron-chrome-web-store');
+const { installChromeWebStore, uninstallExtension, loadAllExtensions } = require('electron-chrome-web-store');
 const { Updater } = require('./updater');
 const PKG = require('../package.json');
 
@@ -181,8 +181,8 @@ function chromeUA() {
     .replace(/\s?Zeus\/\S+/i, '');
 }
 
-const WEB_PREFS = () => ({
-  session: zeusSession,
+const WEB_PREFS = ses => ({
+  session: ses || zeusSession,
   sandbox: true,
   contextIsolation: true,
   nodeIntegration: false,
@@ -330,7 +330,7 @@ function wireWeb(wc, kind) {
         action: 'allow',
         overrideBrowserWindowOptions: {
           width: 520, height: 700, parent: win, autoHideMenuBar: true, backgroundColor: '#ffffff',
-          webPreferences: WEB_PREFS()
+          webPreferences: WEB_PREFS(wc.session)
         }
       };
     }
@@ -569,17 +569,43 @@ function topSites() {
 /* ------------------------------------------------------------------ */
 /* Apps da barra                                                        */
 /* ------------------------------------------------------------------ */
+/*
+ * Sessão de cada app. Com "sessão separada", a app tem os seus próprios cookies,
+ * logins e armazenamento (como se estivesse num browser à parte); as permissões,
+ * o início de sessão na Google e as extensões instaladas são configurados também nela.
+ */
+const appSessions = new Map();   // id da app -> { ses, ext }
+const appPartition = id => 'persist:app-' + id;
+function sessionForApp(a) {
+  if (!a.isolated) return { ses: zeusSession, ext: extensions };
+  if (appSessions.has(a.id)) return appSessions.get(a.id);
+  const ses = session.fromPartition(appPartition(a.id));
+  ses.setUserAgent(chromeUA());
+  setupPermissions(ses);
+  setupGoogleSignin(ses);
+  let ext = null;
+  try {
+    ext = new ElectronChromeExtensions(Object.assign({ session: ses }, extensionHandlers()));
+    loadAllExtensions(ses, extensionsPath(), { allowUnpacked: false }).catch(() => {});
+  } catch (e) { ext = null; }
+  const rec = { ses, ext };
+  appSessions.set(a.id, rec);
+  return rec;
+}
+function extFor(id) { const a = appById(id); const r = a && a.isolated ? appSessions.get(id) : null; return r ? r.ext : extensions; }
+
 function ensureAppView(a) {
   if (appViews.has(a.id)) return appViews.get(a.id);
   if (!a.url) return null;
-  const view = new WebContentsView({ webPreferences: WEB_PREFS() });
+  const { ses, ext } = sessionForApp(a);
+  const view = new WebContentsView({ webPreferences: WEB_PREFS(ses) });
   view.setBackgroundColor('#ffffff');
   appViews.set(a.id, view);
   win.contentView.addChildView(view);
   view.setVisible(false);
   const wc = view.webContents;
   wireWeb(wc, 'app');
-  try { extensions.addTab(wc, win); } catch (e) { /* ok */ }
+  try { if (ext) ext.addTab(wc, win); } catch (e) { /* ok */ }
   wc.on('page-title-updated', (e, title) => {
     const m = /\((\d+)\)/.exec(title) || /^(\d+)\s/.exec(title);
     const n = m ? parseInt(m[1], 10) : 0;
@@ -597,7 +623,7 @@ function ensureAppView(a) {
 }
 function destroyAppView(id) {
   const view = appViews.get(id); if (!view) return;
-  try { extensions.removeTab(view.webContents); } catch (e) { /* ok */ }
+  try { const ext = extFor(id); if (ext) ext.removeTab(view.webContents); } catch (e) { /* ok */ }
   win.contentView.removeChildView(view);
   view.webContents.close();
   appViews.delete(id);
@@ -615,7 +641,7 @@ function openApp(id) {
     if (fullApp === id) fullApp = null;
   }
   applyLayout();
-  if (view && (fullApp === id || openPanel === id)) { view.webContents.focus(); try { extensions.selectTab(view.webContents); } catch (e) { /* ok */ } }
+  if (view && (fullApp === id || openPanel === id)) { view.webContents.focus(); try { const ext = extFor(id); if (ext) ext.selectTab(view.webContents); } catch (e) { /* ok */ } }
   pushState(true);
 }
 function closeAppViews() { openPanel = null; fullApp = null; applyLayout(); pushState(true); }
@@ -628,11 +654,15 @@ function setAppMode(id, mode) {
   if (wasOpen) { if (a.mode === 'full') fullApp = id; else openPanel = id; }
   applyLayout(); pushState(true); saveState();
 }
-function addApp({ name, url, mode }) {
+const ICONS = ['', 'mail', 'pmail', 'wa', 'cal', 'notion', 'pluto', 'apolo', 'work', 'globe', 'star', 'mic', 'play'];
+function addApp({ name, url, mode, icon, isolated }) {
   const u = toURL(url);
   if (!/^https?:/.test(u)) return { ok: false, error: 'Escreve um endereço web válido, por exemplo web.telegram.org.' };
   const id = 'a' + Date.now().toString(36);
-  S.apps.push({ id, name: (name || hostOf(u)).slice(0, 24), url: u, mode: mode === 'side' ? 'side' : 'full', icon: '', preload: false });
+  S.apps.push({
+    id, name: (name || hostOf(u)).slice(0, 24), url: u, mode: mode === 'side' ? 'side' : 'full',
+    icon: ICONS.includes(icon) ? icon : '', isolated: isolated !== false, preload: false
+  });
   saveState(); pushState(true);
   return { ok: true, id };
 }
@@ -645,16 +675,44 @@ function updateApp(id, patch) {
   }
   if (patch.name) a.name = String(patch.name).slice(0, 24);
   if (patch.mode) a.mode = patch.mode === 'full' ? 'full' : 'side';
+  if (patch.icon !== undefined && ICONS.includes(patch.icon)) a.icon = patch.icon;
+  if (patch.isolated !== undefined && !!patch.isolated !== !!a.isolated) setIsolated(id, !!patch.isolated);
   saveState(); pushState(true);
   return { ok: true };
 }
-function removeApp(id) {
+// mudar de sessão: a app recomeça (é preciso voltar a entrar na conta nessa sessão)
+function setIsolated(id, on) {
+  const a = appById(id); if (!a) return;
+  const wasOpen = openPanel === id || fullApp === id;
   destroyAppView(id);
+  a.isolated = on;
+  if (wasOpen) { ensureAppView(a); applyLayout(); }
+  saveState(); pushState(true);
+}
+async function clearAppSession(id) {
+  try { await session.fromPartition(appPartition(id)).clearStorageData(); } catch (e) { /* ok */ }
+  appSessions.delete(id);
+}
+function removeApp(id) {
+  const old = appById(id);
+  destroyAppView(id);
+  if (old && old.isolated) clearAppSession(id);
   S.apps = S.apps.filter(a => a.id !== id);
   if (DEFAULT_APPS.some(a => a.id === id)) S.removedApps = [...new Set([...(S.removedApps || []), id])];
   if (openPanel === id) openPanel = null;
   if (fullApp === id) fullApp = null;
   applyLayout(); saveState(); pushState(true);
+}
+async function askIsolated(id, on) {
+  const a = appById(id); if (!a) return;
+  const r = await dialog.showMessageBox(win, {
+    type: 'question', buttons: [on ? 'Separar' : 'Partilhar', 'Cancelar'], defaultId: 0, cancelId: 1,
+    message: on ? `Dar ao ${a.name} uma sessão separada?` : `Pôr o ${a.name} na sessão partilhada?`,
+    detail: on
+      ? 'Fica com cookies e contas só seus, como se estivesse noutro browser. Vais ter de voltar a entrar na conta dentro desta app.'
+      : 'Passa a partilhar contas e cookies com os separadores e as outras apps partilhadas. Vais ter de voltar a entrar na conta.'
+  });
+  if (r.response === 0) setIsolated(id, on);
 }
 function appMenu(id) {
   const a = appById(id); if (!a) return;
@@ -664,7 +722,8 @@ function appMenu(id) {
     { label: 'Abrir em página inteira', type: 'radio', checked: a.mode === 'full', click: () => setAppMode(id, 'full') },
     { type: 'separator' },
     { label: 'Recarregar', enabled: !!view, click: () => view && view.webContents.reload() },
-    { label: 'Editar nome e endereço…', click: () => ui.send('ui-command', { cmd: 'edit-app', id }) },
+    { label: 'Editar nome, endereço e ícone…', click: () => ui.send('ui-command', { cmd: 'edit-app', id }) },
+    { label: 'Sessão separada', type: 'checkbox', checked: !!a.isolated, click: () => askIsolated(id, !a.isolated) },
     { type: 'separator' },
     { label: 'Remover da barra', click: () => removeApp(id) }
   ]).popup({ window: win });
@@ -787,9 +846,9 @@ function setupPermissions(ses) {
 /* ------------------------------------------------------------------ */
 /* Extensões do Chrome                                                  */
 /* ------------------------------------------------------------------ */
-async function setupExtensions() {
-  extensions = new ElectronChromeExtensions({
-    session: zeusSession,
+const extensionsPath = () => path.join(app.getPath('userData'), 'Extensions');
+function extensionHandlers() {
+  return {
     async createTab(details) {
       const tab = newTab({ url: details.url || 'about:blank', activate: details.active !== false });
       return [ensureTabView(tab).webContents, win];
@@ -815,14 +874,17 @@ async function setupExtensions() {
       });
       return r.response === 0;
     }
-  });
+  };
+}
+async function setupExtensions() {
+  extensions = new ElectronChromeExtensions(Object.assign({ session: zeusSession }, extensionHandlers()));
   ElectronChromeExtensions.handleCRXProtocol(session.defaultSession);
   extensions.on('browser-action-popup-created', () => { /* o próprio módulo posiciona o popup */ });
 
   try {
     await installChromeWebStore({
       session: zeusSession,
-      extensionsPath: path.join(app.getPath('userData'), 'Extensions'),
+      extensionsPath: extensionsPath(),
       autoUpdate: true,
       async beforeInstall(details) {
         const r = await dialog.showMessageBox(win, {
@@ -963,7 +1025,11 @@ function setupIPC() {
   });
   handle('data:clear', async what => {
     if (what === 'cache') await zeusSession.clearCache();
-    if (what === 'all') { await zeusSession.clearStorageData(); await zeusSession.clearCache(); }
+    if (what === 'all') {
+      await zeusSession.clearStorageData(); await zeusSession.clearCache();
+      for (const a of S.apps) if (a.isolated) { const ses = session.fromPartition(appPartition(a.id)); await ses.clearStorageData(); await ses.clearCache(); }
+    }
+    if (what === 'cache') for (const a of S.apps) if (a.isolated) await session.fromPartition(appPartition(a.id)).clearCache();
     return true;
   });
   handle('update:status', () => updater ? updater.status : null);

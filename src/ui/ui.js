@@ -17,6 +17,11 @@ const ICON = {
   pmail: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l9 6 9-6" stroke-linecap="round"/><rect x="3" y="5" width="18" height="14" rx="3"/><rect x="14.5" y="13.5" width="6" height="5" rx="1.2" fill="currentColor" stroke="none"/></svg>',
   notion: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h5"/></svg>',
   pluto: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.5" transform="rotate(-20 12 12)"/></svg>',
+  work: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18" stroke-linecap="round"/></svg>',
+  globe: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z"/></svg>',
+  star: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>',
+  mic: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  play: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>',
   plus: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   gear: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>',
   x: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
@@ -737,6 +742,26 @@ $('#modalWrap').addEventListener('mousedown', e => { if (e.target.id === 'modalW
 const modalHead = t => `<div class="m-head"><h2>${esc(t)}</h2><button class="nb" type="button" data-mclose aria-label="Fechar">${ICON.x}</button></div>`;
 $('#modal').addEventListener('click', e => { if (e.target.closest('[data-mclose]')) closeModal(); });
 
+const ICON_CHOICES = [['', 'Letra'], ['mail', 'Email'], ['pmail', 'Email seguro'], ['wa', 'Conversa'], ['cal', 'Calendário'], ['notion', 'Documento'], ['work', 'Trabalho'], ['globe', 'Web'], ['star', 'Favorito'], ['mic', 'Áudio'], ['play', 'Vídeo'], ['pluto', 'Planeta'], ['apolo', 'Sol']];
+function iconPickerHTML(cur, name) {
+  return `<div class="field"><span class="lab">Ícone</span><div class="icon-pick" id="iconPick" role="radiogroup" aria-label="Ícone">${ICON_CHOICES.map(([k, l]) => `<button type="button" role="radio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-icon="${k}" title="${l}" aria-label="${l}">${k === '' ? `<span class="letter">${esc((name || 'A').charAt(0).toUpperCase())}</span>` : k === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>' : ICON[k]}</button>`).join('')}</div></div>`;
+}
+function wireIconPicker() {
+  const box = $('#iconPick'); if (!box) return;
+  box.addEventListener('click', e => { const b = e.target.closest('[data-icon]'); if (!b) return; box.querySelectorAll('[data-icon]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); }); });
+  tick();
+}
+const pickedIcon = () => { const b = $('#iconPick .on'); return b ? b.dataset.icon : ''; };
+function sessionFieldHTML(isolated, editing) {
+  return `<div class="field"><span class="lab">Sessão</span><div class="seg" id="sessSeg"><button type="button" data-s="1" class="${isolated ? 'on' : ''}">Separada</button><button type="button" data-s="0" class="${isolated ? '' : 'on'}">Partilhada</button></div>
+    <p class="hint">Separada: a app tem contas e cookies só seus, como se estivesse noutro browser. Serve, por exemplo, para teres o Gmail pessoal e o do Observador lado a lado.${editing ? ' Se mudares, vais ter de voltar a entrar na conta dentro desta app.' : ''}</p></div>`;
+}
+function wireSessionSeg() {
+  const seg = $('#sessSeg'); if (!seg) return;
+  seg.addEventListener('click', e => { const b = e.target.closest('button'); if (b) seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); });
+}
+const pickedIsolated = () => { const b = $('#sessSeg .on'); return b ? b.dataset.s === '1' : true; };
+
 function openAddApp() {
   openModal('add', `${modalHead('Juntar ao Zeus')}
     <form id="addAppForm" class="section" autocomplete="off">
@@ -744,6 +769,8 @@ function openAddApp() {
       <div class="field"><label for="aaUrl">Endereço</label><input class="inp" id="aaUrl" type="text" placeholder="drive.proton.me" required spellcheck="false"></div>
       <div class="field"><label for="aaName">Nome na barra</label><input class="inp" id="aaName" type="text" placeholder="Proton Drive"></div>
       <div class="field"><span class="lab">Abrir</span><div class="seg" id="aaMode"><button type="button" class="on" data-m="full">Página inteira</button><button type="button" data-m="side">Ao lado</button></div></div>
+      ${sessionFieldHTML(true, false)}
+      ${iconPickerHTML('', 'A')}
       <p class="err" id="aaErr" hidden></p>
       <div class="row-btns"><button class="btn" type="submit">Juntar à barra</button></div>
     </form>
@@ -753,9 +780,11 @@ function openAddApp() {
     </div>`);
   $('#aaMode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) $('#aaMode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); });
   $('#aaStore').addEventListener('click', () => { closeModal(); Z.invoke('ext:store'); });
+  wireSessionSeg(); wireIconPicker();
+  $('#aaName').addEventListener('input', e => { const l = document.querySelector('#iconPick [data-icon=""] .letter'); if (l) l.textContent = (e.target.value.trim() || 'A').charAt(0).toUpperCase(); });
   $('#addAppForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const r = await Z.invoke('app:add', { url: $('#aaUrl').value, name: $('#aaName').value.trim(), mode: $('#aaMode .on').dataset.m });
+    const r = await Z.invoke('app:add', { url: $('#aaUrl').value, name: $('#aaName').value.trim(), mode: $('#aaMode .on').dataset.m, isolated: pickedIsolated(), icon: pickedIcon() });
     if (!r.ok) { const er = $('#aaErr'); er.textContent = r.error; er.hidden = false; return; }
     closeModal(); toast('Juntaste uma app à barra'); Z.invoke('app:open', r.id);
   });
@@ -785,12 +814,15 @@ function openEditApp(id) {
     <form id="editForm" class="section" autocomplete="off">
       <div class="field"><label for="edName">Nome</label><input class="inp" id="edName" type="text" value="${esc(a.name)}"></div>
       <div class="field"><label for="edUrl">Endereço</label><input class="inp" id="edUrl" type="text" value="${esc(a.url)}" spellcheck="false"></div>
+      ${sessionFieldHTML(!!a.isolated, true)}
+      ${iconPickerHTML(a.icon || '', a.name)}
       <p class="err" id="edErr" hidden></p>
       <div class="row-btns"><button class="btn" type="submit">Guardar</button></div>
     </form>`);
+  wireSessionSeg(); wireIconPicker();
   $('#editForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const r = await Z.invoke('app:update', id, { name: $('#edName').value.trim(), url: $('#edUrl').value });
+    const r = await Z.invoke('app:update', id, { name: $('#edName').value.trim(), url: $('#edUrl').value, icon: pickedIcon(), isolated: pickedIsolated() });
     if (!r.ok) { const er = $('#edErr'); er.textContent = r.error; er.hidden = false; return; }
     closeModal(); toast('App atualizada');
   });
@@ -872,13 +904,14 @@ async function openSettings() {
 }
 function refreshSettingsApps() {
   const box = $('#setApps'); if (!box) return;
-  box.innerHTML = S.apps.map(a => `<div class="li"><div class="grow"><span>${esc(a.name)}</span><small>${esc(a.url || 'Endereço por definir')}</small></div>
+  box.innerHTML = S.apps.map(a => `<div class="li"><div class="grow"><span>${esc(a.name)}</span><small>${esc(a.url || 'Endereço por definir')}${a.isolated ? ' · sessão separada' : ''}</small></div>
     <div class="seg" data-appmode="${esc(a.id)}"><button type="button" data-v="side" class="${a.mode === 'side' ? 'on' : ''}">Ao lado</button><button type="button" data-v="full" class="${a.mode === 'full' ? 'on' : ''}">Inteira</button></div>
     <button class="linkbtn" type="button" data-editapp="${esc(a.id)}">Editar</button><button class="linkbtn" type="button" data-rmapp="${esc(a.id)}">Remover</button></div>`).join('');
 }
 $('#modal').addEventListener('click', e => {
   const m = e.target.closest('[data-appmode] button'); if (m) { Z.invoke('app:mode', m.parentElement.dataset.appmode, m.dataset.v); return; }
   const ed = e.target.closest('[data-editapp]'); if (ed) { openEditApp(ed.dataset.editapp); return; }
+  const iso = e.target.closest('[data-isoapp]'); if (iso) { const a = appById(iso.dataset.isoapp); if (a) Z.invoke('app:update', a.id, { isolated: !a.isolated }); return; }
   const rm = e.target.closest('[data-rmapp]'); if (rm) { Z.invoke('app:remove', rm.dataset.rmapp); return; }
   const rx = e.target.closest('[data-rmext]'); if (rx) { Z.invoke('ext:remove', rx.dataset.rmext); return; }
   const fp = e.target.closest('[data-forget]'); if (fp) { Z.invoke('permissions:forget', fp.dataset.forget); fp.closest('.li').remove(); }

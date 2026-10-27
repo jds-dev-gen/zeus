@@ -99,6 +99,12 @@ browser-action-list::part(action):hover { background-color: var(--surface); }
 .app-item.drop-before::after, .app-item.drop-after::after { content: ""; position: absolute; left: 4px; right: 4px; height: 2px; border-radius: 1px; background: var(--fg); pointer-events: none; }
 .app-item.drop-before::after { top: -6px; }
 .app-item.drop-after::after { bottom: -6px; }
+.icon-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; }
+.icon-pick button { height: 44px; border-radius: 12px; border: 1px solid var(--line2); background: var(--surface); display: grid; place-items: center; color: var(--fg); padding: 0; }
+.icon-pick button svg { width: 20px; height: 20px; }
+.icon-pick button .letter { font-size: 16px; font-weight: 700; }
+.icon-pick button .cal b { font-size: 14px; }
+.icon-pick button.on { background: var(--inv-bg); color: var(--inv-fg); border-color: var(--inv-bg); }
 .app-btn.add { background: transparent; border: 1px dashed var(--line2); color: var(--muted); }
 .cal { display: flex; flex-direction: column; align-items: center; line-height: 1; }
 .cal small { font-size: 8.5px; font-weight: 600; letter-spacing: .08em; opacity: .65; }
@@ -263,3 +269,4 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 
 /* ---------- aviso ---------- */
 .toast { position: absolute; left: 50%; top: 6px; height: 28px; transform: translateX(-50%); z-index: 60; background: var(--inv-bg); color: var(--inv-fg); padding: 0 14px; border-radius: 8px; font-size: 12.5px; max-width: min(640px, calc(100% - 320px)); display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-app-region: no-drag; }
+.field > .seg { align-self: flex-start; }
