@@ -1,0 +1,30 @@
+{
+  "name": "zeus",
+  "productName": "Zeus",
+  "version": "0.2.1",
+  "description": "Zeus — browser pessoal",
+  "main": "src/main.js",
+  "private": true,
+  "author": "João",
+  "scripts": {
+    "start": "node build.js && electron .",
+    "package:mac": "node package-mac.js all"
+  },
+  "dependencies": {
+    "electron-chrome-extensions": "4.10.0",
+    "electron-chrome-web-store": "0.13.0"
+  },
+  "devDependencies": {
+    "@electron/fuses": "^2.1.3",
+    "@electron/packager": "^20.3.0",
+    "esbuild": "^0.24.2",
+    "electron": "44.10.0"
+  },
+  "zeus": {
+    "updateRepo": "jds-dev-gen/zeus"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jds-dev-gen/zeus.git"
+  }
+}

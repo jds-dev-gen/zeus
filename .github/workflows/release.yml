@@ -1,0 +1,112 @@
+# Publica versões novas do Zeus para Mac.
+#
+# Quando corre:
+#  - sempre que a versão em package.json muda no ramo main (ex.: depois de uma alteração feita com o Claude);
+#  - todas as segundas-feiras, para trazer as correções de segurança do Electron/Chromium;
+#  - à mão, no separador Actions do GitHub ("Run workflow").
+# O Zeus instalado procura estas versões sozinho e instala-as ao reiniciar.
+name: Zeus — versões
+
+on:
+  push:
+    branches: [main]
+    paths: [package.json]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  preparar:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      publicar: ${{ steps.v.outputs.publicar }}
+      ref: ${{ steps.v.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Correções de segurança do Electron
+        id: bump
+        if: github.event_name != 'push'
+        run: node scripts/bump-electron.js
+
+      - name: Gravar a atualização do Electron
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          git config user.name "zeus-bot"
+          git config user.email "zeus-bot@users.noreply.github.com"
+          git commit -am "Electron ${{ steps.bump.outputs.electron }} (correções de segurança) — Zeus ${{ steps.bump.outputs.version }}"
+          git push
+
+      - name: Ver se esta versão já foi publicada
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            echo "A versão $V já existe; nada a fazer."
+          else
+            echo "publicar=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  compilar:
+    needs: preparar
+    if: needs.preparar.outputs.publicar == 'true'
+    runs-on: macos-14
+    strategy:
+      matrix:
+        arch: [arm64, x64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preparar.outputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Empacotar e assinar (ad-hoc)
+        run: node package-mac.js ${{ matrix.arch }}
+      - name: Comprimir
+        run: ditto -c -k --keepParent "out/Zeus-darwin-${{ matrix.arch }}/Zeus.app" "Zeus-${{ needs.preparar.outputs.version }}-mac-${{ matrix.arch }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeus-${{ matrix.arch }}
+          path: Zeus-*.zip
+          retention-days: 3
+
+  publicar:
+    needs: [preparar, compilar]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Somas de verificação
+        working-directory: dist
+        run: sha256sum Zeus-*.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Publicar a versão
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=${{ needs.preparar.outputs.version }}
+          gh release create "v$V" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "${{ needs.preparar.outputs.ref }}" \
+            --title "Zeus $V" \
+            --notes "Versão $V do Zeus para Mac. O Zeus instalado descarrega-a sozinho e instala-a ao reiniciar."
