@@ -1,7 +1,7 @@
 {
   "name": "zeus",
   "productName": "Zeus",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Zeus — browser pessoal",
   "main": "src/main.js",
   "private": true,

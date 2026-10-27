@@ -212,7 +212,7 @@ function renderTop() {
   const mode = S.settings.tabMode;
   const tb = $('#titleBtn');
   if (full) tb.innerHTML = `<span class="t">${esc(full.name)}</span><span class="dom">app</span>`;
-  else if (t) tb.innerHTML = `${t.url !== NEWTAB && t.favicon ? `<img src="${esc(t.favicon)}" alt="" data-fav>` : ''}<span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><span class="dom">${t.url === NEWTAB ? '' : esc(hostOf(t.url))}</span>`;
+  else if (t) tb.innerHTML = `${t.url !== NEWTAB && t.favicon ? `<img src="${esc(t.favicon)}" alt="" data-fav>` : ''}<span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><span class="dom">${t.url === NEWTAB ? '' : esc(hostOf(t.url))}${t.sessionLabel ? ' · sessão ' + esc(t.sessionLabel) : ''}</span>`;
   tb.hidden = addrOpen || mode === 'top';
   $('#topTabs').hidden = addrOpen || mode !== 'top';
   if (mode === 'top' && !addrOpen) renderTopTabs();
@@ -567,7 +567,7 @@ function renderZones() {
       const big = isCur && list.length >= 3 && !f;
       return `<div class="card ${big ? 'big' : ''} ${t.id === ov.sel ? 'sel' : ''}" role="button" tabindex="-1" draggable="true" data-card="${t.id}" title="${esc(t.url === NEWTAB ? 'Página nova' : t.url)}">
         <div class="thumb">${thumbHTML(t)}${n <= 9 ? `<span class="num">${n}${isCur ? '<span class="now">Atual</span>' : ''}</span>` : ''}${t.audible ? `<span class="snd">${ICON.snd}a tocar</span>` : ''}<button class="cx" type="button" data-cx="${t.id}" aria-label="Fechar">${ICON.x}</button></div>
-        <div class="cap"><span class="fav">${favHTML(t)}</span><span class="ttl">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span></div></div>`;
+        <div class="cap"><span class="fav">${favHTML(t)}</span><span class="ttl">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span>${t.sessionLabel ? `<span class="sess" title="Sessão de ${esc(t.sessionLabel)}">${esc(t.sessionLabel)}</span>` : ''}</div></div>`;
     }).join('');
     const head = ov.renaming === s.id
       ? `<input id="renameInput" value="${esc(s.name)}" aria-label="Nome do espaço">`

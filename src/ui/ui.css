@@ -270,3 +270,4 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 /* ---------- aviso ---------- */
 .toast { position: absolute; left: 50%; top: 6px; height: 28px; transform: translateX(-50%); z-index: 60; background: var(--inv-bg); color: var(--inv-fg); padding: 0 14px; border-radius: 8px; font-size: 12.5px; max-width: min(640px, calc(100% - 320px)); display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-app-region: no-drag; }
 .field > .seg { align-self: flex-start; }
+.cap .sess { flex-shrink: 0; font-size: 10.5px; font-weight: 500; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--veil-line); color: var(--muted); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

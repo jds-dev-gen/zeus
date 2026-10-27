@@ -111,7 +111,7 @@ function saveNow() {
   try {
     const out = {
       schema: SCHEMA,
-      tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space })),
+      tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space, partition: t.partition || null, sessionLabel: t.sessionLabel || null })),
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
       apps: S.apps, removedApps: S.removedApps || [], settings: S.settings, permissions: S.permissions,
@@ -165,7 +165,7 @@ function setupGoogleSignin(ses) {
     for (const k of Object.keys(h)) if (/^sec-ch-ua/i.test(k)) delete h[k];
     cb({ requestHeaders: h });
   });
-  try { ses.registerPreloadScript({ type: 'frame', id: 'zeus-google-signin', filePath: path.join(__dirname, 'preload-google.js') }); }
+  try { ses.registerPreloadScript({ type: 'frame', id: 'zeus-pages', filePath: path.join(__dirname, 'preload-pages.js') }); }
   catch (e) { console.error('preload da Google', e); }
 }
 function googleUA(wc, url) {
@@ -274,7 +274,7 @@ function pushState(now) {
     const wc = view && view.webContents;
     ui.send('state', {
       tabs: S.tabs.map(t => ({
-        id: t.id, url: t.url, title: t.title || hostOf(t.url) || 'Página nova', favicon: t.favicon || '',
+        id: t.id, url: t.url, title: t.title || hostOf(t.url) || 'Página nova', favicon: t.favicon || '', sessionLabel: t.sessionLabel || '',
         space: t.space, loading: !!t.loading, error: t.error || null, audible: !!t.audible
       })),
       currentId: S.currentId,
@@ -309,7 +309,9 @@ function toURL(input) {
   return (SEARCH[S.settings.search] || SEARCH.google) + encodeURIComponent(s);
 }
 
-function wireWeb(wc, kind) {
+// mudar de conta (Gmail, Calendário…): endereços do tipo /u/1/ abrem dentro da própria app
+const ACCOUNT_SWITCH = /\/u\/\d+\/?$/;
+function wireWeb(wc, kind, ctx = {}) {
   wc.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(wc, d.url); });
   // Option (Mac) / Alt (Windows): a interface decide se é o mosaico ou uma combinação de teclas
   wc.on('before-input-event', (e, input) => {
@@ -334,7 +336,24 @@ function wireWeb(wc, kind) {
         }
       };
     }
-    newTab({ url, activate: disposition !== 'background-tab', space: spaceForOpener(kind) });
+    // links abertos a partir de uma app com sessão separada (ou de um separador dessa sessão)
+    // continuam nessa sessão, para se manter a mesma conta
+    let partition = null, sessionLabel = null;
+    if (kind === 'app' && ctx.appId) {
+      const a = appById(ctx.appId);
+      try {
+        const u = new URL(url);
+        if (hostOf(url) === hostOf(wc.getURL()) && ACCOUNT_SWITCH.test(u.pathname) && !u.search) {
+          wc.loadURL(url).catch(() => {});
+          return { action: 'deny' };
+        }
+      } catch (e) { /* segue para separador */ }
+      if (a && a.isolated) { partition = appPartition(a.id); sessionLabel = a.name; }
+    } else if (kind === 'tab' && ctx.tabId) {
+      const t = tabById(ctx.tabId);
+      if (t) { partition = t.partition || null; sessionLabel = t.sessionLabel || null; }
+    }
+    newTab({ url, activate: disposition !== 'background-tab', space: spaceForOpener(kind), partition, sessionLabel });
     return { action: 'deny' };
   });
   wc.on('did-create-window', (child, details) => {
@@ -408,14 +427,17 @@ function contextMenu(wc, p) {
 /* ------------------------------------------------------------------ */
 function ensureTabView(tab) {
   if (tabViews.has(tab.id) || tab.url === NEWTAB) return tabViews.get(tab.id);
-  const view = new WebContentsView({ webPreferences: WEB_PREFS() });
+  let rec = sessionForPartition(tab.partition);
+  if (!rec) { tab.partition = null; tab.sessionLabel = null; rec = { ses: zeusSession, ext: extensions }; }
+  tabExts.set(tab.id, rec.ext);
+  const view = new WebContentsView({ webPreferences: WEB_PREFS(rec.ses) });
   view.setBackgroundColor('#ffffff');
   const wc = view.webContents;
   tabViews.set(tab.id, view);
   win.contentView.addChildView(view);
   view.setVisible(false);
-  wireWeb(wc, 'tab');
-  try { extensions.addTab(wc, win); } catch (e) { /* extensões opcionais */ }
+  wireWeb(wc, 'tab', { tabId: tab.id });
+  try { if (rec.ext) rec.ext.addTab(wc, win); } catch (e) { /* extensões opcionais */ }
 
   const id = tab.id;
   const T = () => tabById(id);
@@ -469,10 +491,11 @@ function ensureTabView(tab) {
 function destroyTabView(id) {
   const view = tabViews.get(id);
   if (!view) return;
-  try { extensions.removeTab(view.webContents); } catch (e) { /* ok */ }
+  try { const ext = tabExts.get(id); if (ext) ext.removeTab(view.webContents); } catch (e) { /* ok */ }
   win.contentView.removeChildView(view);
   view.webContents.close();
   tabViews.delete(id);
+  tabExts.delete(id);
   thumbs.delete(id);
 }
 
@@ -485,12 +508,14 @@ async function captureThumb(id) {
   } catch (e) { /* sem miniatura */ }
 }
 
-function newTab({ url, space, activate = true, title } = {}) {
+function newTab({ url, space, activate = true, title, partition = null, sessionLabel = null } = {}) {
   const tab = {
     id: nextId++,
     url: url ? toURL(url) : NEWTAB,
     title: title || (url ? hostOf(toURL(url)) : 'Página nova'),
-    space: space || (cur() ? cur().space : S.spaces[0].id)
+    space: space || (cur() ? cur().space : S.spaces[0].id),
+    partition: partition || null,
+    sessionLabel: partition ? sessionLabel : null
   };
   S.tabs.push(tab);
   if (activate) openTab(tab.id);
@@ -507,7 +532,7 @@ function openTab(id) {
   fullApp = null;
   S.mru = [id, ...S.mru.filter(x => x !== id && tabById(x))];
   const view = ensureTabView(tab);
-  if (view) { try { extensions.selectTab(view.webContents); } catch (e) { /* ok */ } }
+  if (view) { try { const ext = tabExts.get(id); if (ext) ext.selectTab(view.webContents); } catch (e) { /* ok */ } }
   applyLayout();
   if (view && !L.overlay) view.webContents.focus();
   else ui && ui.focus();
@@ -518,7 +543,7 @@ function removeTab(id, into) {
   const i = S.tabs.findIndex(t => t.id === id);
   if (i < 0) return;
   const [t] = S.tabs.splice(i, 1);
-  if (t.url !== NEWTAB) into.unshift({ url: t.url, title: t.title, space: t.space, favicon: t.favicon });
+  if (t.url !== NEWTAB) into.unshift({ url: t.url, title: t.title, space: t.space, favicon: t.favicon, partition: t.partition || null, sessionLabel: t.sessionLabel || null });
   destroyTabView(id);
   S.mru = S.mru.filter(x => x !== id);
   if (!S.tabs.length) { newTab({ space: t.space }); return; }
@@ -592,6 +617,12 @@ function sessionForApp(a) {
   appSessions.set(a.id, rec);
   return rec;
 }
+const tabExts = new Map();   // id do separador -> extensões da sessão dele
+function sessionForPartition(p) {
+  if (!p) return { ses: zeusSession, ext: extensions };
+  const a = S.apps.find(x => x.isolated && appPartition(x.id) === p);
+  return a ? sessionForApp(a) : null;
+}
 function extFor(id) { const a = appById(id); const r = a && a.isolated ? appSessions.get(id) : null; return r ? r.ext : extensions; }
 
 function ensureAppView(a) {
@@ -604,7 +635,7 @@ function ensureAppView(a) {
   win.contentView.addChildView(view);
   view.setVisible(false);
   const wc = view.webContents;
-  wireWeb(wc, 'app');
+  wireWeb(wc, 'app', { appId: a.id });
   try { if (ext) ext.addTab(wc, win); } catch (e) { /* ok */ }
   wc.on('page-title-updated', (e, title) => {
     const m = /\((\d+)\)/.exec(title) || /^(\d+)\s/.exec(title);
@@ -952,9 +983,9 @@ function setupIPC() {
   handle('tab:restore', (list, i) => {
     const arr = list === 'later' ? S.later : S.closed;
     const item = arr.splice(i, 1)[0];
-    if (item) newTab({ url: item.url, space: item.space, title: item.title });
+    if (item) newTab({ url: item.url, space: item.space, title: item.title, partition: item.partition, sessionLabel: item.sessionLabel });
   });
-  handle('tab:reopen', () => { const item = S.closed.shift(); if (item) newTab({ url: item.url, space: item.space, title: item.title }); });
+  handle('tab:reopen', () => { const item = S.closed.shift(); if (item) newTab({ url: item.url, space: item.space, title: item.title, partition: item.partition, sessionLabel: item.sessionLabel }); });
   handle('navigate', input => navigate(input));
   handle('nav', a => navAction(a));
   handle('find', (q, opts) => {
@@ -1075,7 +1106,7 @@ function buildMenu() {
     {
       label: 'Ficheiro', submenu: [
         { label: 'Separador novo', accelerator: 'CmdOrCtrl+T', click: () => newTab() },
-        { label: 'Reabrir separador fechado', accelerator: 'CmdOrCtrl+Shift+T', click: () => { const it = S.closed.shift(); if (it) newTab({ url: it.url, space: it.space }); } },
+        { label: 'Reabrir separador fechado', accelerator: 'CmdOrCtrl+Shift+T', click: () => { const it = S.closed.shift(); if (it) newTab({ url: it.url, space: it.space, partition: it.partition, sessionLabel: it.sessionLabel }); } },
         { label: 'Abrir endereço', accelerator: 'CmdOrCtrl+L', click: toUI('address') },
         { type: 'separator' },
         { label: 'Fechar separador', accelerator: 'CmdOrCtrl+W', click: () => { if (fullApp || openPanel) closeAppViews(); else if (S.currentId) closeTab(S.currentId); } },
@@ -1146,6 +1177,8 @@ app.whenReady().then(async () => {
   zeusSession.setUserAgent(chromeUA());
   setupPermissions(zeusSession);
   setupGoogleSignin(zeusSession);
+  // sem número vermelho no ícone da Dock (os sites já não o conseguem pôr, mas fica a garantia)
+  if (isMac) setInterval(() => { try { if (app.getBadgeCount() > 0 || app.dock.getBadge()) { app.setBadgeCount(0); app.dock.setBadge(''); } } catch (e) { /* ok */ } }, 1500);
   // a interface só fala com o processo principal; não precisa de permissões
   session.defaultSession.setPermissionRequestHandler((wc, p, cb) => cb(false));
   setupIPC();
