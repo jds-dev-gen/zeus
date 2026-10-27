@@ -145,6 +145,36 @@ const cur = () => S.tabs.find(t => t.id === S.currentId);
 const tabById = id => S.tabs.find(t => t.id === id);
 const appById = id => S.apps.find(a => a.id === id);
 
+/*
+ * Início de sessão da Google: a Google bloqueia browsers feitos com Electron.
+ * Só na página accounts.google.com o Zeus apresenta-se como Firefox (cabeçalhos,
+ * navigator.userAgent e sem as "client hints" do Chromium). O resto da web vê o Zeus como Chrome.
+ */
+const GOOGLE_LOGIN = /^https:\/\/accounts\.google\.com(\/|$)/i;
+function firefoxUA() {
+  // versão atual aproximada do Firefox (sai uma a cada 4 semanas desde a 140, de 24/06/2025), menos uma por prudência
+  const v = 140 + Math.max(0, Math.floor((Date.now() - Date.UTC(2025, 5, 24)) / (28 * 86400000)) - 1);
+  const plat = isMac ? 'Macintosh; Intel Mac OS X 10.15' : process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : 'X11; Linux x86_64';
+  return `Mozilla/5.0 (${plat}; rv:${v}.0) Gecko/20100101 Firefox/${v}.0`;
+}
+function setupGoogleSignin(ses) {
+  const ff = firefoxUA();
+  ses.webRequest.onBeforeSendHeaders({ urls: ['https://accounts.google.com/*'] }, (d, cb) => {
+    const h = Object.assign({}, d.requestHeaders);
+    h['User-Agent'] = ff;
+    for (const k of Object.keys(h)) if (/^sec-ch-ua/i.test(k)) delete h[k];
+    cb({ requestHeaders: h });
+  });
+  try { ses.registerPreloadScript({ type: 'frame', id: 'zeus-google-signin', filePath: path.join(__dirname, 'preload-google.js') }); }
+  catch (e) { console.error('preload da Google', e); }
+}
+function googleUA(wc, url) {
+  try {
+    const want = GOOGLE_LOGIN.test(url || '') ? firefoxUA() : chromeUA();
+    if (wc.getUserAgent() !== want) wc.setUserAgent(want);
+  } catch (e) { /* ok */ }
+}
+
 function chromeUA() {
   return session.defaultSession.getUserAgent()
     .replace(/\s?Electron\/\S+/i, '')
@@ -280,6 +310,7 @@ function toURL(input) {
 }
 
 function wireWeb(wc, kind) {
+  wc.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(wc, d.url); });
   // Option (Mac) / Alt (Windows): a interface decide se é o mosaico ou uma combinação de teclas
   wc.on('before-input-event', (e, input) => {
     if (input.key === 'Alt') { lastAltWC = wc; ui && ui.send('alt', input.type === 'keyDown' ? 'down' : 'up'); return; }
@@ -306,8 +337,12 @@ function wireWeb(wc, kind) {
     newTab({ url, activate: disposition !== 'background-tab', space: spaceForOpener(kind) });
     return { action: 'deny' };
   });
-  wc.on('did-create-window', child => {
-    child.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url }); return { action: 'deny' }; });
+  wc.on('did-create-window', (child, details) => {
+    const cw = child.webContents;
+    cw.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url }); return { action: 'deny' }; });
+    cw.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(cw, d.url); });
+    // janelas de início de sessão que abrem diretamente na Google
+    if (details && !details.postBody && GOOGLE_LOGIN.test(details.url || '')) { googleUA(cw, details.url); cw.loadURL(details.url).catch(() => {}); }
   });
 
   wc.on('will-attach-webview', e => e.preventDefault());
@@ -1044,6 +1079,7 @@ app.whenReady().then(async () => {
   zeusSession = session.fromPartition(PARTITION);
   zeusSession.setUserAgent(chromeUA());
   setupPermissions(zeusSession);
+  setupGoogleSignin(zeusSession);
   // a interface só fala com o processo principal; não precisa de permissões
   session.defaultSession.setPermissionRequestHandler((wc, p, cb) => cb(false));
   setupIPC();
