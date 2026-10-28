@@ -28,7 +28,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 /* Estado guardado                                                     */
 /* ------------------------------------------------------------------ */
 const DEFAULT_APPS = [
-  { id: 'apolo', name: 'Apolo', url: '', mode: 'full', icon: 'apolo', preload: false },
+  { id: 'apolo', name: 'Apolo', url: '', mode: 'full', icon: 'apolo', preload: false, linksInTabs: true },
   { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true },
   { id: 'mail', name: 'Email', url: 'https://mail.google.com/', mode: 'full', icon: 'mail', preload: true },
   { id: 'cal', name: 'Calendário', url: 'https://calendar.google.com/', mode: 'full', icon: 'cal', preload: false },
@@ -51,6 +51,7 @@ const DEFAULT_SETTINGS = {
   panelWidth: 420,            // largura do painel das apps ao lado
   claudeWidth: 420,
   autoUpdate: true,
+  autoPip: true,              // ao sair de um separador com vídeo a tocar, o vídeo fica a flutuar
   updateRepo: ''              // utilizador/repositório no GitHub com as versões do Zeus
 };
 const SCHEMA = 2;
@@ -72,11 +73,48 @@ let S = {
   settings: DEFAULT_SETTINGS,
   permissions: {},        // "origem|permissão" -> true/false
   visits: {},             // origem -> {n, title, url}
+  history: [],            // {url, title, n, t} — endereços visitados, para sugerir ao escrever
+  appLast: {},            // id da app -> último endereço (para voltar onde estava)
   bounds: null,
   claudeOpen: false
 };
 let nextId = 1;
 
+const HISTORY_MAX = 1500;
+function remember(url, title) {
+  if (!/^https?:/.test(url || '')) return;
+  const u = url.replace(/#.*$/, '');
+  let h = S.history.find(x => x.url === u);
+  if (h) { h.n++; h.t = Date.now(); if (title) h.title = title; S.history = [h, ...S.history.filter(x => x !== h)]; }
+  else { S.history.unshift({ url: u, title: title || '', n: 1, t: Date.now() }); if (S.history.length > HISTORY_MAX) S.history.length = HISTORY_MAX; }
+}
+function retitle(url, title) {
+  const u = (url || '').replace(/#.*$/, '');
+  const h = S.history.find(x => x.url === u); if (h && title) h.title = title;
+}
+const bare = u => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+// sugestões para o campo de endereço: endereços já visitados que comecem ou contenham o que se escreveu
+function suggest(q) {
+  q = String(q || '').trim().toLowerCase(); if (!q) return [];
+  const now = Date.now();
+  const out = [];
+  for (const h of S.history) {
+    const b = bare(h.url).toLowerCase(), host = hostOf(h.url), title = (h.title || '').toLowerCase();
+    let score = 0;
+    if (host.startsWith(q)) score = 100; else if (b.startsWith(q)) score = 80;
+    else if (host.split('.').some(p => p.startsWith(q))) score = 50;
+    else if (b.includes(q)) score = 30; else if (title.includes(q)) score = 25;
+    if (!score) continue;
+    score += Math.min(40, Math.log2(1 + h.n) * 8) + Math.max(0, 20 - (now - h.t) / 86400000);
+    if (b === host) score += 5;  // páginas principais primeiro
+    out.push({ url: h.url, title: h.title, score });
+  }
+  // a página principal de um site que começa pelo texto escrito (para completar "obs" → observador.pt)
+  out.sort((a, b) => b.score - a.score);
+  const seen = new Set(); const res = [];
+  for (const o of out) { const k = bare(o.url); if (seen.has(k)) continue; seen.add(k); res.push({ url: o.url, title: o.title }); if (res.length >= 7) break; }
+  return res;
+}
 const stateFile = () => path.join(app.getPath('userData'), 'zeus-state.json');
 function loadState() {
   try {
@@ -88,15 +126,21 @@ function loadState() {
     // apps novas por defeito entram sem apagar as do João
     const ids = new Set(S.apps.map(a => a.id));
     DEFAULT_APPS.forEach(a => { if (!ids.has(a.id) && !(saved.removedApps || []).includes(a.id)) S.apps.push(a); });
+    // 0.2.8: no Apolo os links abrem em separadores (as outras apps abrem tudo dentro de si)
+    S.apps.forEach(a => { if (a.id === 'apolo' && a.linksInTabs === undefined) a.linksInTabs = true; });
   } catch (e) { /* primeiro arranque */ }
   if (!S.settings.updateRepo && PKG.zeus && PKG.zeus.updateRepo) S.settings.updateRepo = PKG.zeus.updateRepo;
   S.tabs = (S.tabs || []).filter(t => t && t.url);
+  if (!Array.isArray(S.history)) S.history = [];
+  if (!S.appLast || typeof S.appLast !== 'object') S.appLast = {};
+  // primeira vez: o histórico começa com os sites mais visitados
+  if (!S.history.length) Object.values(S.visits || {}).forEach(v => { if (v.url) S.history.push({ url: v.url, title: v.title || '', n: v.n || 1, t: Date.now() - 86400000 }); });
   if (!S.settings.restoreTabs && S.tabs.length) {
     // começa limpo, mas os separadores da última vez ficam em "Fechados há pouco"
     S.closed = [...S.tabs.filter(t => t.url !== NEWTAB).map(t => ({ url: t.url, title: t.title, space: t.space, favicon: t.favicon })), ...(S.closed || [])].slice(0, 15);
     S.tabs = [];
   }
-  S.tabs.forEach(t => { t.id = nextId++; delete t.loading; delete t.error; delete t.audible; });
+  S.tabs.forEach(t => { t.id = nextId++; delete t.loading; delete t.error; delete t.audible; delete t.media; });
   const curIdx = typeof S.currentIndex === 'number' ? S.currentIndex : 0;
   if (!S.tabs.length) S.tabs.push({ id: nextId++, url: NEWTAB, title: 'Página nova', space: S.spaces[0].id });
   S.currentId = (S.tabs[curIdx] || S.tabs[0]).id;
@@ -115,7 +159,7 @@ function saveNow() {
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
       apps: S.apps, removedApps: S.removedApps || [], settings: S.settings, permissions: S.permissions,
-      visits: S.visits, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
+      visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
     fs.mkdirSync(path.dirname(stateFile()), { recursive: true });
@@ -139,7 +183,7 @@ const appErrors = {};         // id da app -> erro de carregamento
 let openPanel = null;         // app aberta ao lado
 let fullApp = null;           // app aberta em página inteira
 let fullscreenView = null;    // vista em ecrã inteiro (vídeo)
-let L = { page: null, panel: null, claude: null, overlay: false };
+let L = { page: null, panel: null, claude: null, overlay: false, cover: false };
 
 const cur = () => S.tabs.find(t => t.id === S.currentId);
 const tabById = id => S.tabs.find(t => t.id === id);
@@ -238,14 +282,14 @@ function applyLayout() {
   // separadores
   for (const [id, view] of tabViews) {
     const tab = tabById(id);
-    const show = !ov && !fullApp && id === S.currentId && tab && !tab.error && tab.url !== NEWTAB && L.page;
+    const show = !ov && !L.cover && !fullApp && id === S.currentId && tab && !tab.error && tab.url !== NEWTAB && L.page;
     if (show) view.setBounds(L.page);
     view.setVisible(!!show);
   }
   // apps
   for (const [id, view] of appViews) {
     let rect = null;
-    if (!ov && !appErrors[id] && fullApp === id && L.page) rect = L.page;
+    if (!ov && !L.cover && !appErrors[id] && fullApp === id && L.page) rect = L.page;
     else if (!ov && !appErrors[id] && openPanel === id && L.panel) rect = L.panel;
     if (rect) view.setBounds(rect);
     view.setVisible(!!rect);
@@ -275,7 +319,7 @@ function pushState(now) {
     ui.send('state', {
       tabs: S.tabs.map(t => ({
         id: t.id, url: t.url, title: t.title || hostOf(t.url) || 'Página nova', favicon: t.favicon || '', sessionLabel: t.sessionLabel || '',
-        space: t.space, loading: !!t.loading, error: t.error || null, audible: !!t.audible
+        space: t.space, loading: !!t.loading, error: t.error || null, audible: !!t.audible, media: !!t.media
       })),
       currentId: S.currentId,
       mru: S.mru,
@@ -335,20 +379,22 @@ function wireWeb(wc, kind, ctx = {}) {
       };
     }
     // apps da barra: tudo abre dentro da própria app (links, mudar de conta…), nunca num separador
-    if (kind === 'app') { wc.loadURL(url).catch(() => {}); return { action: 'deny' }; }
+    const opener = kind === 'app' ? appById(ctx.appId) : null;
+    if (kind === 'app' && !(opener && opener.linksInTabs)) { wc.loadURL(url).catch(() => {}); return { action: 'deny' }; }
     // links de um separador com sessão separada continuam nessa sessão (mesma conta)
     let partition = null, sessionLabel = null;
     if (kind === 'tab' && ctx.tabId) {
       const t = tabById(ctx.tabId);
       if (t) { partition = t.partition || null; sessionLabel = t.sessionLabel || null; }
-    }
+    } else if (opener && opener.isolated) { partition = appPartition(opener.id); sessionLabel = opener.name; }
     newTab({ url, activate: disposition !== 'background-tab', space: spaceForOpener(kind), partition, sessionLabel });
     return { action: 'deny' };
   });
   wc.on('did-create-window', (child, details) => {
     const cw = child.webContents;
     cw.setWindowOpenHandler(({ url }) => {
-      if (/^https?:/.test(url)) { if (kind === 'app' && !wc.isDestroyed()) wc.loadURL(url).catch(() => {}); else newTab({ url }); }
+      const op = kind === 'app' ? appById(ctx.appId) : null;
+      if (/^https?:/.test(url)) { if (op && !op.linksInTabs && !wc.isDestroyed()) wc.loadURL(url).catch(() => {}); else newTab({ url }); }
       return { action: 'deny' };
     });
     cw.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(cw, d.url); });
@@ -357,7 +403,7 @@ function wireWeb(wc, kind, ctx = {}) {
   });
 
   wc.on('will-attach-webview', e => e.preventDefault());
-  wc.on('context-menu', (e, p) => contextMenu(wc, p, kind));
+  wc.on('context-menu', (e, p) => { const ap = kind === 'app' ? appById(ctx.appId) : null; contextMenu(wc, p, ap && !ap.linksInTabs ? 'app' : kind); });
 }
 
 let lastAltWC = null;  // página onde se carregou no Option pela última vez
@@ -435,11 +481,12 @@ function ensureTabView(tab) {
 
   const id = tab.id;
   const T = () => tabById(id);
-  wc.on('page-title-updated', (e, title) => { const t = T(); if (t) { t.title = title; pushState(); saveState(); } });
+  wc.on('page-title-updated', (e, title) => { const t = T(); if (t) { t.title = title; retitle(t.url, title); pushState(); saveState(); } });
   wc.on('page-favicon-updated', (e, fav) => { const t = T(); if (t) { t.favicon = fav[0] || ''; pushState(); } });
   const onNav = (e, url) => {
     const t = T(); if (!t) return;
     t.url = url; pushState(); saveState();
+    remember(url, wc.getTitle() !== url ? wc.getTitle() : '');
     const o = originOf(url);
     if (o && /^https?:/.test(o)) {
       const v = S.visits[o] || { n: 0 };
@@ -466,6 +513,8 @@ function ensureTabView(tab) {
     applyLayout(); pushState();
   });
   wc.on('audio-state-changed', e => { const t = T(); if (t) { t.audible = e.audible; pushState(); } });
+  wc.on('media-started-playing', () => { const t = T(); if (t) { t.media = true; pushState(); } });
+  wc.on('media-paused', () => { const t = T(); if (t) { t.media = false; pushState(); } });
   wc.on('enter-html-full-screen', () => {
     fullscreenView = view;
     win.contentView.removeChildView(view); win.contentView.addChildView(view);
@@ -521,7 +570,7 @@ function openTab(id) {
   const tab = tabById(id);
   if (!tab) return;
   const prev = S.currentId;
-  if (prev !== id) captureThumb(prev);
+  if (prev !== id) { captureThumb(prev); autoPip(prev); pipExit(id); }
   S.currentId = id;
   fullApp = null;
   S.mru = [id, ...S.mru.filter(x => x !== id && tabById(x))];
@@ -562,6 +611,87 @@ function navigate(input) {
   pushState(); saveState();
 }
 
+// casa: página nova (hora, meteorologia, pesquisa) — reaproveita uma página nova vazia do espaço
+function goHome() {
+  const t = cur();
+  const space = t ? t.space : S.spaces[0].id;
+  if (t && t.url === NEWTAB && !fullApp) { ui.send('ui-command', { cmd: 'focus-ask' }); return; }
+  const blank = S.tabs.find(x => x.url === NEWTAB && x.space === space);
+  if (blank) openTab(blank.id); else newTab({ space });
+}
+function pageWC() { const v = fullApp ? appViews.get(fullApp) : tabViews.get(S.currentId); return v && !v.webContents.isDestroyed() ? v.webContents : null; }
+
+/* Vídeo a flutuar (picture-in-picture) */
+const PIP_ENTER = force => `(async () => {
+  const vs = [...document.querySelectorAll('video')].filter(v => v.readyState > 1 && !v.disablePictureInPicture);
+  let v = vs.find(v => !v.paused && !v.muted) || vs.find(v => !v.paused);
+  if (!v && ${force}) v = vs.sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
+  if (!v) return 'none';
+  if (document.pictureInPictureElement === v) return 'already';
+  await v.requestPictureInPicture(); return 'ok';
+})().catch(e => 'err')`;
+const PIP_STATE = `!!document.pictureInPictureElement`;
+const PIP_EXIT = `(document.pictureInPictureElement ? document.exitPictureInPicture().then(() => 'out') : Promise.resolve('none')).catch(() => 'err')`;
+async function inFrames(wc, code) {
+  const out = [];
+  if (!wc || wc.isDestroyed()) return out;
+  let frames = [];
+  try { frames = wc.mainFrame.framesInSubtree; } catch (e) { frames = [wc.mainFrame]; }
+  for (const f of frames) { try { out.push(await f.executeJavaScript(code, true)); } catch (e) { /* moldura sem acesso */ } }
+  return out;
+}
+async function pipEnter(wc, force) { const r = await inFrames(wc, PIP_ENTER(force)); return r.includes('ok') || r.includes('already'); }
+function autoPip(tabId) {
+  if (S.settings.autoPip === false) return;
+  const t = tabById(tabId); const v = tabViews.get(tabId);
+  if (!t || !t.media || !v) return;
+  pipEnter(v.webContents, false).catch(() => {});
+}
+function pipExit(tabId) { const v = tabViews.get(tabId); if (v) inFrames(v.webContents, PIP_EXIT).catch(() => {}); }
+async function pipToggle() {
+  const wc = pageWC(); if (!wc) return;
+  const on = (await inFrames(wc, PIP_STATE)).includes(true);
+  if (on) { await inFrames(wc, PIP_EXIT); return; }
+  if (!(await pipEnter(wc, true))) ui.send('toast', 'Não há nenhum vídeo nesta página para pôr a flutuar.');
+}
+
+/* Partilhar a página */
+function openInApp(a, url) {
+  const view = ensureAppView(a); if (!view) return;
+  view.webContents.loadURL(url).catch(() => {});
+  if (fullApp !== a.id && openPanel !== a.id) openApp(a.id);
+}
+function sharePage(pos) {
+  const wc = pageWC();
+  if (!wc) { ui.send('toast', 'Abre uma página para a partilhares.'); return; }
+  const url = wc.getURL(), title = wc.getTitle() || hostOf(url);
+  if (!/^https?:/.test(url)) { ui.send('toast', 'Esta página não pode ser partilhada.'); return; }
+  const enc = encodeURIComponent;
+  const items = [];
+  if (isMac) items.push({ label: 'Partilhar com…', role: 'shareMenu', sharingItem: { urls: [url] } }, { type: 'separator' });
+  items.push(
+    { label: 'Copiar endereço', click: () => { clipboard.writeText(url); ui.send('toast', 'Endereço copiado.'); } },
+    { label: 'Copiar título e endereço', click: () => { clipboard.writeText(title + '\n' + url); ui.send('toast', 'Título e endereço copiados.'); } },
+    { type: 'separator' }
+  );
+  S.apps.filter(a => a.url && hostOf(a.url) === 'mail.google.com').forEach(a => {
+    const m = /\/mail\/u\/(\d+)/.exec(S.appLast[a.id] || '');
+    const base = 'https://mail.google.com/mail/' + (m ? 'u/' + m[1] + '/' : '');
+    items.push({ label: `Enviar por email (${a.name})`, click: () => openInApp(a, `${base}?view=cm&fs=1&su=${enc(title)}&body=${enc(url)}`) });
+  });
+  S.apps.filter(a => a.url && hostOf(a.url) === 'web.whatsapp.com').forEach(a => {
+    items.push({ label: `Enviar no ${a.name}`, click: () => openInApp(a, `https://web.whatsapp.com/send?text=${enc(title + ' ' + url)}`) });
+  });
+  items.push(
+    { label: 'Enviar ao Claude', click: () => sendToClaude(`${title}\n${url}\n\n`) },
+    { type: 'separator' },
+    { label: 'Abrir no browser do sistema', click: () => shell.openExternal(url) }
+  );
+  const opts = { window: win };
+  if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) { opts.x = Math.round(pos.x); opts.y = Math.round(pos.y); }
+  Menu.buildFromTemplate(items).popup(opts);
+}
+
 function navAction(a) {
   if (fullApp) {
     const v = appViews.get(fullApp); if (!v) return;
@@ -571,9 +701,11 @@ function navAction(a) {
     if (a === 'reload' || a === 'retry') w.reload();
     if (a === 'hardreload') w.reloadIgnoringCache();
     if (a === 'stop') w.stop();
-    if (a === 'home' && ap && ap.url) w.loadURL(ap.url).catch(() => {});
+    if (a === 'apphome' && ap && ap.url) w.loadURL(ap.url).catch(() => {});
+    if (a === 'home') goHome();
     return;
   }
+  if (a === 'home') { goHome(); return; }
   const tab = cur(); if (!tab) return;
   const view = tabViews.get(tab.id);
   if (a === 'retry' && tab.error) { const u = tab.error.url || tab.url; tab.error = null; if (view) view.webContents.loadURL(u).catch(() => {}); applyLayout(); pushState(); return; }
@@ -582,6 +714,7 @@ function navAction(a) {
   if (a === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
   if (a === 'forward' && wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
   if (a === 'reload') wc.reload();
+  if (a === 'home') goHome();
   if (a === 'hardreload') wc.reloadIgnoringCache();
   if (a === 'stop') wc.stop();
 }
@@ -651,12 +784,18 @@ function ensureAppView(a) {
     if (!isMain || code === -3) return;
     appErrors[a.id] = { code, desc, url }; applyLayout(); pushState();
   });
-  wc.on('did-navigate', () => pushState());
-  wc.on('did-navigate-in-page', () => pushState());
+  // lembrar onde a app estava (ex.: a Drive ou o Calendário da conta do trabalho)
+  const keep = url => {
+    if (/^https?:/.test(url) && hostOf(url) === hostOf(a.url)) { S.appLast[a.id] = url; saveState(); }
+    pushState();
+  };
+  wc.on('did-navigate', (e, url) => keep(url));
+  wc.on('did-navigate-in-page', (e, url, isMain) => { if (isMain) keep(url); });
   wc.on('did-start-navigation', d => {
     if (d.isMainFrame && !d.isSameDocument && appErrors[a.id]) { delete appErrors[a.id]; applyLayout(); pushState(); }
   });
-  wc.loadURL(a.url).catch(() => {});
+  const last = S.appLast[a.id];
+  wc.loadURL(last && hostOf(last) === hostOf(a.url) ? last : a.url).catch(() => {});
   return view;
 }
 function destroyAppView(id) {
@@ -672,7 +811,9 @@ function openApp(id) {
   const a = appById(id); if (!a || !a.url) return;
   const view = ensureAppView(a);
   if (a.mode === 'full') {
+    if (fullApp !== id && !fullApp) autoPip(S.currentId);
     fullApp = fullApp === id ? null : id;
+    if (!fullApp) pipExit(S.currentId);
     if (openPanel === id) openPanel = null;
   } else {
     openPanel = openPanel === id ? null : id;
@@ -709,7 +850,7 @@ function updateApp(id, patch) {
   if (patch.url !== undefined) {
     const u = toURL(patch.url);
     if (!/^https?:/.test(u)) return { ok: false, error: 'Escreve um endereço web válido.' };
-    if (u !== a.url) { a.url = u; destroyAppView(id); }
+    if (u !== a.url) { a.url = u; delete S.appLast[id]; destroyAppView(id); }
   }
   if (patch.name) a.name = String(patch.name).slice(0, 24);
   if (patch.mode) a.mode = patch.mode === 'full' ? 'full' : 'side';
@@ -732,6 +873,7 @@ async function clearAppSession(id) {
   appSessions.delete(id);
 }
 function removeApp(id) {
+  delete S.appLast[id];
   const old = appById(id);
   destroyAppView(id);
   if (old && old.isolated) clearAppSession(id);
@@ -762,6 +904,7 @@ function appMenu(id) {
     { label: 'Recarregar', enabled: !!view, click: () => view && view.webContents.reload() },
     { label: 'Editar nome, endereço e ícone…', click: () => ui.send('ui-command', { cmd: 'edit-app', id }) },
     { label: 'Sessão separada', type: 'checkbox', checked: !!a.isolated, click: () => askIsolated(id, !a.isolated) },
+    { label: 'Links abrem em separadores', type: 'checkbox', checked: !!a.linksInTabs, click: () => { a.linksInTabs = !a.linksInTabs; saveState(); pushState(true); } },
     { type: 'separator' },
     { label: 'Remover da barra', click: () => removeApp(id) }
   ]).popup({ window: win });
@@ -960,7 +1103,7 @@ function setupIPC() {
     const clean = r => (r && r.width > 0 && r.height > 0)
       ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null;
     const wasOverlay = L.overlay;
-    L = { page: clean(rects.page), panel: clean(rects.panel), claude: clean(rects.claude), overlay: !!rects.overlay };
+    L = { page: clean(rects.page), panel: clean(rects.panel), claude: clean(rects.claude), overlay: !!rects.overlay, cover: !!rects.cover };
     applyLayout();
     if (L.overlay && !wasOverlay) ui.focus();
     if (!L.overlay && wasOverlay) {
@@ -995,6 +1138,13 @@ function setupIPC() {
   handle('tab:reopen', () => { const item = S.closed.shift(); if (item) newTab({ url: item.url, space: item.space, title: item.title, partition: item.partition, sessionLabel: item.sessionLabel }); });
   handle('navigate', input => navigate(input));
   handle('nav', a => navAction(a));
+  handle('history:suggest', q => suggest(q));
+  handle('page:share', pos => sharePage(pos));
+  handle('pip:toggle', () => pipToggle());
+  handle('page:snapshot', async () => {
+    const wc = pageWC(); if (!wc) return '';
+    try { const img = await wc.capturePage(); return img.isEmpty() ? '' : 'data:image/jpeg;base64,' + img.toJPEG(80).toString('base64'); } catch (e) { return ''; }
+  });
   handle('find', (q, opts) => {
     const v = tabViews.get(S.currentId); if (!v) return;
     if (!q) { v.webContents.stopFindInPage('clearSelection'); return; }
@@ -1035,7 +1185,13 @@ function setupIPC() {
     wc.focus();
     if (t) wc.insertText(t);
   });
-  handle('app:reload', id => { const v = appViews.get(id); const a = appById(id); if (!v) return; delete appErrors[id]; v.webContents.loadURL(a.url).catch(() => {}); applyLayout(); pushState(); });
+  handle('app:reload', id => {
+    const v = appViews.get(id); const a = appById(id); if (!v || !a) return;
+    // recarrega onde está (não volta ao início); se deu erro, tenta outra vez o mesmo endereço
+    if (appErrors[id]) { const u = appErrors[id].url || S.appLast[id] || a.url; delete appErrors[id]; v.webContents.loadURL(u).catch(() => {}); }
+    else v.webContents.reload();
+    applyLayout(); pushState();
+  });
   handle('claude:toggle', open => setClaude(open === undefined ? !S.claudeOpen : open));
   handle('claude:sendPage', () => sendPageToClaude());
   handle('claude:ask', text => sendToClaude(String(text || '')));
@@ -1063,6 +1219,7 @@ function setupIPC() {
   });
   handle('data:clear', async what => {
     if (what === 'cache') await zeusSession.clearCache();
+    if (what === 'history' || what === 'all') { S.history = []; S.visits = {}; S.closed = []; saveState(); pushState(); }
     if (what === 'all') {
       await zeusSession.clearStorageData(); await zeusSession.clearCache();
       for (const a of S.apps) if (a.isolated) { const ses = session.fromPartition(appPartition(a.id)); await ses.clearStorageData(); await ses.clearCache(); }
@@ -1148,6 +1305,10 @@ function buildMenu() {
       label: 'Navegar', submenu: [
         { label: 'Retroceder', accelerator: 'CmdOrCtrl+[', click: () => navAction('back') },
         { label: 'Avançar', accelerator: 'CmdOrCtrl+]', click: () => navAction('forward') },
+        { label: 'Página inicial', accelerator: 'CmdOrCtrl+Shift+H', click: () => goHome() },
+        { type: 'separator' },
+        { label: 'Vídeo a flutuar', accelerator: 'CmdOrCtrl+Alt+P', click: () => pipToggle() },
+        { label: 'Partilhar a página…', click: () => sharePage() },
         { type: 'separator' },
         { label: 'Separador seguinte', accelerator: 'Ctrl+Tab', click: () => cycle(1) },
         { label: 'Separador anterior', accelerator: 'Ctrl+Shift+Tab', click: () => cycle(-1) }

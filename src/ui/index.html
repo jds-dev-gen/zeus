@@ -12,13 +12,15 @@
     <div class="tl-space" id="tlSpace"></div>
     <div class="brand"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.5 2 4.5 13.5h6.5L9.5 22l10-12.5h-6.5L13.5 2z" transform="rotate(14 12 12)"/></svg><span>Zeus</span></div>
     <div class="navs">
-      <button class="nb" id="btnBack" type="button" aria-label="Retroceder" title="Retroceder (⌘[)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
-      <button class="nb" id="btnFwd" type="button" aria-label="Avançar" title="Avançar (⌘])"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
-      <button class="nb" id="btnReload" type="button" aria-label="Recarregar" title="Recarregar (⌘R)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button>
+      <button class="nb" id="btnBack" type="button" aria-label="Retroceder" title="Retroceder (⌘[)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <button class="nb" id="btnFwd" type="button" aria-label="Avançar" title="Avançar (⌘])"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      <button class="nb" id="btnReload" type="button" aria-label="Recarregar" title="Recarregar (⌘R)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button>
+      <button class="nb" id="btnHome" type="button" aria-label="Página inicial" title="Página inicial — hora, meteorologia e pesquisa (⇧⌘H)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h4v-6h4v6h4V10"/></svg></button>
     </div>
     <div class="center" id="center">
       <button class="title-btn" id="titleBtn" type="button" title="Escrever um endereço (⌘L)"></button>
       <input class="addr" id="addr" type="text" aria-label="Endereço ou pesquisa" spellcheck="false" autocomplete="off" hidden>
+      <div class="sugg" id="addrSugg" role="listbox" aria-label="Sugestões" hidden></div>
       <div class="top-tabs" id="topTabs" hidden></div>
     </div>
     <div class="findbox" id="findbox" hidden>
@@ -31,6 +33,8 @@
       <button class="tbtn" id="fullSide" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M10 4v16"/></svg><span class="tx">Abrir ao lado</span></button>
       <button class="nb" id="fullClose" type="button" aria-label="Fechar a app e voltar à página"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
+    <button class="nb" id="pipBtn" type="button" aria-label="Pôr o vídeo a flutuar" title="Vídeo a flutuar" hidden><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><rect x="12" y="11.5" width="7" height="5.5" rx="1.2" fill="currentColor" stroke="none"/></svg></button>
+    <button class="nb" id="shareBtn" type="button" aria-label="Partilhar a página" title="Partilhar"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg></button>
     <browser-action-list id="extActions" partition="persist:zeus" alignment="bottom left"></browser-action-list>
     <button class="tbtn on" id="updBtn" type="button" hidden></button>
     <button class="tbtn" id="mosaicBtn" type="button" title="Separadores — mantém Option premido"><span class="kbd" id="keyLbl">⌥</span><span class="tx">Separadores</span></button>

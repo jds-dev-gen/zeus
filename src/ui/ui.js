@@ -28,6 +28,10 @@ const ICON = {
   arrow: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
   full: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M20 15v5h-5"/></svg>',
   snd: '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/></svg>',
+  moon: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>`,
+  drop: '<svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5s-7 7.6-7 12.5a7 7 0 0 0 14 0c0-4.9-7-12.5-7-12.5z"/></svg>',
+  link: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>',
+  search: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
   sun: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`,
   part: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="3"/><path d="M9 2.5v1.5M2.5 9H4M4.4 4.4l1 1M13.6 4.4l-1 1"/><path d="M9 19a3.5 3.5 0 0 1 .4-7 4.5 4.5 0 0 1 8.6 1.3A2.9 2.9 0 0 1 18 19z"/></svg>`,
   cloud: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M7 17a4 4 0 0 1 .5-8 5 5 0 0 1 9.6 1.5A3.3 3.3 0 0 1 17 17z"/></svg>`,
@@ -61,7 +65,7 @@ function rectOf(el) {
 }
 let lastLayout = '';
 function sendLayout() {
-  const lay = { page: rectOf($('#pageSlot')), panel: rectOf($('#panelSlot')), claude: rectOf($('#claudeSlot')), overlay: ov.open || !!modal };
+  const lay = { page: rectOf($('#pageSlot')), panel: rectOf($('#panelSlot')), claude: rectOf($('#claudeSlot')), overlay: ov.open || !!modal, cover: !!sendLayout.cover };
   const k = JSON.stringify(lay);
   if (k === lastLayout) return;
   lastLayout = k;
@@ -122,7 +126,7 @@ function renderRail() {
   const key = JSON.stringify([S.apps, S.openPanel, S.fullApp]);
   if (key === railKey) return;
   railKey = key;
-  let h = '';
+  let h = '<div class="rail-apps" id="railApps">';
   S.apps.forEach((a, i) => {
     const on = S.openPanel === a.id || S.fullApp === a.id;
     let inner = a.icon === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>'
@@ -133,9 +137,12 @@ function renderRail() {
     if (i === 0) h += '<span class="rail-sep" aria-hidden="true"></span>';
   });
   h += `<div class="app-item"><button class="app-btn add" type="button" data-add-app aria-label="Juntar site como app ou extensão" title="Juntar">${ICON.plus}</button><span class="lbl">Juntar</span></div>`;
+  h += '</div><div class="rail-foot">';
   h += `<div class="clock" aria-label="Hora"><b data-clock></b><span data-dshort></span></div>`;
-  h += `<button class="icon-btn" type="button" data-settings aria-label="Definições" title="Definições (⌘,)">${ICON.gear}</button>`;
+  h += `<button class="icon-btn" type="button" data-settings aria-label="Definições" title="Definições (⌘,)">${ICON.gear}</button></div>`;
+  const keepScroll = $('#railApps') ? $('#railApps').scrollTop : 0;
   $('#rail').innerHTML = h;
+  $('#railApps').scrollTop = keepScroll;
   tick();
 }
 $('#rail').addEventListener('click', e => {
@@ -207,6 +214,8 @@ function renderTop() {
   $('#btnReload').disabled = !(onWeb || (t && t.error));
   const away = full && S.fullAppURL && hostOf(S.fullAppURL) && hostOf(S.fullAppURL) !== hostOf(full.url) ? hostOf(S.fullAppURL) : '';
   $('#fullHome').hidden = !full || !away;
+  $('#pipBtn').hidden = !!full || !(t && t.media);
+  $('#shareBtn').disabled = full ? !/^https?:/.test(S.fullAppURL || '') : !(t && /^https?:/.test(t.url || ''));
   $('#fullBtns').hidden = !full;
   $('#claudeBtn').classList.toggle('on', S.claudeOpen);
   $('#mosaicBtn').classList.toggle('on', ov.open);
@@ -364,6 +373,7 @@ function newtabHTML() {
       <div class="seg" id="askSeg"><button type="button" class="on" data-mode="web">Web</button><button type="button" data-mode="claude">Claude</button></div>
       <input id="askInput" type="text" placeholder="Pesquisar na web ou escrever um endereço" aria-label="Pesquisa ou endereço" spellcheck="false">
       <button class="go" type="submit" aria-label="Ir">${ICON.arrow}</button>
+      <div class="sugg" id="askSugg" role="listbox" aria-label="Sugestões" hidden></div>
     </form>
     <div class="section"><span class="lbl-mono">Atalhos</span><div class="shorts" id="shorts"></div></div>
     <div class="section" id="contSec"><span class="lbl-mono">Continuar onde ficaste</span><div class="cont" id="cont"></div></div>
@@ -400,9 +410,18 @@ $('#pageSlot').addEventListener('click', e => {
   }
   if (e.target.closest('[data-city]')) openCity();
 });
+// roda do rato na barra hora a hora: desliza na horizontal
+$('#pageSlot').addEventListener('wheel', e => {
+  const h = e.target.closest('.hourly'); if (!h || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+  e.preventDefault(); h.scrollLeft += e.deltaY;
+}, { passive: false });
+$('#pageSlot').addEventListener('input', e => { if (e.target.id === 'askInput') suggInput(e, e.target, $('#askSugg')); });
+$('#pageSlot').addEventListener('keydown', e => { if (e.target.id === 'askInput' && suggKey(e, e.target)) e.stopPropagation(); }, true);
+$('#pageSlot').addEventListener('focusout', e => { if (e.target.id === 'askInput' && sug.input === e.target) closeSugg(); });
 $('#pageSlot').addEventListener('submit', e => {
   if (e.target.id !== 'askForm') return;
   e.preventDefault();
+  if (sug.open) { pickSugg(sug.sel); return; }
   const v = $('#askInput').value.trim(); if (!v) return;
   const claude = $('#askSeg .on') && $('#askSeg .on').dataset.mode === 'claude';
   if (claude) { Z.invoke('claude:ask', v); $('#askInput').value = ''; }
@@ -425,12 +444,14 @@ const WX = c => {
 };
 async function loadWeather() {
   const city = S.settings.city || { name: 'Lisboa', lat: 38.7223, lon: -9.1393 };
-  const ck = 'wx:' + city.lat + ',' + city.lon;
+  const ck = 'wx2:' + city.lat + ',' + city.lon;
   let data = null;
   try { const c = JSON.parse(localStorage.getItem(ck) || 'null'); if (c && Date.now() - c.t < 30 * 60 * 1000) data = c.d; } catch (e) { /* sem cache */ }
   if (!data) {
     try {
-      const u = `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=6`;
+      const u = `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}&current=temperature_2m,weather_code,is_day`
+        + `&hourly=temperature_2m,weather_code,precipitation_probability,is_day`
+        + `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=6`;
       const r = await fetch(u); if (!r.ok) throw new Error(r.status);
       data = await r.json();
       try { localStorage.setItem(ck, JSON.stringify({ t: Date.now(), d: data })); } catch (e) { /* ok */ }
@@ -441,9 +462,12 @@ async function loadWeather() {
     now.innerHTML = `<div><span>Meteorologia indisponível · <button class="wx-city" type="button" data-city>${esc(city.name)}</button></span></div>`;
     fc.innerHTML = ''; return;
   }
-  const [desc, ic] = WX(data.current.weather_code);
-  now.innerHTML = `${ICON[ic](40)}<div><b>${Math.round(data.current.temperature_2m)}°</b><span><button class="wx-city" type="button" data-city title="Mudar de cidade">${esc(city.name)}</button> · ${esc(desc)}</span></div>`;
+  const icFor = (code, day) => { const [, ic] = WX(code); return ic === 'sun' && day === 0 ? 'moon' : ic; };
+  const [desc] = WX(data.current.weather_code);
   const d = data.daily;
+  const rainToday = d.precipitation_probability_max ? d.precipitation_probability_max[0] : null;
+  const today = d.temperature_2m_max ? `<span class="wx-today">Hoje: máx. ${Math.round(d.temperature_2m_max[0])}° · mín. ${Math.round(d.temperature_2m_min[0])}°${rainToday != null ? ` · chuva ${rainToday}%` : ''}</span>` : '';
+  now.innerHTML = `${ICON[icFor(data.current.weather_code, data.current.is_day)](40)}<div><b>${Math.round(data.current.temperature_2m)}°</b><span><button class="wx-city" type="button" data-city title="Mudar de cidade">${esc(city.name)}</button> · ${esc(desc)}</span>${today}</div>`;
   let h = '<div class="fc">';
   for (let i = 1; i <= 5 && i < d.time.length; i++) {
     const day = new Date(d.time[i] + 'T12:00:00');
@@ -451,14 +475,34 @@ async function loadWeather() {
     const [, ic2] = WX(d.weather_code[i]);
     h += `<div><span>${lab}</span>${ICON[ic2](20)}<span>${Math.round(d.temperature_2m_max[i])}° <em>${Math.round(d.temperature_2m_min[i])}°</em></span></div>`;
   }
-  fc.innerHTML = h + '</div>';
+  h += '</div>';
+  // hora a hora: do momento atual até ao fim do dia (pelo menos 8 horas)
+  const H = data.hourly;
+  if (H && H.time) {
+    const nowIso = (data.current.time || '').slice(0, 13);
+    let start = H.time.findIndex(t => t.slice(0, 13) === nowIso); if (start < 0) start = 0;
+    const todayDate = H.time[start].slice(0, 10);
+    let end = start; while (end < H.time.length && H.time[end].slice(0, 10) === todayDate) end++;
+    end = Math.min(H.time.length, Math.max(end, start + 8));
+    let row = '';
+    for (let i = start; i < end; i++) {
+      const p = H.precipitation_probability ? H.precipitation_probability[i] : null;
+      const hour = H.time[i].slice(11, 13) + 'h';
+      row += `<div class="${i === start ? 'now' : ''}" title="${hour}: ${Math.round(H.temperature_2m[i])}°, ${esc(WX(H.weather_code[i])[0])}${p != null ? ', ' + p + '% de probabilidade de chuva' : ''}"><span class="h">${i === start ? 'Agora' : hour}</span>${ICON[icFor(H.weather_code[i], H.is_day ? H.is_day[i] : 1)](20)}<span>${Math.round(H.temperature_2m[i])}°</span>${p != null ? `<span class="p ${p >= 40 ? 'wet' : ''}">${ICON.drop}${p}%</span><span class="bar"><i style="width:${p}%"></i></span>` : ''}</div>`;
+    }
+    h += `<div class="hourly" aria-label="Previsão hora a hora">${row}</div>`;
+  }
+  fc.innerHTML = h;
 }
 
 /* ------------------------------------------------------------------ */
 /* Faixa de cima: navegação, endereço, procurar                         */
 /* ------------------------------------------------------------------ */
 $('#btnBack').addEventListener('click', () => Z.invoke('nav', 'back'));
-$('#fullHome').addEventListener('click', () => Z.invoke('nav', 'home'));
+$('#fullHome').addEventListener('click', () => Z.invoke('nav', 'apphome'));
+$('#btnHome').addEventListener('click', () => Z.invoke('nav', 'home'));
+$('#pipBtn').addEventListener('click', () => Z.invoke('pip:toggle'));
+$('#shareBtn').addEventListener('click', e => { const r = e.currentTarget.getBoundingClientRect(); Z.invoke('page:share', { x: r.left, y: r.bottom + 4 }); });
 $('#btnFwd').addEventListener('click', () => Z.invoke('nav', 'forward'));
 $('#btnReload').addEventListener('click', () => { const t = curTab(); Z.invoke('nav', t && t.error ? 'retry' : 'reload'); });
 $('#titleBtn').addEventListener('click', openAddr);
@@ -478,15 +522,98 @@ function openAddr() {
   if (!S.fullApp && t && t.url === NEWTAB && $('#askInput')) { $('#askInput').focus(); return; }
   addrOpen = true;
   const a = $('#addr');
-  a.value = S.fullApp ? '' : (t && t.url !== NEWTAB ? t.url : '');
+  a.value = S.fullApp ? (S.fullAppURL || '') : (t && t.url !== NEWTAB ? t.url : '');
   renderTop(); a.hidden = false; a.focus(); a.select();
+  // imagem da página por baixo das sugestões (as páginas web ficam sempre por cima da interface)
+  coverShot = null;
+  Z.invoke('page:snapshot').then(img => { coverShot = img || ''; if (sug.open) showCover(true); });
 }
-function closeAddr() { addrOpen = false; $('#addr').hidden = true; renderTop(); }
+function closeAddr() { addrOpen = false; $('#addr').hidden = true; closeSugg(); renderTop(); }
 $('#addr').addEventListener('keydown', e => {
+  if (suggKey(e, $('#addr'))) return;
   if (e.key === 'Enter') { const v = e.target.value.trim(); closeAddr(); if (v) Z.invoke('navigate', v); }
   if (e.key === 'Escape') { closeAddr(); Z.invoke('ui:focusPage'); }
 });
 $('#addr').addEventListener('blur', () => { if (addrOpen) closeAddr(); });
+$('#addr').addEventListener('input', e => suggInput(e, $('#addr'), $('#addrSugg')));
+
+/* Sugestões de endereços já visitados (campo de endereço e pesquisa da página nova) */
+const sug = { open: false, list: [], sel: -1, input: null, box: null, typed: '', seq: 0 };
+let coverShot = null;
+function showCover(on) {
+  const slot = $('#pageSlot'); let img = $('#coverImg');
+  if (on && coverShot) {
+    if (!img) { img = document.createElement('img'); img.id = 'coverImg'; img.className = 'cover'; img.alt = ''; slot.appendChild(img); }
+    img.src = coverShot;
+  } else if (img) img.remove();
+  const cover = on && sug.input === $('#addr') && coverShot !== null;
+  if (cover !== sendLayout.cover) { sendLayout.cover = cover; lastLayout = ''; sendLayout(); }
+}
+function closeSugg() {
+  sug.open = false; sug.list = []; sug.sel = -1;
+  if (sug.box) { sug.box.hidden = true; sug.box.innerHTML = ''; }
+  showCover(false);
+}
+async function suggInput(e, input, box) {
+  sug.input = input; sug.box = box;
+  const v = input.value;
+  const typed = input.selectionStart === v.length ? v : v.slice(0, input.selectionStart);
+  sug.typed = typed;
+  const q = typed.trim();
+  if (!q || (input.id === 'askInput' && $('#askSeg .on') && $('#askSeg .on').dataset.mode === 'claude')) { closeSugg(); return; }
+  const seq = ++sug.seq;
+  const list = await Z.invoke('history:suggest', q);
+  if (seq !== sug.seq || document.activeElement !== input) return;
+  sug.list = list || []; sug.sel = -1;
+  // completar o endereço enquanto se escreve ("obs" → "observador.pt"), exceto quando se está a apagar
+  const deleting = e && e.inputType && e.inputType.startsWith('delete');
+  const first = sug.list[0];
+  if (first && !deleting && !/\s/.test(q)) {
+    const b = first.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+    if (b.toLowerCase().startsWith(q.toLowerCase()) && b.length > q.length) {
+      input.value = q + b.slice(q.length);
+      input.setSelectionRange(q.length, input.value.length);
+      sug.sel = 0;
+    }
+  }
+  renderSugg();
+}
+function renderSugg() {
+  const box = sug.box; if (!box) return;
+  if (!sug.list.length) { closeSugg(); return; }
+  const q = sug.typed.trim();
+  const looksURL = /^[^\s]+\.[a-z]{2,}/i.test(q) || /^https?:/i.test(q);
+  const head = `<button type="button" data-sg="-1" class="${sug.sel === -1 ? 'sel' : ''}"><span class="ic">${looksURL ? ICON.link : ICON.search}</span><span class="u">${esc(q)}</span><span class="ti">${looksURL ? 'abrir este endereço' : 'pesquisar na web'}</span></button>`;
+  box.innerHTML = head + sug.list.map((x, i) => `<button type="button" data-sg="${i}" class="${i === sug.sel ? 'sel' : ''}" title="${esc(x.url)}"><span class="ic">${ICON.link}</span><span class="u">${esc(x.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))}</span><span class="ti">${esc(x.title || '')}</span></button>`).join('');
+  box.hidden = false; sug.open = true;
+  showCover(true);
+}
+function pickSugg(i) {
+  const input = sug.input; const x = sug.list[i];
+  const v = x ? x.url : sug.typed.trim();
+  closeSugg();
+  if (input === $('#addr')) { closeAddr(); if (v) Z.invoke('navigate', v); }
+  else if (v) Z.invoke('navigate', v);
+}
+// devolve true se a tecla foi tratada pelas sugestões
+function suggKey(e, input) {
+  if (!sug.open || sug.input !== input) return false;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const n = sug.list.length;
+    sug.sel = e.key === 'ArrowDown' ? Math.min(n - 1, sug.sel + 1) : Math.max(-1, sug.sel - 1);
+    const x = sug.list[sug.sel];
+    input.value = x ? x.url : sug.typed;
+    renderSugg(); return true;
+  }
+  if (e.key === 'Enter') { e.preventDefault(); pickSugg(sug.sel); return true; }
+  if (e.key === 'Escape') { e.preventDefault(); input.value = sug.typed; closeSugg(); return true; }
+  return false;
+}
+document.addEventListener('mousedown', e => {
+  const b = e.target.closest('[data-sg]');
+  if (b) { e.preventDefault(); pickSugg(+b.dataset.sg); }
+}, true);
 
 function openFind() { $('#findbox').hidden = false; const i = $('#findInput'); i.focus(); i.select(); }
 function closeFind() { $('#findbox').hidden = true; $('#findCount').textContent = ''; Z.invoke('find', ''); Z.invoke('ui:focusPage'); }
@@ -504,6 +631,7 @@ Z.on('ui-command', c => {
   if (c.cmd === 'find') openFind();
   if (c.cmd === 'mosaic') ov.open ? closeMosaic() : openMosaic(false);
   if (c.cmd === 'edit-app') openEditApp(c.id);
+  if (c.cmd === 'focus-ask') { const i = $('#askInput'); if (i) { i.focus(); i.select(); } }
 });
 
 /* ------------------------------------------------------------------ */
@@ -574,7 +702,9 @@ function renderZones() {
     }).join('');
     const head = ov.renaming === s.id
       ? `<input id="renameInput" value="${esc(s.name)}" aria-label="Nome do espaço">`
-      : `<span data-rename="${s.id}" title="Duplo clique para mudar o nome">${esc(s.name)}</span><em>· ${list.length}</em>${!list.length && S.spaces.length > 1 ? `<button class="zx" type="button" data-rmspace="${s.id}" aria-label="Apagar o espaço ${esc(s.name)}">${ICON.x}</button>` : ''}`;
+      : `<span data-rename="${s.id}" title="Duplo clique para mudar o nome">${esc(s.name)}</span><em>· ${list.length}</em>${S.spaces.length < 2 ? '' : ov.confirmRm === s.id
+        ? `<span class="zconf">${S.tabs.filter(t => t.space === s.id).length} separador(es) passam para “${esc((S.spaces.find(x => x.id !== s.id) || {}).name || '')}”<button type="button" class="danger" data-rmspace-ok="${s.id}">Apagar</button><button type="button" data-rmspace-no>Cancelar</button></span>`
+        : `<button class="zx" type="button" data-rmspace="${s.id}" aria-label="Apagar o espaço ${esc(s.name)}" title="Apagar o espaço">${ICON.x}</button>`}`;
     const isCurZone = curTab() && curTab().space === s.id;
     return `<section class="zone ${isCurZone ? 'cur' : ''}" data-zone="${s.id}" style="flex:${basis} 1 ${basis >= 4 ? 460 : 230}px"><div class="zone-h"><i></i>${head}</div><div class="grid">${cards}${f ? '' : `<button class="card newc" type="button" data-newin="${s.id}">${ICON.plus}Separador neste espaço</button>`}</div></section>`;
   }).join('');
@@ -610,7 +740,15 @@ $('#zones').addEventListener('click', e => {
   if (cx) { e.stopPropagation(); const id = +cx.dataset.cx; selNeighbor(id); Z.invoke('tab:close', id); return; }
   const c = e.target.closest('[data-card]'); if (c) { openSel(+c.dataset.card); return; }
   const nw = e.target.closest('[data-newin]'); if (nw) { closeMosaic(); Z.invoke('tab:new', { space: nw.dataset.newin }); return; }
-  const rm = e.target.closest('[data-rmspace]'); if (rm) { Z.invoke('space:remove', rm.dataset.rmspace); }
+  const rm = e.target.closest('[data-rmspace]');
+  if (rm) {
+    const id = rm.dataset.rmspace;
+    if (!S.tabs.some(t => t.space === id)) Z.invoke('space:remove', id);
+    else { ov.confirmRm = id; renderZones(); }
+    return;
+  }
+  const ok = e.target.closest('[data-rmspace-ok]'); if (ok) { ov.confirmRm = null; Z.invoke('space:remove', ok.dataset.rmspaceOk); return; }
+  if (e.target.closest('[data-rmspace-no]')) { ov.confirmRm = null; renderZones(); }
 });
 $('#zones').addEventListener('dblclick', e => { const r = e.target.closest('[data-rename]'); if (r) { ov.renaming = r.dataset.rename; renderZones(); } });
 $('#zones').addEventListener('keydown', e => {
@@ -859,6 +997,7 @@ async function openSettings() {
     <div class="set-sec" style="border-top:0;padding-top:0"><h3>Aspeto</h3>
       <div class="set-row"><span>Separadores</span>${segHTML('tabMode', st.tabMode, [['mosaic', 'Mosaico'], ['top', 'Em cima'], ['right', 'À direita']])}</div>
       <div class="set-row"><span>Tema</span>${segHTML('theme', st.theme, [['dark', 'Escuro'], ['light', 'Claro'], ['system', 'Sistema']])}</div>
+      <div class="set-row"><span>Vídeo ao mudar de separador</span>${segHTML('autoPip', String(st.autoPip !== false), [['true', 'Fica a flutuar'], ['false', 'Não']])}</div>
       <div class="set-row"><span>Ao abrir o Zeus</span>${segHTML('restoreTabs', String(st.restoreTabs !== false), [['true', 'Retomar separadores'], ['false', 'Página nova']])}</div>
       <p class="hint">Mosaico: mantém ${esc(KEYNAME)} premido para ver os separadores e larga para abrir o escolhido. Um toque rápido deixa-o aberto. Também abre com ⌘E.</p>
     </div>
@@ -873,7 +1012,7 @@ async function openSettings() {
     <div class="set-sec"><h3>Permissões dadas a sites</h3><div class="list" id="setPerm"><p class="hint">A carregar…</p></div></div>
     <div class="set-sec"><h3>Privacidade</h3>
       <p class="hint">Apagar todos os dados termina as sessões em todos os sites e apps (WhatsApp, Email, etc.).</p>
-      <div class="row-btns"><button class="btn ghost" type="button" id="clrCache">Limpar a cache</button><button class="btn danger" type="button" id="clrAll">Apagar todos os dados</button></div></div>
+      <div class="row-btns"><button class="btn ghost" type="button" id="clrHist">Apagar o histórico</button><button class="btn ghost" type="button" id="clrCache">Limpar a cache</button><button class="btn danger" type="button" id="clrAll">Apagar todos os dados</button></div></div>
     <div class="set-sec"><h3>Atualizações</h3>
       <div class="set-row"><span>Versão instalada: ${esc(S.versions.zeus)}</span>${segHTML('autoUpdate', String(st.autoUpdate !== false), [['true', 'Automáticas'], ['false', 'Desligadas']])}</div>
       <p class="hint" id="updLine"></p>
@@ -896,6 +1035,7 @@ async function openSettings() {
   $('#repoForm').addEventListener('submit', e => { e.preventDefault(); Z.invoke('settings:set', { updateRepo: $('#repoInput').value }); toast('Repositório guardado'); });
   $('#setAddApp').addEventListener('click', openAddApp);
   $('#setStore').addEventListener('click', () => { closeModal(); Z.invoke('ext:store'); });
+  $('#clrHist').addEventListener('click', async () => { await Z.invoke('data:clear', 'history'); toast('Histórico apagado'); });
   $('#clrCache').addEventListener('click', async () => { await Z.invoke('data:clear', 'cache'); toast('Cache limpa'); });
   $('#clrAll').addEventListener('click', async e => {
     const b = e.currentTarget;
