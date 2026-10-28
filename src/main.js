@@ -1317,7 +1317,16 @@ function setupIPC() {
   handle('tab:open', id => openTab(id));
   handle('tab:close', id => closeTab(id));
   handle('tab:later', id => laterTab(id));
-  handle('tab:move', (id, space) => { const t = tabById(id); if (t && S.spaces.some(s => s.id === space)) { t.space = space; pushState(); saveState(); } });
+  // mover um separador: para outro espaço e/ou para outra posição (antes do separador "before"; sem ele, para o fim do espaço)
+  handle('tab:move', (id, space, before) => {
+    const t = tabById(id); if (!t || !S.spaces.some(s => s.id === space)) return;
+    t.space = space;
+    S.tabs = S.tabs.filter(x => x !== t);
+    let i = before != null ? S.tabs.findIndex(x => x.id === before && x.space === space) : -1;
+    if (i < 0) { const last = S.tabs.map(x => x.space).lastIndexOf(space); i = last < 0 ? S.tabs.length : last + 1; }
+    S.tabs.splice(i, 0, t);
+    pushState(); saveState();
+  });
   handle('tab:restore', (list, i) => {
     const arr = list === 'later' ? S.later : S.closed;
     const item = arr.splice(i, 1)[0];

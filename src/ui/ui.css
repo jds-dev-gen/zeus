@@ -182,7 +182,7 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .wx b { font-size: 34px; font-weight: 400; letter-spacing: -.02em; line-height: 1; display: block; }
 .wx span { font-size: 12.5px; color: var(--muted); }
 .wx-city { background: none; border: 0; padding: 0; color: var(--muted); font-size: 12.5px; text-decoration: underline dotted; text-underline-offset: 3px; }
-.fc { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line2); border-radius: 14px; overflow: hidden; }
+.fc { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border: 1px solid var(--line2); border-radius: 14px; overflow: hidden; }
 .fc div { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 4px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .fc div + div { border-left: 1px solid var(--line); }
 .fc div:first-child { background: var(--inv-bg); color: var(--inv-fg); }
@@ -261,7 +261,11 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .card:hover { transform: translateY(-2px); }
 .card.big { grid-column: span 2; grid-row: span 2; }
 .card.sel { border: 2px solid var(--fg); box-shadow: 0 18px 50px var(--shadow); }
-.card.drag { opacity: .4; }
+.card.drag { opacity: .35; }
+.card.drop-before::before, .card.drop-after::after { content: ""; position: absolute; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--fg); z-index: 5; }
+.card.drop-before::before { left: 2px; }
+.card.drop-after::after { right: 2px; }
+body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .thumb { position: relative; flex: 1; min-height: 0; background: #f3f3f4; overflow: hidden; }
 .thumb img.shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
 .thumb .ph { position: absolute; inset: 0; display: grid; place-items: center; color: #0b0b0c; }

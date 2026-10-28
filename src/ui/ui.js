@@ -469,9 +469,10 @@ async function loadWeather() {
   const today = d.temperature_2m_max ? `<span class="wx-today">Hoje: máx. ${Math.round(d.temperature_2m_max[0])}° · mín. ${Math.round(d.temperature_2m_min[0])}°${rainToday != null ? ` · chuva ${rainToday}%` : ''}</span>` : '';
   now.innerHTML = `${ICON[icFor(data.current.weather_code, data.current.is_day)](40)}<div><b>${Math.round(data.current.temperature_2m)}°</b><span><button class="wx-city" type="button" data-city title="Mudar de cidade">${esc(city.name)}</button> · ${esc(desc)}</span>${today}</div>`;
   let h = '<div class="fc">';
-  for (let i = 1; i <= 5 && i < d.time.length; i++) {
+  // hoje em destaque (primeira coluna), seguido dos 5 dias seguintes
+  for (let i = 0; i <= 5 && i < d.time.length; i++) {
     const day = new Date(d.time[i] + 'T12:00:00');
-    const lab = i === 1 ? 'Amanhã' : DABR[day.getDay()].charAt(0).toUpperCase() + DABR[day.getDay()].slice(1);
+    const lab = i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : DABR[day.getDay()].charAt(0).toUpperCase() + DABR[day.getDay()].slice(1);
     const [, ic2] = WX(d.weather_code[i]);
     h += `<div><span>${lab}</span>${ICON[ic2](20)}<span>${Math.round(d.temperature_2m_max[i])}° <em>${Math.round(d.temperature_2m_min[i])}°</em></span></div>`;
   }
@@ -746,7 +747,7 @@ function renderZones() {
       n++;
       const isCur = t.id === S.currentId;
       const big = isCur && list.length >= 3 && !f;
-      return `<div class="card ${big ? 'big' : ''} ${t.id === ov.sel ? 'sel' : ''}" role="button" tabindex="-1" draggable="true" data-card="${t.id}" title="${esc(t.url === NEWTAB ? 'Página nova' : t.url)}">
+      return `<div class="card ${big ? 'big' : ''} ${t.id === ov.sel ? 'sel' : ''}" role="button" tabindex="-1" data-card="${t.id}" title="${esc(t.url === NEWTAB ? 'Página nova' : t.url)}">
         <div class="thumb">${thumbHTML(t)}${n <= 9 ? `<span class="num">${n}${isCur ? '<span class="now">Atual</span>' : ''}</span>` : ''}${t.audible ? `<span class="snd">${ICON.snd}a tocar</span>` : ''}<button class="cx" type="button" data-cx="${t.id}" aria-label="Fechar">${ICON.x}</button></div>
         <div class="cap"><span class="fav">${favHTML(t)}</span><span class="ttl">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span>${t.sessionLabel ? `<span class="sess" title="Sessão de ${esc(t.sessionLabel)}">${esc(t.sessionLabel)}</span>` : ''}</div></div>`;
     }).join('');
@@ -817,15 +818,69 @@ $('#shelf').addEventListener('click', e => {
   const r = e.target.closest('[data-restore]'); if (!r) return;
   const [l, i] = r.dataset.restore.split(':'); closeMosaic(); Z.invoke('tab:restore', l, +i);
 });
-let dragId = null;
-$('#zones').addEventListener('dragstart', e => { const c = e.target.closest('[data-card]'); if (!c) return; dragId = +c.dataset.card; c.classList.add('drag'); try { e.dataTransfer.setData('text/plain', String(dragId)); } catch (_) { /* ok */ } });
-$('#zones').addEventListener('dragend', () => { dragId = null; document.querySelectorAll('.zone.drop').forEach(z => z.classList.remove('drop')); });
-$('#zones').addEventListener('dragover', e => { const z = e.target.closest('[data-zone]'); if (!z || dragId == null) return; e.preventDefault(); document.querySelectorAll('.zone.drop').forEach(x => x !== z && x.classList.remove('drop')); z.classList.add('drop'); });
-$('#zones').addEventListener('drop', e => {
-  const z = e.target.closest('[data-zone]'); if (!z || dragId == null) return;
-  e.preventDefault(); const sp = S.spaces.find(s => s.id === z.dataset.zone);
-  Z.invoke('tab:move', dragId, z.dataset.zone); if (sp) toast('Movido para ' + sp.name); dragId = null;
+/* Arrastar cartões: mudar a ordem dentro do espaço ou passar para outro espaço (com o rato, sem o arrastar do sistema) */
+let cardDrag = null, cardDragged = false;
+const clearCardDrop = () => document.querySelectorAll('.card.drop-before,.card.drop-after,.zone.drop').forEach(x => x.classList.remove('drop-before', 'drop-after', 'drop'));
+function cardTarget(x, y, dragId) {
+  const el = document.elementFromPoint(x, y);
+  const z = el && el.closest('[data-zone]'); if (!z) return null;
+  const cards = [...z.querySelectorAll('[data-card]')].filter(c => +c.dataset.card !== dragId);
+  // o cartão mais próximo do ponteiro, e de que lado (a grelha enche-se da esquerda para a direita)
+  let best = null, bd = Infinity;
+  for (const c of cards) {
+    const r = c.getBoundingClientRect();
+    const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+    const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    const d = dx * dx + dy * dy * 4;
+    if (d < bd) { bd = d; best = { c, after: x > r.left + r.width / 2 }; }
+  }
+  return { zone: z.dataset.zone, z, card: best && best.c, after: best && best.after };
+}
+$('#zones').addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('[data-cx]')) return;
+  const c = e.target.closest('[data-card]'); if (!c) return;
+  cardDrag = { id: +c.dataset.card, el: c, x: e.clientX, y: e.clientY, on: false };
+  cardDragged = false;
 });
+window.addEventListener('pointermove', e => {
+  if (!cardDrag) return;
+  if (!cardDrag.on) {
+    if (Math.hypot(e.clientX - cardDrag.x, e.clientY - cardDrag.y) < 6) return;
+    cardDrag.on = true; cardDrag.el.classList.add('drag'); document.body.classList.add('dragging-card');
+  }
+  clearCardDrop();
+  const t = cardTarget(e.clientX, e.clientY, cardDrag.id); if (!t) return;
+  t.z.classList.add('drop');
+  if (t.card) t.card.classList.add(t.after ? 'drop-after' : 'drop-before');
+});
+window.addEventListener('pointerup', e => {
+  if (!cardDrag) return;
+  const d = cardDrag; cardDrag = null;
+  if (!d.on) return;
+  cardDragged = true; setTimeout(() => { cardDragged = false; }, 50);
+  d.el.classList.remove('drag'); document.body.classList.remove('dragging-card');
+  const t = cardTarget(e.clientX, e.clientY, d.id);
+  clearCardDrop();
+  if (!t) return;
+  // posição: antes de um cartão, ou depois dele (= antes do seguinte nesse espaço)
+  let before = null;
+  if (t.card) {
+    if (!t.after) before = +t.card.dataset.card;
+    else {
+      const list = S.tabs.filter(x => x.space === t.zone && x.id !== d.id);
+      const i = list.findIndex(x => x.id === +t.card.dataset.card);
+      before = list[i + 1] ? list[i + 1].id : null;
+    }
+  }
+  const from = (tabById(d.id) || {}).space;
+  Z.invoke('tab:move', d.id, t.zone, before);
+  if (from !== t.zone) { const sp = S.spaces.find(s => s.id === t.zone); if (sp) toast('Movido para ' + sp.name); }
+});
+// sem o arrastar nativo das imagens (cancelaria o arrasto dos cartões)
+$('#zones').addEventListener('dragstart', e => e.preventDefault());
+window.addEventListener('pointercancel', () => { if (cardDrag) { cardDrag.el.classList.remove('drag'); document.body.classList.remove('dragging-card'); cardDrag = null; clearCardDrop(); } });
+// o clique que termina um arrasto não abre o separador
+$('#zones').addEventListener('click', e => { if (cardDragged) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
 
 /* ------------------------------------------------------------------ */
 /* Teclado: Option/Alt e atalhos do mosaico                             */
