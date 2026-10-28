@@ -130,6 +130,8 @@ function loadState() {
     // 0.2.9: o WhatsApp também abre os links em separadores
     if (!saved.waLinks) { S.apps.forEach(a => { if (a.id === 'wa' || hostOf(a.url || '') === 'web.whatsapp.com') a.linksInTabs = true; }); S.waLinks = true; }
     // 0.3.0: o Gmail também abre os links em separadores
+    // 0.3.1: na Drive, navegar fica na app; documentos (Docs, Sheets, Slides) abrem em separadores
+    if (!saved.driveLinks) { S.apps.forEach(a => { if (hostOf(a.url || '') === 'drive.google.com' && !a.linksInTabs) a.linksInTabs = 'external'; }); }
     if (!saved.gmailLinks) { S.apps.forEach(a => { if (hostOf(a.url || '') === 'mail.google.com') a.linksInTabs = true; }); }
   } catch (e) { /* primeiro arranque */ }
   if (!S.settings.updateRepo && PKG.zeus && PKG.zeus.updateRepo) S.settings.updateRepo = PKG.zeus.updateRepo;
@@ -161,7 +163,7 @@ function saveNow() {
       tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space, partition: t.partition || null, sessionLabel: t.sessionLabel || null })),
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
-      apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, settings: S.settings, permissions: S.permissions,
+      apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, driveLinks: true, settings: S.settings, permissions: S.permissions,
       visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
@@ -383,12 +385,14 @@ function wireWeb(wc, kind, ctx = {}) {
         }
       };
     }
-    // apps da barra: tudo abre dentro da própria app (links, mudar de conta…), nunca num separador
     const opener = kind === 'app' ? appById(ctx.appId) : null;
-    // mudar de conta (/u/1/ no mesmo site) fica sempre dentro da app, mesmo nas que abrem os links em separadores
-    let sameAccountSwitch = false;
-    try { sameAccountSwitch = kind === 'app' && hostOf(url) === hostOf(wc.getURL()) && /\/u\/\d+(\/|$)/.test(new URL(url).pathname); } catch (e) { /* ok */ }
-    if (kind === 'app' && (sameAccountSwitch || !(opener && opener.linksInTabs))) { wc.loadURL(url).catch(() => {}); return { action: 'deny' }; }
+    // janela em branco que a página vai preencher depois (a Drive faz isto ao abrir um documento):
+    // cria-se escondida e, quando tiver endereço, decide-se se vai para a app ou para um separador
+    if (kind === 'app' && (!url || url === 'about:blank')) {
+      relayNext = { kind, ctx, wc, disposition };
+      return { action: 'allow', overrideBrowserWindowOptions: { show: false, webPreferences: WEB_PREFS(wc.session) } };
+    }
+    if (kind === 'app' && linkTarget(opener, wc, url) === 'app') { wc.loadURL(url).catch(() => {}); return { action: 'deny' }; }
     // links de um separador com sessão separada continuam nessa sessão (mesma conta)
     let partition = null, sessionLabel = null;
     if (kind === 'tab' && ctx.tabId) {
@@ -400,9 +404,26 @@ function wireWeb(wc, kind, ctx = {}) {
   });
   wc.on('did-create-window', (child, details) => {
     const cw = child.webContents;
+    if (relayNext && relayNext.wc === wc) {
+      const r = relayNext; relayNext = null;
+      let done = false;
+      const finish = url => {
+        if (done) return; done = true;
+        const op = appById(r.ctx.appId);
+        if (url && /^https?:/.test(url)) {
+          if (linkTarget(op, wc, url) === 'app') wc.loadURL(url).catch(() => {});
+          else newTab({ url, activate: r.disposition !== 'background-tab', space: spaceForOpener(), partition: op && op.isolated ? appPartition(op.id) : null, sessionLabel: op && op.isolated ? op.name : null });
+        }
+        setImmediate(() => { try { if (!child.isDestroyed()) child.close(); } catch (e) { /* ok */ } });
+      };
+      cw.on('did-start-navigation', d => { if (d.isMainFrame && /^https?:/.test(d.url)) finish(d.url); });
+      cw.setWindowOpenHandler(({ url }) => { finish(url); return { action: 'deny' }; });
+      setTimeout(() => finish(null), 15000);
+      return;
+    }
     cw.setWindowOpenHandler(({ url }) => {
       const op = kind === 'app' ? appById(ctx.appId) : null;
-      if (/^https?:/.test(url)) { if (op && !op.linksInTabs && !wc.isDestroyed()) wc.loadURL(url).catch(() => {}); else newTab({ url }); }
+      if (/^https?:/.test(url)) { if (op && linkTarget(op, wc, url) === 'app' && !wc.isDestroyed()) wc.loadURL(url).catch(() => {}); else newTab({ url }); }
       return { action: 'deny' };
     });
     cw.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(cw, d.url); });
@@ -412,8 +433,34 @@ function wireWeb(wc, kind, ctx = {}) {
 
   wc.on('will-attach-webview', e => e.preventDefault());
   wc.on('context-menu', (e, p) => { const ap = kind === 'app' ? appById(ctx.appId) : null; contextMenu(wc, p, ap && !ap.linksInTabs ? 'app' : kind); });
+  // apps com "outros sites em separadores" (ex.: Drive): abrir um documento do Google Docs/Sheets/Slides
+  // dentro da própria página vai para um separador, na sessão da app
+  if (kind === 'app') wc.on('will-navigate', (e, url) => {
+    const ap = appById(ctx.appId);
+    if (!ap || ap.linksInTabs !== 'external') return;
+    if (hostOf(url) === 'docs.google.com' && hostOf(wc.getURL()) !== 'docs.google.com') {
+      e.preventDefault();
+      newTab({ url, space: spaceForOpener(), partition: ap.isolated ? appPartition(ap.id) : null, sessionLabel: ap.isolated ? ap.name : null });
+    }
+  });
 }
 
+let relayNext = null;   // janela em branco aberta por uma app, à espera do endereço
+/*
+ * Para onde vai um link aberto numa app da barra:
+ *  - linksInTabs falso → dentro da app;  true → separador novo;
+ *  - 'external' → o mesmo site fica na app, outros sites vão para separador (ex.: Drive → Docs/Sheets).
+ * Mudar de conta (/u/1/ no mesmo site) e o início de sessão na Google ficam sempre na app.
+ */
+function linkTarget(app, wc, url) {
+  if (!app) return 'tab';
+  const here = hostOf(wc.getURL()), there = hostOf(url);
+  let accountSwitch = false;
+  try { accountSwitch = there === here && /\/u\/\d+(\/|$)/.test(new URL(url).pathname); } catch (e) { /* ok */ }
+  if (accountSwitch || there === 'accounts.google.com') return 'app';
+  if (app.linksInTabs === 'external') return there === here || there === hostOf(app.url) ? 'app' : 'tab';
+  return app.linksInTabs ? 'tab' : 'app';
+}
 let lastAltWC = null;  // página onde se carregou no Option pela última vez
 function spaceForOpener() { const t = cur(); return t ? t.space : S.spaces[0].id; }
 
@@ -879,7 +926,8 @@ function addApp({ name, url, mode, icon, isolated }) {
   const id = 'a' + Date.now().toString(36);
   S.apps.push({
     id, name: (name || hostOf(u)).slice(0, 24), url: u, mode: mode === 'side' ? 'side' : 'full',
-    icon: ICONS.includes(icon) ? icon : '', isolated: isolated !== false, preload: false
+    icon: ICONS.includes(icon) ? icon : '', isolated: isolated !== false, preload: false,
+    linksInTabs: hostOf(u) === 'drive.google.com' ? 'external' : false
   });
   saveState(); pushState(true);
   return { ok: true, id };
@@ -894,6 +942,7 @@ function updateApp(id, patch) {
   if (patch.name) a.name = String(patch.name).slice(0, 24);
   if (patch.mode) a.mode = patch.mode === 'full' ? 'full' : 'side';
   if (patch.icon !== undefined && ICONS.includes(patch.icon)) a.icon = patch.icon;
+  if (patch.linksInTabs !== undefined) a.linksInTabs = patch.linksInTabs === 'external' ? 'external' : !!patch.linksInTabs;
   if (patch.isolated !== undefined && !!patch.isolated !== !!a.isolated) setIsolated(id, !!patch.isolated);
   saveState(); pushState(true);
   return { ok: true };
@@ -943,7 +992,11 @@ function appMenu(id) {
     { label: 'Recarregar', enabled: !!view, click: () => view && view.webContents.reload() },
     { label: 'Editar nome, endereço e ícone…', click: () => ui.send('ui-command', { cmd: 'edit-app', id }) },
     { label: 'Sessão separada', type: 'checkbox', checked: !!a.isolated, click: () => askIsolated(id, !a.isolated) },
-    { label: 'Links abrem em separadores', type: 'checkbox', checked: !!a.linksInTabs, click: () => { a.linksInTabs = !a.linksInTabs; saveState(); pushState(true); } },
+    { label: 'Links', submenu: [
+      { label: 'Abrem dentro da app', type: 'radio', checked: !a.linksInTabs, click: () => { a.linksInTabs = false; saveState(); pushState(true); } },
+      { label: 'Abrem em separadores', type: 'radio', checked: a.linksInTabs === true, click: () => { a.linksInTabs = true; saveState(); pushState(true); } },
+      { label: 'Outros sites em separadores (o próprio site fica na app)', type: 'radio', checked: a.linksInTabs === 'external', click: () => { a.linksInTabs = 'external'; saveState(); pushState(true); } }
+    ] },
     { type: 'separator' },
     { label: 'Remover da barra', click: () => removeApp(id) }
   ]).popup({ window: win });
