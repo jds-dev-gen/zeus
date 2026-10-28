@@ -29,7 +29,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 /* ------------------------------------------------------------------ */
 const DEFAULT_APPS = [
   { id: 'apolo', name: 'Apolo', url: '', mode: 'full', icon: 'apolo', preload: false, linksInTabs: true },
-  { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true },
+  { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true, linksInTabs: true },
   { id: 'mail', name: 'Email', url: 'https://mail.google.com/', mode: 'full', icon: 'mail', preload: true },
   { id: 'cal', name: 'Calendário', url: 'https://calendar.google.com/', mode: 'full', icon: 'cal', preload: false },
   { id: 'notion', name: 'Notion', url: 'https://www.notion.so/', mode: 'full', icon: 'notion', preload: false },
@@ -128,6 +128,8 @@ function loadState() {
     DEFAULT_APPS.forEach(a => { if (!ids.has(a.id) && !(saved.removedApps || []).includes(a.id)) S.apps.push(a); });
     // 0.2.8: no Apolo os links abrem em separadores (as outras apps abrem tudo dentro de si)
     S.apps.forEach(a => { if (a.id === 'apolo' && a.linksInTabs === undefined) a.linksInTabs = true; });
+    // 0.2.9: o WhatsApp também abre os links em separadores
+    if (!saved.waLinks) { S.apps.forEach(a => { if (a.id === 'wa' || hostOf(a.url || '') === 'web.whatsapp.com') a.linksInTabs = true; }); S.waLinks = true; }
   } catch (e) { /* primeiro arranque */ }
   if (!S.settings.updateRepo && PKG.zeus && PKG.zeus.updateRepo) S.settings.updateRepo = PKG.zeus.updateRepo;
   S.tabs = (S.tabs || []).filter(t => t && t.url);
@@ -158,7 +160,7 @@ function saveNow() {
       tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space, partition: t.partition || null, sessionLabel: t.sessionLabel || null })),
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
-      apps: S.apps, removedApps: S.removedApps || [], settings: S.settings, permissions: S.permissions,
+      apps: S.apps, removedApps: S.removedApps || [], waLinks: true, settings: S.settings, permissions: S.permissions,
       visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
