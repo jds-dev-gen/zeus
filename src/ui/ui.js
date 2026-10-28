@@ -967,10 +967,11 @@ function openAddApp() {
     </form>
     <div class="set-sec"><h3>Extensões do Chrome</h3>
       <p class="hint">Instala-as diretamente da Chrome Web Store, com o botão “Adicionar ao Chrome”. Nem todas funcionam no Zeus; as mais comuns costumam funcionar.</p>
-      <div class="row-btns"><button class="btn ghost" type="button" id="aaStore">Abrir a Chrome Web Store</button></div>
+      <div class="row-btns"><button class="btn ghost" type="button" id="aaStore">Abrir a Chrome Web Store</button><button class="btn ghost" type="button" id="aaLoadExt">Carregar de uma pasta ou .zip…</button></div>
     </div>`);
   $('#aaMode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) $('#aaMode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); });
   $('#aaStore').addEventListener('click', () => { closeModal(); Z.invoke('ext:store'); });
+  $('#aaLoadExt').addEventListener('click', loadExtFromFolder);
   wireSessionSeg(); wireIconPicker();
   $('#aaName').addEventListener('input', e => { const l = document.querySelector('#iconPick [data-icon=""] .letter'); if (l) l.textContent = (e.target.value.trim() || 'A').charAt(0).toUpperCase(); });
   $('#addAppForm').addEventListener('submit', async e => {
@@ -1058,7 +1059,8 @@ async function openSettings() {
     <div class="set-sec"><h3>Apps na barra</h3><div class="list" id="setApps"></div>
       <div class="row-btns"><button class="btn ghost" type="button" id="setAddApp">Juntar app</button></div></div>
     <div class="set-sec"><h3>Extensões do Chrome</h3><div class="list" id="setExt"><p class="hint">A carregar…</p></div>
-      <div class="row-btns"><button class="btn ghost" type="button" id="setStore">Abrir a Chrome Web Store</button></div></div>
+      <div class="row-btns"><button class="btn ghost" type="button" id="setStore">Abrir a Chrome Web Store</button><button class="btn ghost" type="button" id="setLoadExt">Carregar de uma pasta ou .zip…</button></div>
+      <p class="hint">Para extensões tuas que não estão na loja (como as que usas no modo de programador do Chrome ou do Vivaldi). Ficam ativas nos separadores e em todas as apps da barra.</p></div>
     <div class="set-sec"><h3>Permissões dadas a sites</h3><div class="list" id="setPerm"><p class="hint">A carregar…</p></div></div>
     <div class="set-sec"><h3>Privacidade</h3>
       <p class="hint">Apagar todos os dados termina as sessões em todos os sites e apps (WhatsApp, Email, etc.).</p>
@@ -1085,6 +1087,7 @@ async function openSettings() {
   $('#repoForm').addEventListener('submit', e => { e.preventDefault(); Z.invoke('settings:set', { updateRepo: $('#repoInput').value }); toast('Repositório guardado'); });
   $('#setAddApp').addEventListener('click', openAddApp);
   $('#setStore').addEventListener('click', () => { closeModal(); Z.invoke('ext:store'); });
+  $('#setLoadExt').addEventListener('click', loadExtFromFolder);
   $('#clrHist').addEventListener('click', async () => { await Z.invoke('data:clear', 'history'); toast('Histórico apagado'); });
   $('#clrCache').addEventListener('click', async () => { await Z.invoke('data:clear', 'cache'); toast('Cache limpa'); });
   $('#clrAll').addEventListener('click', async e => {
@@ -1109,9 +1112,14 @@ $('#modal').addEventListener('click', e => {
   const rx = e.target.closest('[data-rmext]'); if (rx) { Z.invoke('ext:remove', rx.dataset.rmext); return; }
   const fp = e.target.closest('[data-forget]'); if (fp) { Z.invoke('permissions:forget', fp.dataset.forget); fp.closest('.li').remove(); }
 });
+async function loadExtFromFolder() {
+  const r = await Z.invoke('ext:load');
+  if (r && r.ok) { toast(`Extensão “${r.name}” carregada`); renderExtList(await Z.invoke('ext:list')); }
+  else if (r && r.error) toast(r.error);
+}
 function renderExtList(list) {
   const box = $('#setExt'); if (!box) return;
-  box.innerHTML = list && list.length ? list.map(x => `<div class="li"><div class="grow"><span>${esc(x.name)}</span><small>Versão ${esc(x.version)}</small></div><button class="linkbtn" type="button" data-rmext="${esc(x.id)}">Remover</button></div>`).join('') : '<p class="hint">Nenhuma extensão instalada.</p>';
+  box.innerHTML = list && list.length ? list.map(x => `<div class="li"><div class="grow"><span>${esc(x.name)}</span><small>Versão ${esc(x.version)}${x.unpacked ? ' · da pasta' : ''}</small></div><button class="linkbtn" type="button" data-rmext="${esc(x.id)}">Remover</button></div>`).join('') : '<p class="hint">Nenhuma extensão instalada.</p>';
 }
 Z.on('extensions', list => renderExtList(list));
 const PERM = { media: 'Câmara/microfone', geolocation: 'Localização', 'display-capture': 'Gravar o ecrã', 'clipboard-read': 'Ler a área de transferência', 'storage-access': 'Cookies noutros sites', 'top-level-storage-access': 'Cookies noutros sites', midi: 'MIDI', midiSysex: 'MIDI', 'idle-detection': 'Inatividade', 'window-management': 'Janelas', 'local-fonts': 'Tipos de letra', keyboardLock: 'Teclado', 'screen-wake-lock': 'Ecrã ligado' };

@@ -17,7 +17,7 @@ const INVOKE = new Set([
   'app:open', 'app:close', 'app:mode', 'app:add', 'app:update', 'app:remove', 'app:menu', 'app:reload', 'app:reorder', 'page:insertText',
   'claude:toggle', 'claude:sendPage', 'claude:ask', 'claude:new',
   'settings:set', 'permissions:list', 'permissions:forget',
-  'ext:list', 'ext:store', 'ext:remove', 'data:clear', 'ui:focusPage',
+  'ext:list', 'ext:store', 'ext:remove', 'ext:load', 'data:clear', 'ui:focusPage',
   'update:status', 'update:check', 'update:install'
 ]);
 const EVENTS = new Set(['state', 'alt', 'toast', 'ui-command', 'find-result', 'extensions', 'update']);

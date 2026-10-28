@@ -9,6 +9,7 @@ const {
   app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog,
   clipboard, shell, nativeTheme, Notification, ShareMenu } = require('electron');
 const path = require('path');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const { ElectronChromeExtensions } = require('electron-chrome-extensions');
 const { installChromeWebStore, uninstallExtension, loadAllExtensions } = require('electron-chrome-web-store');
@@ -832,12 +833,16 @@ function sessionForApp(a) {
   ses.setUserAgent(chromeUA());
   setupPermissions(ses);
   setupGoogleSignin(ses);
-  let ext = null;
+  let ext = null, ready = Promise.resolve();
   try {
     ext = new ElectronChromeExtensions(Object.assign({ session: ses }, extensionHandlers()));
-    loadAllExtensions(ses, extensionsPath(), { allowUnpacked: false }).catch(() => {});
+    // a app só começa a carregar depois das extensões, para elas entrarem logo na página
+    ready = Promise.all([
+      loadAllExtensions(ses, extensionsPath(), { allowUnpacked: false }).catch(() => {}),
+      loadUnpackedInto(ses).catch(() => {})
+    ]);
   } catch (e) { ext = null; }
-  const rec = { ses, ext };
+  const rec = { ses, ext, ready };
   appSessions.set(a.id, rec);
   return rec;
 }
@@ -852,7 +857,7 @@ function extFor(id) { const a = appById(id); const r = a && a.isolated ? appSess
 function ensureAppView(a) {
   if (appViews.has(a.id)) return appViews.get(a.id);
   if (!a.url) return null;
-  const { ses, ext } = sessionForApp(a);
+  const { ses, ext, ready } = sessionForApp(a);
   const view = new WebContentsView({ webPreferences: WEB_PREFS(ses) });
   view.setBackgroundColor('#ffffff');
   appViews.set(a.id, view);
@@ -881,7 +886,8 @@ function ensureAppView(a) {
     if (d.isMainFrame && !d.isSameDocument && appErrors[a.id]) { delete appErrors[a.id]; applyLayout(); pushState(); }
   });
   const last = S.appLast[a.id];
-  wc.loadURL(last && hostOf(last) === hostOf(a.url) ? last : a.url).catch(() => {});
+  const start = last && hostOf(last) === hostOf(a.url) ? last : a.url;
+  Promise.resolve(ready).then(() => { if (!wc.isDestroyed()) wc.loadURL(start).catch(() => {}); });
   return view;
 }
 function destroyAppView(id) {
@@ -1171,10 +1177,100 @@ async function setupExtensions() {
       }
     });
   } catch (e) { console.error('Chrome Web Store indisponível', e); }
+  await loadUnpackedInto(zeusSession);
+}
+/*
+ * Extensões carregadas a partir de uma pasta (ou .zip), como o "modo de programador" do Chrome/Vivaldi.
+ * São copiadas para userData/Unpacked/<nome> e carregadas em todas as sessões (separadores e apps).
+ */
+const unpackedPath = () => path.join(app.getPath('userData'), 'Unpacked');
+const allSessions = () => [zeusSession, ...[...appSessions.values()].map(r => r.ses)].filter(Boolean);
+function unpackedDirs() {
+  try { return fs.readdirSync(unpackedPath()).map(n => path.join(unpackedPath(), n)).filter(d => fs.existsSync(path.join(d, 'manifest.json'))); }
+  catch (e) { return []; }
+}
+async function loadUnpackedInto(ses) {
+  for (const dir of unpackedDirs()) {
+    try {
+      const have = ses.extensions.getAllExtensions().some(x => path.resolve(x.path) === path.resolve(dir));
+      if (!have) await ses.extensions.loadExtension(dir, { allowFileAccess: true });
+    } catch (e) { console.error('Extensão da pasta não carregou', dir, e.message); }
+  }
+}
+function findManifestDir(root) {
+  if (fs.existsSync(path.join(root, 'manifest.json'))) return root;
+  // um .zip ou pasta com uma única subpasta lá dentro
+  const subs = fs.readdirSync(root, { withFileTypes: true }).filter(d => d.isDirectory() && !d.name.startsWith('__MACOSX') && !d.name.startsWith('.'));
+  for (const d of subs) { const r = path.join(root, d.name); if (fs.existsSync(path.join(r, 'manifest.json'))) return r; }
+  return null;
+}
+async function addUnpackedExtension() {
+  // só em desenvolvimento (nunca na app empacotada): testes automáticos sem janelas de diálogo
+  const testPick = !app.isPackaged && process.env.ZEUS_TEST_EXT;
+  const r = testPick ? { canceled: false, filePaths: [testPick] } : await dialog.showOpenDialog(win, {
+    title: 'Carregar extensão',
+    message: 'Escolhe a pasta da extensão (a que tem o ficheiro manifest.json) ou o ficheiro .zip.',
+    buttonLabel: 'Carregar',
+    properties: ['openDirectory', 'openFile'],
+    filters: [{ name: 'Extensão (.zip ou pasta)', extensions: ['zip'] }]
+  });
+  if (r.canceled || !r.filePaths.length) return { ok: false, canceled: true };
+  let src = r.filePaths[0]; let tmp = null;
+  try {
+    if (/\.zip$/i.test(src)) {
+      tmp = fs.mkdtempSync(path.join(app.getPath('temp'), 'zeus-ext-'));
+      await new Promise((res, rej) => {
+        const cmd = isMac ? ['ditto', ['-x', '-k', src, tmp]] : ['unzip', ['-q', src, '-d', tmp]];
+        execFile(cmd[0], cmd[1], err => err ? rej(err) : res());
+      });
+      src = tmp;
+    }
+    const dir = findManifestDir(src);
+    if (!dir) return { ok: false, error: 'Não encontrei o ficheiro manifest.json. Escolhe a pasta da extensão (ou o .zip).' };
+    let manifest;
+    try { manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')); }
+    catch (e) { return { ok: false, error: 'O manifest.json da extensão não é válido.' }; }
+    const base = String(manifest.name || path.basename(dir)).replace(/__MSG_\w+__/g, '').trim() || path.basename(dir);
+    const slug = base.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'extensao';
+    const ok = testPick ? { response: 0 } : await dialog.showMessageBox(win, {
+      type: 'question', buttons: ['Carregar', 'Cancelar'], defaultId: 0, cancelId: 1,
+      message: `Carregar a extensão “${base}”${manifest.version ? ' (versão ' + manifest.version + ')' : ''}?`,
+      detail: 'As extensões podem ler e alterar as páginas que visitas. Carrega apenas extensões tuas ou que conheças. Fica disponível nos separadores e em todas as apps da barra.'
+    });
+    if (ok.response !== 0) return { ok: false, canceled: true };
+    const dest = path.join(unpackedPath(), slug);
+    // versão nova da mesma extensão: tira a anterior de todas as sessões e substitui os ficheiros
+    for (const ses of allSessions()) {
+      try { ses.extensions.getAllExtensions().filter(x => path.resolve(x.path) === path.resolve(dest)).forEach(x => ses.extensions.removeExtension(x.id)); } catch (e) { /* ok */ }
+    }
+    fs.rmSync(dest, { recursive: true, force: true });
+    fs.mkdirSync(unpackedPath(), { recursive: true });
+    fs.cpSync(dir, dest, { recursive: true });
+    for (const ses of allSessions()) await loadUnpackedInto(ses);
+    // recarregar as apps e separadores abertos para a extensão entrar já nas páginas
+    for (const v of [...appViews.values(), ...tabViews.values()]) { try { v.webContents.reload(); } catch (e) { /* ok */ } }
+    pushExtensions();
+    return { ok: true, name: base };
+  } catch (e) {
+    return { ok: false, error: 'Não foi possível carregar a extensão: ' + e.message };
+  } finally {
+    if (tmp) try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* ok */ }
+  }
+}
+function removeUnpacked(id) {
+  let dir = null;
+  for (const ses of allSessions()) {
+    try {
+      const x = ses.extensions.getExtension(id);
+      if (x && path.resolve(x.path).startsWith(path.resolve(unpackedPath()))) { dir = x.path; ses.extensions.removeExtension(id); }
+    } catch (e) { /* ok */ }
+  }
+  if (dir) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* ok */ } return true; }
+  return false;
 }
 function listExtensions() {
   try {
-    return zeusSession.extensions.getAllExtensions().map(x => ({ id: x.id, name: x.name, version: x.version }));
+    return zeusSession.extensions.getAllExtensions().map(x => ({ id: x.id, name: x.name, version: x.version, unpacked: path.resolve(x.path).startsWith(path.resolve(unpackedPath())) }));
   } catch (e) { return []; }
 }
 function pushExtensions() { ui && ui.send('extensions', listExtensions()); }
@@ -1305,7 +1401,9 @@ function setupIPC() {
   handle('permissions:forget', key => { delete S.permissions[key]; saveState(); });
   handle('ext:list', () => listExtensions());
   handle('ext:store', () => newTab({ url: WEBSTORE }));
+  handle('ext:load', () => addUnpackedExtension());
   handle('ext:remove', async id => {
+    if (removeUnpacked(id)) { pushExtensions(); return; }
     try { await uninstallExtension(id, { session: zeusSession, extensionsPath: path.join(app.getPath('userData'), 'Extensions') }); }
     catch (e) { try { zeusSession.extensions.removeExtension(id); } catch (_) { /* ok */ } }
     pushExtensions();
