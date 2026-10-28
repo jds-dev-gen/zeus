@@ -201,17 +201,19 @@ $('#rail').addEventListener('contextmenu', e => {
 function renderTop() {
   const t = curTab();
   const full = S.fullApp && appById(S.fullApp);
-  const onWeb = !full && t && t.url !== NEWTAB && !t.error;
+  const onWeb = full ? true : (t && t.url !== NEWTAB && !t.error);
   $('#btnBack').disabled = !onWeb || !S.canGoBack;
   $('#btnFwd').disabled = !onWeb || !S.canGoForward;
   $('#btnReload').disabled = !(onWeb || (t && t.error));
+  const away = full && S.fullAppURL && hostOf(S.fullAppURL) && hostOf(S.fullAppURL) !== hostOf(full.url) ? hostOf(S.fullAppURL) : '';
+  $('#fullHome').hidden = !full || !away;
   $('#fullBtns').hidden = !full;
   $('#claudeBtn').classList.toggle('on', S.claudeOpen);
   $('#mosaicBtn').classList.toggle('on', ov.open);
   $('#progress').hidden = !(t && t.loading && !full && t.url !== NEWTAB);
   const mode = S.settings.tabMode;
   const tb = $('#titleBtn');
-  if (full) tb.innerHTML = `<span class="t">${esc(full.name)}</span><span class="dom">app</span>`;
+  if (full) tb.innerHTML = `<span class="t">${esc(full.name)}</span><span class="dom">${away ? esc(away) : 'app'}</span>`;
   else if (t) tb.innerHTML = `${t.url !== NEWTAB && t.favicon ? `<img src="${esc(t.favicon)}" alt="" data-fav>` : ''}<span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><span class="dom">${t.url === NEWTAB ? '' : esc(hostOf(t.url))}${t.sessionLabel ? ' · sessão ' + esc(t.sessionLabel) : ''}</span>`;
   tb.hidden = addrOpen || mode === 'top';
   $('#topTabs').hidden = addrOpen || mode !== 'top';
@@ -456,6 +458,7 @@ async function loadWeather() {
 /* Faixa de cima: navegação, endereço, procurar                         */
 /* ------------------------------------------------------------------ */
 $('#btnBack').addEventListener('click', () => Z.invoke('nav', 'back'));
+$('#fullHome').addEventListener('click', () => Z.invoke('nav', 'home'));
 $('#btnFwd').addEventListener('click', () => Z.invoke('nav', 'forward'));
 $('#btnReload').addEventListener('click', () => { const t = curTab(); Z.invoke('nav', t && t.error ? 'retry' : 'reload'); });
 $('#titleBtn').addEventListener('click', openAddr);

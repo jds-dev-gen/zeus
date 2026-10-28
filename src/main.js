@@ -270,7 +270,7 @@ function pushState(now) {
   if (!ui || ui.isDestroyed()) return;
   const send = () => {
     pushTimer = null;
-    const view = cur() && tabViews.get(S.currentId);
+    const view = fullApp ? appViews.get(fullApp) : (cur() && tabViews.get(S.currentId));
     const wc = view && view.webContents;
     ui.send('state', {
       tabs: S.tabs.map(t => ({
@@ -283,7 +283,7 @@ function pushState(now) {
       canGoForward: !!(wc && wc.navigationHistory.canGoForward()),
       spaces: S.spaces, later: S.later, closed: S.closed,
       apps: S.apps.map(a => Object.assign({}, a, { badge: badges[a.id] || 0, loaded: appViews.has(a.id), error: appErrors[a.id] || null })),
-      openPanel, fullApp, claudeOpen: S.claudeOpen,
+      openPanel, fullApp, fullAppURL: fullApp && wc ? wc.getURL() : '', claudeOpen: S.claudeOpen,
       settings: S.settings,
       topSites: topSites(),
       platform: process.platform,
@@ -309,8 +309,6 @@ function toURL(input) {
   return (SEARCH[S.settings.search] || SEARCH.google) + encodeURIComponent(s);
 }
 
-// mudar de conta (Gmail, Calendário…): endereços do tipo /u/1/ abrem dentro da própria app
-const ACCOUNT_SWITCH = /\/u\/\d+\/?$/;
 function wireWeb(wc, kind, ctx = {}) {
   wc.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(wc, d.url); });
   // Option (Mac) / Alt (Windows): a interface decide se é o mosaico ou uma combinação de teclas
@@ -336,20 +334,11 @@ function wireWeb(wc, kind, ctx = {}) {
         }
       };
     }
-    // links abertos a partir de uma app com sessão separada (ou de um separador dessa sessão)
-    // continuam nessa sessão, para se manter a mesma conta
+    // apps da barra: tudo abre dentro da própria app (links, mudar de conta…), nunca num separador
+    if (kind === 'app') { wc.loadURL(url).catch(() => {}); return { action: 'deny' }; }
+    // links de um separador com sessão separada continuam nessa sessão (mesma conta)
     let partition = null, sessionLabel = null;
-    if (kind === 'app' && ctx.appId) {
-      const a = appById(ctx.appId);
-      try {
-        const u = new URL(url);
-        if (hostOf(url) === hostOf(wc.getURL()) && ACCOUNT_SWITCH.test(u.pathname) && !u.search) {
-          wc.loadURL(url).catch(() => {});
-          return { action: 'deny' };
-        }
-      } catch (e) { /* segue para separador */ }
-      if (a && a.isolated) { partition = appPartition(a.id); sessionLabel = a.name; }
-    } else if (kind === 'tab' && ctx.tabId) {
+    if (kind === 'tab' && ctx.tabId) {
       const t = tabById(ctx.tabId);
       if (t) { partition = t.partition || null; sessionLabel = t.sessionLabel || null; }
     }
@@ -358,20 +347,25 @@ function wireWeb(wc, kind, ctx = {}) {
   });
   wc.on('did-create-window', (child, details) => {
     const cw = child.webContents;
-    cw.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url }); return { action: 'deny' }; });
+    cw.setWindowOpenHandler(({ url }) => {
+      if (/^https?:/.test(url)) { if (kind === 'app' && !wc.isDestroyed()) wc.loadURL(url).catch(() => {}); else newTab({ url }); }
+      return { action: 'deny' };
+    });
     cw.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(cw, d.url); });
     // janelas de início de sessão que abrem diretamente na Google
     if (details && !details.postBody && GOOGLE_LOGIN.test(details.url || '')) { googleUA(cw, details.url); cw.loadURL(details.url).catch(() => {}); }
   });
 
   wc.on('will-attach-webview', e => e.preventDefault());
-  wc.on('context-menu', (e, p) => contextMenu(wc, p));
+  wc.on('context-menu', (e, p) => contextMenu(wc, p, kind));
 }
 
 let lastAltWC = null;  // página onde se carregou no Option pela última vez
 function spaceForOpener() { const t = cur(); return t ? t.space : S.spaces[0].id; }
 
-function contextMenu(wc, p) {
+function contextMenu(wc, p, kind) {
+  const inApp = kind === 'app';
+  const openHere = u => wc.loadURL(u).catch(() => {});
   const items = [];
   const short = s => (s.length > 28 ? s.slice(0, 28) + '…' : s);
   if (p.misspelledWord && p.dictionarySuggestions.length) {
@@ -380,14 +374,14 @@ function contextMenu(wc, p) {
   }
   if (p.linkURL) {
     items.push(
-      { label: 'Abrir num separador novo', click: () => newTab({ url: p.linkURL, activate: false }) },
+      inApp ? { label: 'Abrir aqui', click: () => openHere(p.linkURL) } : { label: 'Abrir num separador novo', click: () => newTab({ url: p.linkURL, activate: false }) },
       { label: 'Copiar endereço do link', click: () => clipboard.writeText(p.linkURL) },
       { type: 'separator' }
     );
   }
   if (p.mediaType === 'image' && p.srcURL) {
     items.push(
-      { label: 'Abrir imagem num separador novo', click: () => newTab({ url: p.srcURL, activate: false }) },
+      inApp ? { label: 'Abrir imagem aqui', click: () => openHere(p.srcURL) } : { label: 'Abrir imagem num separador novo', click: () => newTab({ url: p.srcURL, activate: false }) },
       { label: 'Copiar imagem', click: () => wc.copyImageAt(p.x, p.y) },
       { label: 'Guardar imagem…', click: () => wc.downloadURL(p.srcURL) },
       { type: 'separator' }
@@ -403,7 +397,7 @@ function contextMenu(wc, p) {
     const txt = p.selectionText.trim();
     items.push(
       { role: 'copy', label: 'Copiar' },
-      { label: `Pesquisar “${short(txt)}”`, click: () => newTab({ url: toURL(txt.includes(' ') ? txt : txt + ' ') }) },
+      { label: `Pesquisar “${short(txt)}”`, click: () => { const u = toURL(txt.includes(' ') ? txt : txt + ' '); if (inApp) openHere(u); else newTab({ url: u }); } },
       { label: 'Perguntar ao Claude sobre isto', click: () => sendToClaude(`Sobre este excerto de ${wc.getURL()}:\n\n"${txt.slice(0, 4000)}"\n\n`) }
     );
   } else {
@@ -569,6 +563,17 @@ function navigate(input) {
 }
 
 function navAction(a) {
+  if (fullApp) {
+    const v = appViews.get(fullApp); if (!v) return;
+    const w = v.webContents, ap = appById(fullApp);
+    if (a === 'back' && w.navigationHistory.canGoBack()) w.navigationHistory.goBack();
+    if (a === 'forward' && w.navigationHistory.canGoForward()) w.navigationHistory.goForward();
+    if (a === 'reload' || a === 'retry') w.reload();
+    if (a === 'hardreload') w.reloadIgnoringCache();
+    if (a === 'stop') w.stop();
+    if (a === 'home' && ap && ap.url) w.loadURL(ap.url).catch(() => {});
+    return;
+  }
   const tab = cur(); if (!tab) return;
   const view = tabViews.get(tab.id);
   if (a === 'retry' && tab.error) { const u = tab.error.url || tab.url; tab.error = null; if (view) view.webContents.loadURL(u).catch(() => {}); applyLayout(); pushState(); return; }
@@ -646,6 +651,8 @@ function ensureAppView(a) {
     if (!isMain || code === -3) return;
     appErrors[a.id] = { code, desc, url }; applyLayout(); pushState();
   });
+  wc.on('did-navigate', () => pushState());
+  wc.on('did-navigate-in-page', () => pushState());
   wc.on('did-start-navigation', d => {
     if (d.isMainFrame && !d.isSameDocument && appErrors[a.id]) { delete appErrors[a.id]; applyLayout(); pushState(); }
   });
