@@ -502,7 +502,7 @@ $('#btnBack').addEventListener('click', () => Z.invoke('nav', 'back'));
 $('#fullHome').addEventListener('click', () => Z.invoke('nav', 'apphome'));
 $('#btnHome').addEventListener('click', () => Z.invoke('nav', 'home'));
 $('#pipBtn').addEventListener('click', () => Z.invoke('pip:toggle'));
-$('#shareBtn').addEventListener('click', e => { const r = e.currentTarget.getBoundingClientRect(); Z.invoke('page:share', { x: r.left, y: r.bottom + 4 }); });
+$('#shareBtn').addEventListener('click', () => { shareOpen ? closeShare() : openShare(); });
 $('#btnFwd').addEventListener('click', () => Z.invoke('nav', 'forward'));
 $('#btnReload').addEventListener('click', () => { const t = curTab(); Z.invoke('nav', t && t.error ? 'retry' : 'reload'); });
 $('#titleBtn').addEventListener('click', openAddr);
@@ -537,16 +537,65 @@ $('#addr').addEventListener('keydown', e => {
 $('#addr').addEventListener('blur', () => { if (addrOpen) closeAddr(); });
 $('#addr').addEventListener('input', e => suggInput(e, $('#addr'), $('#addrSugg')));
 
+/* Partilhar: menu próprio com as apps da barra (Gmail, Proton Mail, WhatsApp…) e outras opções */
+let shareOpen = false;
+const SHARE_IC = {
+  mail: () => ICON.mail, pmail: () => ICON.pmail, wa: () => ICON.wa,
+  claude: () => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M5.6 18.4l3.2-3.2M15.2 8.8l3.2-3.2"/></svg>',
+  send: () => '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 3 10.5l7 2.5 2.5 7z"/><path d="m10 13 4.5-4.5" stroke-linecap="round"/></svg>',
+  in: () => '<span class="lt">in</span>', x2: () => '<span class="lt">X</span>', sky: () => '<span class="lt">B</span>', fb: () => '<span class="lt">f</span>'
+};
+async function openShare() {
+  if (shareOpen) return;
+  const info = await Z.invoke('share:info');
+  if (!info) { toast('Abre uma página para a partilhares.'); return; }
+  if (addrOpen) closeAddr();
+  shareOpen = true;
+  const pop = $('#sharePop');
+  pop.innerHTML = `<div class="sp-head"><b>${esc(info.title)}</b><span>${esc(info.url.replace(/^https?:\/\/(www\.)?/, ''))}</span></div>
+    <div class="sp-grid">${info.targets.map(t => `<button type="button" data-share="${esc(t.id)}" title="${esc(t.label)} · ${esc(t.sub)}"><span class="sp-ic">${(SHARE_IC[t.icon] || SHARE_IC.send)()}</span><span class="sp-l">${esc(t.label)}</span></button>`).join('')}</div>
+    <div class="sp-list">
+      <button type="button" data-share="copy">${ICON.link}<span>Copiar endereço</span></button>
+      <button type="button" data-share="copyboth">${ICON.link}<span>Copiar título e endereço</span></button>
+      ${info.mac ? `<button type="button" data-share="native">${ICON.plus}<span>Mais opções do Mac (AirDrop, Mensagens, Notas…)</span></button>` : ''}
+      <button type="button" data-share="browser">${ICON.search}<span>Abrir no browser do sistema</span></button>
+    </div>`;
+  pop.hidden = false;
+  // à direita, alinhado com o botão, sem passar por cima do painel do Claude
+  const b = $('#shareBtn').getBoundingClientRect(), page = $('#pageSlot').getBoundingClientRect();
+  const w = pop.offsetWidth;
+  let left = Math.min(b.right, page.right - 8) - w; left = Math.max(page.left + 8, left);
+  pop.style.left = left + 'px';
+  coverShot = null;
+  showCover(true);
+  Z.invoke('page:snapshot').then(img => { coverShot = img || ''; if (shareOpen) showCover(true); });
+}
+function closeShare() {
+  if (!shareOpen) return;
+  shareOpen = false; $('#sharePop').hidden = true; $('#sharePop').innerHTML = '';
+  showCover(false);
+}
+$('#sharePop').addEventListener('click', e => {
+  const b = e.target.closest('[data-share]'); if (!b) return;
+  const id = b.dataset.share;
+  const r = $('#shareBtn').getBoundingClientRect();
+  closeShare();
+  Z.invoke('share:do', id, { x: r.left, y: r.bottom + 4 });
+});
+document.addEventListener('mousedown', e => { if (shareOpen && !e.target.closest('#sharePop') && !e.target.closest('#shareBtn')) closeShare(); });
+document.addEventListener('keydown', e => { if (shareOpen && e.key === 'Escape') { e.preventDefault(); closeShare(); Z.invoke('ui:focusPage'); } });
+
 /* Sugestões de endereços já visitados (campo de endereço e pesquisa da página nova) */
 const sug = { open: false, list: [], sel: -1, input: null, box: null, typed: '', seq: 0 };
 let coverShot = null;
 function showCover(on) {
+  on = on || shareOpen;
   const slot = $('#pageSlot'); let img = $('#coverImg');
   if (on && coverShot) {
     if (!img) { img = document.createElement('img'); img.id = 'coverImg'; img.className = 'cover'; img.alt = ''; slot.appendChild(img); }
     img.src = coverShot;
   } else if (img) img.remove();
-  const cover = on && sug.input === $('#addr') && coverShot !== null;
+  const cover = on && (shareOpen || sug.input === $('#addr')) && coverShot !== null;
   if (cover !== sendLayout.cover) { sendLayout.cover = cover; lastLayout = ''; sendLayout(); }
 }
 function closeSugg() {
@@ -631,6 +680,7 @@ Z.on('ui-command', c => {
   if (c.cmd === 'find') openFind();
   if (c.cmd === 'mosaic') ov.open ? closeMosaic() : openMosaic(false);
   if (c.cmd === 'edit-app') openEditApp(c.id);
+  if (c.cmd === 'share') { shareOpen ? closeShare() : openShare(); }
   if (c.cmd === 'focus-ask') { const i = $('#askInput'); if (i) { i.focus(); i.select(); } }
 });
 

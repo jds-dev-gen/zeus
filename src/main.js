@@ -7,8 +7,7 @@
  */
 const {
   app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog,
-  clipboard, shell, nativeTheme, Notification
-} = require('electron');
+  clipboard, shell, nativeTheme, Notification, ShareMenu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { ElectronChromeExtensions } = require('electron-chrome-extensions');
@@ -30,7 +29,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 const DEFAULT_APPS = [
   { id: 'apolo', name: 'Apolo', url: '', mode: 'full', icon: 'apolo', preload: false, linksInTabs: true },
   { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true, linksInTabs: true },
-  { id: 'mail', name: 'Email', url: 'https://mail.google.com/', mode: 'full', icon: 'mail', preload: true },
+  { id: 'mail', name: 'Email', url: 'https://mail.google.com/', mode: 'full', icon: 'mail', preload: true, linksInTabs: true },
   { id: 'cal', name: 'Calendário', url: 'https://calendar.google.com/', mode: 'full', icon: 'cal', preload: false },
   { id: 'notion', name: 'Notion', url: 'https://www.notion.so/', mode: 'full', icon: 'notion', preload: false },
   { id: 'pmail', name: 'Proton Mail', url: 'https://mail.proton.me/', mode: 'full', icon: 'pmail', preload: true },
@@ -130,6 +129,8 @@ function loadState() {
     S.apps.forEach(a => { if (a.id === 'apolo' && a.linksInTabs === undefined) a.linksInTabs = true; });
     // 0.2.9: o WhatsApp também abre os links em separadores
     if (!saved.waLinks) { S.apps.forEach(a => { if (a.id === 'wa' || hostOf(a.url || '') === 'web.whatsapp.com') a.linksInTabs = true; }); S.waLinks = true; }
+    // 0.3.0: o Gmail também abre os links em separadores
+    if (!saved.gmailLinks) { S.apps.forEach(a => { if (hostOf(a.url || '') === 'mail.google.com') a.linksInTabs = true; }); }
   } catch (e) { /* primeiro arranque */ }
   if (!S.settings.updateRepo && PKG.zeus && PKG.zeus.updateRepo) S.settings.updateRepo = PKG.zeus.updateRepo;
   S.tabs = (S.tabs || []).filter(t => t && t.url);
@@ -160,7 +161,7 @@ function saveNow() {
       tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space, partition: t.partition || null, sessionLabel: t.sessionLabel || null })),
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
-      apps: S.apps, removedApps: S.removedApps || [], waLinks: true, settings: S.settings, permissions: S.permissions,
+      apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, settings: S.settings, permissions: S.permissions,
       visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
@@ -286,6 +287,8 @@ function applyLayout() {
     const tab = tabById(id);
     const show = !ov && !L.cover && !fullApp && id === S.currentId && tab && !tab.error && tab.url !== NEWTAB && L.page;
     if (show) view.setBounds(L.page);
+    // de volta ao separador do vídeo: o vídeo sai da janela flutuante e volta para a página
+    if (show && pipTabs.has(id)) pipExit(id);
     view.setVisible(!!show);
   }
   // apps
@@ -382,7 +385,10 @@ function wireWeb(wc, kind, ctx = {}) {
     }
     // apps da barra: tudo abre dentro da própria app (links, mudar de conta…), nunca num separador
     const opener = kind === 'app' ? appById(ctx.appId) : null;
-    if (kind === 'app' && !(opener && opener.linksInTabs)) { wc.loadURL(url).catch(() => {}); return { action: 'deny' }; }
+    // mudar de conta (/u/1/ no mesmo site) fica sempre dentro da app, mesmo nas que abrem os links em separadores
+    let sameAccountSwitch = false;
+    try { sameAccountSwitch = kind === 'app' && hostOf(url) === hostOf(wc.getURL()) && /\/u\/\d+(\/|$)/.test(new URL(url).pathname); } catch (e) { /* ok */ }
+    if (kind === 'app' && (sameAccountSwitch || !(opener && opener.linksInTabs))) { wc.loadURL(url).catch(() => {}); return { action: 'deny' }; }
     // links de um separador com sessão separada continuam nessa sessão (mesma conta)
     let partition = null, sessionLabel = null;
     if (kind === 'tab' && ctx.tabId) {
@@ -643,13 +649,14 @@ async function inFrames(wc, code) {
   return out;
 }
 async function pipEnter(wc, force) { const r = await inFrames(wc, PIP_ENTER(force)); return r.includes('ok') || r.includes('already'); }
+const pipTabs = new Set();   // separadores cujo vídeo passou a flutuar automaticamente
 function autoPip(tabId) {
   if (S.settings.autoPip === false) return;
   const t = tabById(tabId); const v = tabViews.get(tabId);
   if (!t || !t.media || !v) return;
-  pipEnter(v.webContents, false).catch(() => {});
+  pipEnter(v.webContents, false).then(ok => { if (ok) pipTabs.add(tabId); }).catch(() => {});
 }
-function pipExit(tabId) { const v = tabViews.get(tabId); if (v) inFrames(v.webContents, PIP_EXIT).catch(() => {}); }
+function pipExit(tabId) { pipTabs.delete(tabId); const v = tabViews.get(tabId); if (v) inFrames(v.webContents, PIP_EXIT).catch(() => {}); }
 async function pipToggle() {
   const wc = pageWC(); if (!wc) return;
   const on = (await inFrames(wc, PIP_STATE)).includes(true);
@@ -663,35 +670,65 @@ function openInApp(a, url) {
   view.webContents.loadURL(url).catch(() => {});
   if (fullApp !== a.id && openPanel !== a.id) openApp(a.id);
 }
-function sharePage(pos) {
-  const wc = pageWC();
-  if (!wc) { ui.send('toast', 'Abre uma página para a partilhares.'); return; }
-  const url = wc.getURL(), title = wc.getTitle() || hostOf(url);
-  if (!/^https?:/.test(url)) { ui.send('toast', 'Esta página não pode ser partilhada.'); return; }
-  const enc = encodeURIComponent;
-  const items = [];
-  if (isMac) items.push({ label: 'Partilhar com…', role: 'shareMenu', sharingItem: { urls: [url] } }, { type: 'separator' });
-  items.push(
-    { label: 'Copiar endereço', click: () => { clipboard.writeText(url); ui.send('toast', 'Endereço copiado.'); } },
-    { label: 'Copiar título e endereço', click: () => { clipboard.writeText(title + '\n' + url); ui.send('toast', 'Título e endereço copiados.'); } },
-    { type: 'separator' }
+// menu de partilha próprio (desenhado na interface): o processo principal diz o que há e executa a escolha
+function shareCurrent() {
+  const wc = pageWC(); if (!wc) return null;
+  const url = wc.getURL(); if (!/^https?:/.test(url)) return null;
+  return { url, title: wc.getTitle() || hostOf(url) };
+}
+function shareTargets() {
+  const t = []; const has = h => S.apps.filter(a => a.url && hostOf(a.url) === h);
+  has('mail.google.com').forEach(a => t.push({ id: 'gmail:' + a.id, label: a.name === 'Email' ? 'Gmail' : a.name, sub: 'Gmail', icon: 'mail' }));
+  has('mail.proton.me').forEach(a => t.push({ id: 'proton:' + a.id, label: a.name, sub: 'Proton Mail', icon: 'pmail' }));
+  has('web.whatsapp.com').forEach(a => t.push({ id: 'wa:' + a.id, label: a.name, sub: 'WhatsApp', icon: 'wa' }));
+  t.push(
+    { id: 'claude', label: 'Claude', sub: 'conversa', icon: 'claude' },
+    { id: 'telegram', label: 'Telegram', sub: 'separador', icon: 'send' },
+    { id: 'linkedin', label: 'LinkedIn', sub: 'separador', icon: 'in' },
+    { id: 'x', label: 'X', sub: 'separador', icon: 'x2' },
+    { id: 'bluesky', label: 'Bluesky', sub: 'separador', icon: 'sky' },
+    { id: 'facebook', label: 'Facebook', sub: 'separador', icon: 'fb' },
+    { id: 'mailapp', label: 'Mail do Mac', sub: 'app do sistema', icon: 'mail' }
   );
-  S.apps.filter(a => a.url && hostOf(a.url) === 'mail.google.com').forEach(a => {
-    const m = /\/mail\/u\/(\d+)/.exec(S.appLast[a.id] || '');
-    const base = 'https://mail.google.com/mail/' + (m ? 'u/' + m[1] + '/' : '');
-    items.push({ label: `Enviar por email (${a.name})`, click: () => openInApp(a, `${base}?view=cm&fs=1&su=${enc(title)}&body=${enc(url)}`) });
-  });
-  S.apps.filter(a => a.url && hostOf(a.url) === 'web.whatsapp.com').forEach(a => {
-    items.push({ label: `Enviar no ${a.name}`, click: () => openInApp(a, `https://web.whatsapp.com/send?text=${enc(title + ' ' + url)}`) });
-  });
-  items.push(
-    { label: 'Enviar ao Claude', click: () => sendToClaude(`${title}\n${url}\n\n`) },
-    { type: 'separator' },
-    { label: 'Abrir no browser do sistema', click: () => shell.openExternal(url) }
-  );
-  const opts = { window: win };
-  if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) { opts.x = Math.round(pos.x); opts.y = Math.round(pos.y); }
-  Menu.buildFromTemplate(items).popup(opts);
+  return t;
+}
+function shareInfo() {
+  const c = shareCurrent(); if (!c) return null;
+  return Object.assign(c, { targets: shareTargets(), mac: isMac });
+}
+function appUser(a, re) { const m = re.exec(S.appLast[a.id] || ''); return m ? m[1] : null; }
+function shareDo(id, pos) {
+  const c = shareCurrent();
+  if (!c) { ui.send('toast', 'Esta página não pode ser partilhada.'); return; }
+  const { url, title } = c; const enc = encodeURIComponent; const both = title + '\n' + url;
+  const [kind, appId] = String(id).split(':'); const a = appId ? appById(appId) : null;
+  switch (kind) {
+    case 'copy': clipboard.writeText(url); ui.send('toast', 'Endereço copiado.'); break;
+    case 'copyboth': clipboard.writeText(both); ui.send('toast', 'Título e endereço copiados.'); break;
+    case 'gmail': if (a) { const u = appUser(a, /\/mail\/u\/(\d+)/); openInApp(a, `https://mail.google.com/mail/${u ? 'u/' + u + '/' : ''}?view=cm&fs=1&su=${enc(title)}&body=${enc(url)}`); } break;
+    case 'proton': if (a) {
+      // o Proton Mail abre um email novo a partir de um endereço mailto; o link fica também copiado, por segurança
+      const u = appUser(a, /mail\.proton\.me\/u\/(\d+)/) || '0';
+      clipboard.writeText(both);
+      openInApp(a, `https://mail.proton.me/u/${u}/inbox#mailto=${enc('mailto:?subject=' + enc(title) + '&body=' + enc(url))}`);
+      ui.send('toast', 'A abrir um email no Proton Mail. O link também ficou copiado (⌘V).');
+    } break;
+    case 'wa': if (a) openInApp(a, `https://web.whatsapp.com/send?text=${enc(title + ' ' + url)}`); break;
+    case 'claude': sendToClaude(`${title}\n${url}\n\n`); break;
+    case 'telegram': newTab({ url: `https://t.me/share/url?url=${enc(url)}&text=${enc(title)}` }); break;
+    case 'linkedin': newTab({ url: `https://www.linkedin.com/sharing/share-offsite/?url=${enc(url)}` }); break;
+    case 'x': newTab({ url: `https://x.com/intent/post?text=${enc(title)}&url=${enc(url)}` }); break;
+    case 'bluesky': newTab({ url: `https://bsky.app/intent/compose?text=${enc(title + ' ' + url)}` }); break;
+    case 'facebook': newTab({ url: `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}` }); break;
+    case 'mailapp': shell.openExternal(`mailto:?subject=${enc(title)}&body=${enc(url)}`); break;
+    case 'browser': shell.openExternal(url); break;
+    case 'native': if (isMac) {
+      const opts = { window: win };
+      if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) { opts.x = Math.round(pos.x); opts.y = Math.round(pos.y); }
+      try { new ShareMenu({ urls: [url] }).popup(opts); }
+      catch (e) { Menu.buildFromTemplate([{ label: 'Partilhar com…', role: 'shareMenu', sharingItem: { urls: [url] } }]).popup(opts); }
+    } break;
+  }
 }
 
 function navAction(a) {
@@ -1141,7 +1178,8 @@ function setupIPC() {
   handle('navigate', input => navigate(input));
   handle('nav', a => navAction(a));
   handle('history:suggest', q => suggest(q));
-  handle('page:share', pos => sharePage(pos));
+  handle('share:info', () => shareInfo());
+  handle('share:do', (id, pos) => shareDo(id, pos));
   handle('pip:toggle', () => pipToggle());
   handle('page:snapshot', async () => {
     const wc = pageWC(); if (!wc) return '';
@@ -1310,7 +1348,7 @@ function buildMenu() {
         { label: 'Página inicial', accelerator: 'CmdOrCtrl+Shift+H', click: () => goHome() },
         { type: 'separator' },
         { label: 'Vídeo a flutuar', accelerator: 'CmdOrCtrl+Alt+P', click: () => pipToggle() },
-        { label: 'Partilhar a página…', click: () => sharePage() },
+        { label: 'Partilhar a página…', accelerator: 'CmdOrCtrl+Shift+S', click: () => ui && ui.send('ui-command', { cmd: 'share' }) },
         { type: 'separator' },
         { label: 'Separador seguinte', accelerator: 'Ctrl+Tab', click: () => cycle(1) },
         { label: 'Separador anterior', accelerator: 'Ctrl+Shift+Tab', click: () => cycle(-1) }
