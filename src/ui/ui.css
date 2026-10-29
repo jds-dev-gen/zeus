@@ -245,6 +245,12 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .vbtn { height: 36px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--veil-line); background: var(--veil-fill); font-size: 12.5px; white-space: nowrap; }
 .vbtn.solid { background: var(--inv-bg); color: var(--inv-fg); border-color: var(--inv-bg); font-weight: 600; }
 /* cada espaço é um painel com contorno próprio, para as fronteiras ficarem claras */
+.msugg { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px auto 0; max-width: 980px; justify-content: center; }
+.msugg .lbl-mono { margin-right: 4px; }
+.msugg button { display: flex; align-items: center; gap: 7px; max-width: 320px; height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--veil-line); background: var(--veil-fill); color: var(--fg); font-size: 12.5px; }
+.msugg button:hover, .msugg button.sel { background: var(--inv-bg); color: var(--inv-fg); border-color: var(--inv-bg); }
+.msugg button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msugg button em { font-style: normal; opacity: .6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 .zones { display: flex; gap: 18px; flex-wrap: wrap; align-items: stretch; }
 .zone { display: flex; flex-direction: column; gap: 12px; min-width: 0; border: 1px solid var(--zone-line); border-radius: 18px; padding: 12px 14px 14px; background: var(--zone-fill); transition: background .12s, border-color .12s; }
 .zone.cur { border-color: var(--zone-cur); }

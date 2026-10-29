@@ -12,7 +12,7 @@ try { injectBrowserAction(); } catch (e) { /* sem extensões */ }
 const INVOKE = new Set([
   'ready', 'layout', 'mosaic:prepare',
   'tab:new', 'tab:open', 'tab:close', 'tab:later', 'tab:move', 'tab:restore', 'tab:reopen',
-  'navigate', 'nav', 'find', 'history:suggest', 'share:info', 'share:do', 'page:snapshot', 'pip:toggle',
+  'navigate', 'nav', 'find', 'history:suggest', 'history:browsers', 'history:import', 'history:count', 'share:info', 'share:do', 'page:snapshot', 'pip:toggle',
   'space:add', 'space:rename', 'space:remove',
   'app:open', 'app:close', 'app:mode', 'app:add', 'app:update', 'app:remove', 'app:menu', 'app:reload', 'app:reorder', 'page:insertText',
   'claude:toggle', 'claude:sendPage', 'claude:ask', 'claude:new',

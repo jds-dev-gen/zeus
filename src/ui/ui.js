@@ -701,7 +701,7 @@ async function openMosaic(hold) {
   if (ov.open || modal || !S) return;
   ov.open = true; ov.hold = hold; ov.addingSpace = false; ov.renaming = null;
   ov.sel = S.mru.find(x => x !== S.currentId && tabById(x)) || S.currentId;
-  $('#mfilter').value = '';
+  $('#mfilter').value = ''; $('#msugg').hidden = true; $('#msugg').innerHTML = ''; msug.list = [];
   let prep = { bg: '', thumbs: {} };
   try { prep = await Z.invoke('mosaic:prepare'); } catch (e) { /* sem miniaturas */ }
   if (!ov.open) return;
@@ -780,6 +780,18 @@ function renderKeys() {
     ? `<span><b>${KEY}</b>largar para abrir</span><span><b>← → ↑ ↓</b>escolher</span><span><b>Esc</b>cancelar</span>`
     : `<span><b>Enter</b>abrir</span><span><b>Esc</b>fechar</span><span><b>← → ↑ ↓</b>navegar</span><span><b>${isMac ? 'delete' : 'Backspace'}</b>fechar separador</span><span><b>${KEY} L</b>mais tarde</span><span>arrastar para reordenar</span>`;
 }
+function moveZone(d) {
+  const v = visible(); if (!v.length) return;
+  const cur = tabById(ov.sel) || v[0];
+  const spaces = S.spaces.filter(sp => v.some(t => t.space === sp.id));
+  let zi = spaces.findIndex(sp => sp.id === cur.space);
+  const inZone = id => v.filter(t => t.space === id);
+  const row = inZone(cur.space).findIndex(t => t.id === cur.id);
+  zi = Math.max(0, Math.min(spaces.length - 1, zi + d));
+  const list = inZone(spaces[zi].id);
+  ov.sel = list[Math.min(row, list.length - 1)].id; renderZones();
+  const el = document.querySelector('.card.sel'); if (el) el.scrollIntoView({ block: 'nearest' });
+}
 function moveSel(d) {
   const v = visible(); if (!v.length) return;
   let i = v.findIndex(t => t.id === ov.sel);
@@ -791,7 +803,26 @@ function selNeighbor(id) {
   const v = visible(); const i = v.findIndex(t => t.id === id);
   const n = v[i + 1] || v[i - 1]; ov.sel = n ? n.id : null;
 }
-$('#mfilter').addEventListener('input', () => renderZones());
+$('#mfilter').addEventListener('input', () => { renderZones(); mosaicSugg(); });
+/* Sites visitados que correspondem ao que se escreve na caixa do mosaico */
+let msug = { list: [], seq: 0 };
+async function mosaicSugg() {
+  const q = $('#mfilter').value.trim(); const box = $('#msugg');
+  if (!q) { msug.list = []; box.hidden = true; box.innerHTML = ''; return; }
+  const seq = ++msug.seq;
+  const list = await Z.invoke('history:suggest', q);
+  if (seq !== msug.seq) return;
+  msug.list = (list || []).slice(0, 5);
+  if (!msug.list.length) { box.hidden = true; box.innerHTML = ''; return; }
+  const short = u => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+  box.innerHTML = `<span class="lbl-mono">Sites visitados</span>` + msug.list.map((x, i) => `<button type="button" data-msug="${i}" class="${i === 0 && !visible().length ? 'sel' : ''}" title="${esc(x.url)}"><span>${esc(short(x.url))}</span>${x.title && x.title !== hostOf(x.url) ? `<em>${esc(x.title)}</em>` : ''}</button>`).join('');
+  box.hidden = false;
+}
+$('#msugg').addEventListener('click', e => {
+  const b = e.target.closest('[data-msug]'); if (!b) return;
+  const x = msug.list[+b.dataset.msug]; if (!x) return;
+  closeMosaic(); Z.invoke('tab:new', { url: x.url });
+});
 $('#mNew').addEventListener('click', () => { closeMosaic(); Z.invoke('tab:new', {}); });
 $('#mSpace').addEventListener('click', () => { ov.addingSpace = true; renderZones(); });
 $('#zones').addEventListener('click', e => {
@@ -949,10 +980,11 @@ window.addEventListener('keydown', e => {
   const inField = e.target && (e.target.id === 'renameInput' || e.target.id === 'spaceInput');
   if (inField) return;
   if (e.key === 'Escape') { e.preventDefault(); if (ov.hold) giveBackKey(''); else closeMosaic(); return; }
-  if (e.key === 'ArrowRight') { e.preventDefault(); moveSel(1); return; }
-  if (e.key === 'ArrowLeft') { e.preventDefault(); moveSel(-1); return; }
-  if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(3); return; }
-  if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-3); return; }
+  // cada espaço é uma lista: ↑ ↓ dentro do espaço, ← → para o espaço ao lado
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(1); return; }
+  if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-1); return; }
+  if (e.key === 'ArrowRight') { e.preventDefault(); moveZone(1); return; }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); moveZone(-1); return; }
   if (ov.hold) {
     // com o Option ainda premido, qualquer outra tecla quer dizer que se estava a escrever
     if (e.key === 'Enter') { e.preventDefault(); ov.hold = false; ignoreUp = true; if (ov.sel) openSel(ov.sel); return; }
@@ -962,7 +994,7 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     e.preventDefault();
     const v = visible(); const val = f.value.trim();
-    if (val && !v.length) { closeMosaic(); Z.invoke('tab:new', { url: val }); }
+    if (val && !v.length) { const x = msug.list[0]; closeMosaic(); Z.invoke('tab:new', { url: x ? x.url : val }); }
     else if (ov.sel) openSel(ov.sel);
     return;
   }
@@ -1125,6 +1157,9 @@ async function openSettings() {
       <div class="row-btns"><button class="btn ghost" type="button" id="setStore">Abrir a Chrome Web Store</button><button class="btn ghost" type="button" id="setLoadExt">Carregar de uma pasta ou .zip…</button></div>
       <p class="hint">Para extensões tuas que não estão na loja (como as que usas no modo de programador do Chrome ou do Vivaldi). Ficam ativas nos separadores e em todas as apps da barra.</p></div>
     <div class="set-sec"><h3>Permissões dadas a sites</h3><div class="list" id="setPerm"><p class="hint">A carregar…</p></div></div>
+    <div class="set-sec"><h3>Histórico</h3>
+      <p class="hint" id="histLine">Ao escrever um endereço, o Zeus sugere os sites que já visitaste e os que mais visitas.</p>
+      <div class="row-btns" id="histImport"></div></div>
     <div class="set-sec"><h3>Privacidade</h3>
       <p class="hint">Apagar todos os dados termina as sessões em todos os sites e apps (WhatsApp, Email, etc.).</p>
       <div class="row-btns"><button class="btn ghost" type="button" id="clrHist">Apagar o histórico</button><button class="btn ghost" type="button" id="clrCache">Limpar a cache</button><button class="btn danger" type="button" id="clrAll">Apagar todos os dados</button></div></div>
@@ -1158,6 +1193,7 @@ async function openSettings() {
     if (!b.dataset.confirm) { b.dataset.confirm = '1'; b.textContent = 'Confirmar: apagar tudo'; return; }
     await Z.invoke('data:clear', 'all'); b.textContent = 'Dados apagados'; b.disabled = true;
   });
+  renderHistSection();
   renderExtList(await Z.invoke('ext:list'));
   renderPermList(await Z.invoke('permissions:list'));
 }
@@ -1175,6 +1211,22 @@ $('#modal').addEventListener('click', e => {
   const rx = e.target.closest('[data-rmext]'); if (rx) { Z.invoke('ext:remove', rx.dataset.rmext); return; }
   const fp = e.target.closest('[data-forget]'); if (fp) { Z.invoke('permissions:forget', fp.dataset.forget); fp.closest('.li').remove(); }
 });
+async function renderHistSection() {
+  const n = await Z.invoke('history:count');
+  const line = $('#histLine'); if (!line) return;
+  line.textContent = `Ao escrever um endereço (em cima, na página principal ou no mosaico), o Zeus sugere os sites que já visitaste e os que mais visitas. Tem ${n.toLocaleString('pt-PT')} endereços guardados.`;
+  const list = await Z.invoke('history:browsers');
+  const box = $('#histImport'); if (!box) return;
+  box.innerHTML = list.length
+    ? list.map(b => `<button class="btn ghost" type="button" data-histimp="${esc(b.id)}">Importar do ${esc(b.name)}</button>`).join('')
+    : '<span class="hint">Não encontrei outros browsers (Vivaldi, Chrome, Brave, Edge, Arc) neste computador para importar o histórico.</span>';
+  box.querySelectorAll('[data-histimp]').forEach(btn => btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = 'A importar…';
+    const r = await Z.invoke('history:import', btn.dataset.histimp);
+    if (r && r.ok) { btn.textContent = `Importado do ${r.name}`; toast(`${r.added.toLocaleString('pt-PT')} endereços novos do ${r.name}`); renderHistSection(); }
+    else { btn.disabled = false; btn.textContent = 'Tentar de novo'; toast((r && r.error) || 'Não foi possível importar.'); }
+  }));
+}
 async function loadExtFromFolder() {
   const r = await Z.invoke('ext:load');
   if (r && r.ok) { toast(`Extensão “${r.name}” carregada`); renderExtList(await Z.invoke('ext:list')); }

@@ -80,7 +80,7 @@ let S = {
 };
 let nextId = 1;
 
-const HISTORY_MAX = 1500;
+const HISTORY_MAX = 6000;
 function remember(url, title) {
   if (!/^https?:/.test(url || '')) return;
   const u = url.replace(/#.*$/, '');
@@ -95,9 +95,11 @@ function retitle(url, title) {
 const bare = u => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
 // sugestões para o campo de endereço: endereços já visitados que comecem ou contenham o que se escreveu
 function suggest(q) {
-  q = String(q || '').trim().toLowerCase(); if (!q) return [];
+  q = String(q || '').trim().toLowerCase().replace(/^https?:\/\/(www\.)?/, ''); if (!q) return [];
   const now = Date.now();
+  const freshness = t => Math.max(0, 20 - (now - (t || 0)) / 86400000);
   const out = [];
+  const sites = new Map();   // site que começa pelo texto escrito → visitas somadas (para sugerir a página principal)
   for (const h of S.history) {
     const b = bare(h.url).toLowerCase(), host = hostOf(h.url), title = (h.title || '').toLowerCase();
     let score = 0;
@@ -105,15 +107,82 @@ function suggest(q) {
     else if (host.split('.').some(p => p.startsWith(q))) score = 50;
     else if (b.includes(q)) score = 30; else if (title.includes(q)) score = 25;
     if (!score) continue;
-    score += Math.min(40, Math.log2(1 + h.n) * 8) + Math.max(0, 20 - (now - h.t) / 86400000);
+    if (host.startsWith(q) || host.split('.').some(p => p.startsWith(q))) {
+      const st = sites.get(host) || { n: 0, t: 0, title: '', root: false };
+      st.n += h.n; st.t = Math.max(st.t, h.t || 0);
+      if (b === host) { st.root = true; st.title = h.title; }
+      sites.set(host, st);
+    }
+    score += Math.min(40, Math.log2(1 + h.n) * 8) + freshness(h.t);
     if (b === host) score += 5;  // páginas principais primeiro
     out.push({ url: h.url, title: h.title, score });
   }
-  // a página principal de um site que começa pelo texto escrito (para completar "obs" → observador.pt)
+  // a página principal de cada site que corresponde ao texto, à frente das páginas soltas desse site
+  // (escrever "obs" completa para observador.pt, e não para um artigo qualquer)
+  for (const [host, st] of sites) {
+    const base = host.startsWith(q) ? 106 : 56;
+    out.push({ url: 'https://' + host + '/', title: st.title || host, score: base + Math.min(45, Math.log2(1 + st.n) * 8) + freshness(st.t) });
+  }
   out.sort((a, b) => b.score - a.score);
   const seen = new Set(); const res = [];
-  for (const o of out) { const k = bare(o.url); if (seen.has(k)) continue; seen.add(k); res.push({ url: o.url, title: o.title }); if (res.length >= 7) break; }
+  for (const o of out) { const k = bare(o.url).toLowerCase(); if (seen.has(k)) continue; seen.add(k); res.push({ url: o.url, title: o.title }); if (res.length >= 7) break; }
   return res;
+}
+/*
+ * Importar o histórico de outro browser (Vivaldi, Chrome, Brave, Edge, Arc) — todos usam o ficheiro "History"
+ * do Chromium (SQLite). Copia-se o ficheiro (o browser pode estar aberto) e lê-se com o SQLite do Node.
+ */
+const OTHER_BROWSERS = [
+  { id: 'vivaldi', name: 'Vivaldi', mac: 'Vivaldi', win: 'Vivaldi/User Data', linux: 'vivaldi' },
+  { id: 'chrome', name: 'Google Chrome', mac: 'Google/Chrome', win: 'Google/Chrome/User Data', linux: 'google-chrome' },
+  { id: 'brave', name: 'Brave', mac: 'BraveSoftware/Brave-Browser', win: 'BraveSoftware/Brave-Browser/User Data', linux: 'BraveSoftware/Brave-Browser' },
+  { id: 'edge', name: 'Microsoft Edge', mac: 'Microsoft Edge', win: 'Microsoft/Edge/User Data', linux: 'microsoft-edge' },
+  { id: 'arc', name: 'Arc', mac: 'Arc/User Data', win: null, linux: null }
+];
+function historyFiles(b) {
+  const rel = isMac ? b.mac : (process.platform === 'win32' ? b.win : b.linux);
+  if (!rel) return [];
+  const base = process.platform === 'win32'
+    ? path.join(process.env.LOCALAPPDATA || '', rel)
+    : path.join(app.getPath('appData'), rel);
+  let dirs = [];
+  try { dirs = fs.readdirSync(base).filter(n => n === 'Default' || /^Profile \d+$/.test(n)); } catch (e) { return []; }
+  return dirs.map(d => path.join(base, d, 'History')).filter(f => { try { return fs.statSync(f).isFile(); } catch (e) { return false; } });
+}
+function otherBrowsers() { return OTHER_BROWSERS.map(b => ({ id: b.id, name: b.name, profiles: historyFiles(b).length })).filter(b => b.profiles); }
+function importHistory(id) {
+  const b = OTHER_BROWSERS.find(x => x.id === id); if (!b) return { ok: false, error: 'Browser desconhecido.' };
+  const files = historyFiles(b);
+  if (!files.length) return { ok: false, error: `Não encontrei o histórico do ${b.name} neste computador.` };
+  let DatabaseSync;
+  try { ({ DatabaseSync } = require('node:sqlite')); } catch (e) { return { ok: false, error: 'Esta versão do Zeus não consegue ler o histórico.' }; }
+  const byUrl = new Map(S.history.map(h => [h.url, h]));
+  let added = 0, seen = 0;
+  for (const f of files) {
+    const tmp = path.join(app.getPath('temp'), 'zeus-history-' + Date.now() + '.sqlite');
+    try {
+      fs.copyFileSync(f, tmp);
+      const db = new DatabaseSync(tmp, { readOnly: true });
+      const rows = db.prepare(`SELECT url, title, visit_count AS n, typed_count AS typed, (last_visit_time / 1000) AS t
+        FROM urls WHERE hidden = 0 AND (url LIKE 'http://%' OR url LIKE 'https://%') AND length(url) < 600
+        ORDER BY (visit_count + 2 * typed_count) DESC, last_visit_time DESC LIMIT 5000`).all();
+      db.close();
+      for (const r of rows) {
+        seen++;
+        const u = String(r.url).replace(/#.*$/, '');
+        // tempo do Chromium: microssegundos desde 1601-01-01 (já dividido por 1000 na consulta)
+        const t = Math.max(0, Math.round(Number(r.t) - 11644473600000));
+        const n = Number(r.n || 0) + 2 * Number(r.typed || 0);
+        const h = byUrl.get(u);
+        if (h) { h.n = Math.max(h.n, n); h.t = Math.max(h.t || 0, t); if (!h.title && r.title) h.title = String(r.title); }
+        else { const x = { url: u, title: String(r.title || ''), n: Math.max(1, n), t }; byUrl.set(u, x); added++; }
+      }
+    } catch (e) { console.error('Histórico de', f, e.message); }
+    finally { try { fs.rmSync(tmp, { force: true }); } catch (e) { /* ok */ } }
+  }
+  S.history = [...byUrl.values()].sort((a, b2) => (b2.t || 0) - (a.t || 0)).slice(0, HISTORY_MAX);
+  saveState();
+  return { ok: true, added, seen, name: b.name };
 }
 const stateFile = () => path.join(app.getPath('userData'), 'zeus-state.json');
 function loadState() {
@@ -1396,6 +1465,9 @@ function setupIPC() {
   handle('navigate', input => navigate(input));
   handle('nav', a => navAction(a));
   handle('history:suggest', q => suggest(q));
+  handle('history:browsers', () => otherBrowsers());
+  handle('history:import', id => importHistory(id));
+  handle('history:count', () => S.history.length);
   handle('share:info', () => shareInfo());
   handle('share:do', (id, pos) => shareDo(id, pos));
   handle('pip:toggle', () => pipToggle());
