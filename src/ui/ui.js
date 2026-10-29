@@ -501,7 +501,15 @@ async function loadWeather() {
 /* ------------------------------------------------------------------ */
 $('#btnBack').addEventListener('click', () => Z.invoke('nav', 'back'));
 $('#fullHome').addEventListener('click', () => Z.invoke('nav', 'apphome'));
-$('#btnHome').addEventListener('click', () => Z.invoke('nav', 'home'));
+$('#btnHome').addEventListener('click', () => { goHomeUI(); Z.invoke('nav', 'home'); });
+// casa: fecha o que estiver por cima (mosaico/espaços, menus, janelas) e mostra a página principal
+function goHomeUI() {
+  if (ov.open) closeMosaic();
+  if (shareOpen) closeShare();
+  if (addrOpen) closeAddr();
+  if (modal) closeModal();
+  setTimeout(() => { const i = $('#askInput'); if (i) { i.focus(); i.select(); } }, 80);
+}
 $('#pipBtn').addEventListener('click', () => Z.invoke('pip:toggle'));
 $('#shareBtn').addEventListener('click', () => { shareOpen ? closeShare() : openShare(); });
 $('#btnFwd').addEventListener('click', () => Z.invoke('nav', 'forward'));
@@ -682,7 +690,7 @@ Z.on('ui-command', c => {
   if (c.cmd === 'mosaic') ov.open ? closeMosaic() : openMosaic(false);
   if (c.cmd === 'edit-app') openEditApp(c.id);
   if (c.cmd === 'share') { shareOpen ? closeShare() : openShare(); }
-  if (c.cmd === 'focus-ask') { const i = $('#askInput'); if (i) { i.focus(); i.select(); } }
+  if (c.cmd === 'focus-ask' || c.cmd === 'home') goHomeUI();
 });
 
 /* ------------------------------------------------------------------ */

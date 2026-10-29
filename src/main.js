@@ -671,9 +671,12 @@ function navigate(input) {
 function goHome() {
   const t = cur();
   const space = t ? t.space : S.spaces[0].id;
-  if (t && t.url === NEWTAB && !fullApp) { ui.send('ui-command', { cmd: 'focus-ask' }); return; }
-  const blank = S.tabs.find(x => x.url === NEWTAB && x.space === space);
-  if (blank) openTab(blank.id); else newTab({ space });
+  if (!(t && t.url === NEWTAB && !fullApp)) {
+    const blank = S.tabs.find(x => x.url === NEWTAB && x.space === space);
+    if (blank) openTab(blank.id); else newTab({ space });
+  }
+  // a interface fecha o mosaico (ou outra janela por cima) e põe o cursor na pesquisa
+  ui.send('ui-command', { cmd: 'home' });
 }
 function pageWC() { const v = fullApp ? appViews.get(fullApp) : tabViews.get(S.currentId); return v && !v.webContents.isDestroyed() ? v.webContents : null; }
 
