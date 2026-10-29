@@ -51,7 +51,8 @@ const DEFAULT_SETTINGS = {
   panelWidth: 420,            // largura do painel das apps ao lado
   claudeWidth: 420,
   autoUpdate: true,
-  autoPip: true,              // ao sair de um separador com vídeo a tocar, o vídeo fica a flutuar
+  autoPip: true,
+  homeFeeds: [],              // contas Google ligadas à página principal (agenda e tarefas do dia)              // ao sair de um separador com vídeo a tocar, o vídeo fica a flutuar
   updateRepo: ''              // utilizador/repositório no GitHub com as versões do Zeus
 };
 const SCHEMA = 2;
@@ -779,6 +780,94 @@ function navigate(input) {
   pushState(); saveState();
 }
 
+/* ------------------------------------------------------------------ */
+/* Página principal: agenda e tarefas do dia das contas Google          */
+/* ------------------------------------------------------------------ */
+/*
+ * Cada conta liga-se com um pequeno Apps Script pessoal (assets/zeus-hoje.gs) publicado como aplicação Web
+ * com acesso "Só eu". O Zeus lê-o com a sessão da app Gmail dessa conta (os cookies dela), por isso
+ * ninguém mais consegue ler o endereço. Não há chaves nem palavras-passe guardadas no Zeus.
+ */
+const SCRIPT_URL = /^https:\/\/script\.google\.com\/(a\/macros\/[^/]+|macros)\/(u\/\d+\/)?s\/[\w-]+\/exec(\?.*)?$/;
+let todayCache = { t: 0, data: null };
+const feedSession = f => { const a = appById(f.appId); return a ? sessionForApp(a).ses : zeusSession; };
+async function callFeed(f, params) {
+  const u = new URL(f.url);
+  Object.entries(params || {}).forEach(([k, v]) => u.searchParams.set(k, v));
+  const r = await feedSession(f).fetch(u.toString(), { credentials: 'include', redirect: 'follow', cache: 'no-store' });
+  const text = await r.text();
+  let j = null; try { j = JSON.parse(text); } catch (e) { /* página de login ou de erro */ }
+  if (!j) throw new Error(/accounts\.google\.com|ServiceLogin|signin/i.test(r.url + text.slice(0, 2000))
+    ? 'É preciso entrar na conta na app ' + ((appById(f.appId) || {}).name || 'Gmail') + '.'
+    : 'O endereço não devolveu a agenda (confirma que é o da aplicação Web e que o acesso é "Só eu").');
+  if (!j.ok) throw new Error(j.error || 'Erro no Apps Script.');
+  return j;
+}
+const localDate = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+async function homeToday(force) {
+  const feeds = S.settings.homeFeeds || [];
+  if (!feeds.length) return { feeds: 0, events: [], tasks: [], errors: [] };
+  if (!force && todayCache.data && Date.now() - todayCache.t < 5 * 60 * 1000 && todayCache.date === localDate()) return todayCache.data;
+  const date = localDate();
+  const res = await Promise.all(feeds.map(f => callFeed(f, { date }).then(d => ({ f, d }), e => ({ f, e }))));
+  const events = [], tasks = [], errors = [];
+  for (const { f, d, e } of res) {
+    const label = f.label || (appById(f.appId) || {}).name || f.account || 'Google';
+    if (e) { errors.push({ feed: f.id, label, error: e.message }); continue; }
+    if (d.account && !f.account) { f.account = d.account; saveState(); }
+    (d.events || []).forEach(ev => events.push(Object.assign({}, ev, { feed: f.id, label })));
+    (d.tasks || []).forEach(t => tasks.push(Object.assign({}, t, { feed: f.id, label })));
+  }
+  events.sort((a, b) => (b.allDay - a.allDay) || a.start.localeCompare(b.start));
+  tasks.sort((a, b) => (b.overdue - a.overdue) || a.due.localeCompare(b.due) || a.title.localeCompare(b.title));
+  const data = { feeds: feeds.length, events, tasks, errors, at: Date.now() };
+  todayCache = { t: Date.now(), date, data };
+  return data;
+}
+async function homeTaskDone(feedId, list, task) {
+  const f = (S.settings.homeFeeds || []).find(x => x.id === feedId); if (!f) return { ok: false };
+  try { await callFeed(f, { action: 'done', list, task }); todayCache.t = 0; return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+}
+function homeScriptCode() {
+  try { return fs.readFileSync(path.join(__dirname, '..', 'assets', 'zeus-hoje.gs'), 'utf8'); } catch (e) { return ''; }
+}
+// abre o Apps Script numa janela com a sessão (a conta) da app escolhida e copia o código
+function homeSetupOpen(appId) {
+  const a = appById(appId); if (!a) return { ok: false };
+  clipboard.writeText(homeScriptCode());
+  const { ses } = sessionForApp(a);
+  const w = new BrowserWindow({ width: 1180, height: 820, parent: win, title: 'Apps Script — ' + a.name, autoHideMenuBar: true, backgroundColor: '#ffffff', webPreferences: WEB_PREFS(ses) });
+  const wc = w.webContents;
+  wc.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(wc, d.url); });
+  // janelas de autorização da Google abrem como janelas filhas, na mesma conta
+  wc.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 700, parent: w, autoHideMenuBar: true, webPreferences: WEB_PREFS(ses) } }));
+  wc.on('did-create-window', child => child.webContents.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(child.webContents, d.url); }));
+  googleUA(wc, 'https://script.new');
+  w.loadURL('https://script.new').catch(() => {});
+  return { ok: true };
+}
+async function homeFeedAdd({ appId, url, label }) {
+  const a = appById(appId);
+  url = String(url || '').trim();
+  if (!a) return { ok: false, error: 'Escolhe a app da conta.' };
+  // (em desenvolvimento, ZEUS_TEST_SCRIPT permite um servidor de teste local; nunca na app empacotada)
+  const testOk = !app.isPackaged && process.env.ZEUS_TEST_SCRIPT && url.startsWith(process.env.ZEUS_TEST_SCRIPT);
+  if (!SCRIPT_URL.test(url) && !testOk) return { ok: false, error: 'Cola o URL da aplicação Web (começa por https://script.google.com/ e acaba em /exec).' };
+  const f = { id: 'f' + Date.now().toString(36), appId, url, label: String(label || a.name).slice(0, 30), account: '' };
+  try {
+    const d = await callFeed(f, { date: localDate() });
+    f.account = d.account || '';
+    S.settings.homeFeeds = [...(S.settings.homeFeeds || []), f];
+    todayCache.t = 0; saveState(); pushState(true);
+    return { ok: true, account: f.account, events: (d.events || []).length, tasks: (d.tasks || []).length };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+function homeFeedRemove(id) {
+  S.settings.homeFeeds = (S.settings.homeFeeds || []).filter(f => f.id !== id);
+  todayCache.t = 0; saveState(); pushState(true);
+}
+
 // casa: página nova (hora, meteorologia, pesquisa) — reaproveita uma página nova vazia do espaço
 function goHome() {
   const t = cur();
@@ -1492,6 +1581,12 @@ function setupIPC() {
   handle('navigate', input => navigate(input));
   handle('nav', a => navAction(a));
   handle('history:suggest', q => suggest(q));
+  handle('home:today', force => homeToday(!!force));
+  handle('home:taskDone', (feed, list, task) => homeTaskDone(feed, list, task));
+  handle('home:setupOpen', appId => homeSetupOpen(appId));
+  handle('home:feedAdd', d => homeFeedAdd(d || {}));
+  handle('home:feedRemove', id => homeFeedRemove(id));
+  handle('home:code', () => { clipboard.writeText(homeScriptCode()); return true; });
   handle('history:browsers', () => otherBrowsers());
   handle('history:import', id => importHistory(id));
   handle('history:count', () => S.history.length);
@@ -1563,7 +1658,7 @@ function setupIPC() {
   handle('claude:ask', text => sendToClaude(String(text || '')));
   handle('claude:new', () => { setClaude(true); claudeView.webContents.loadURL('https://claude.ai/new').catch(() => {}); });
   handle('settings:set', (patch = {}) => {
-    const ALLOWED = Object.keys(DEFAULT_SETTINGS);
+    const ALLOWED = Object.keys(DEFAULT_SETTINGS).filter(k => k !== 'homeFeeds');
     const clean = {};
     for (const k of Object.keys(patch)) if (ALLOWED.includes(k)) clean[k] = patch[k];
     ['panelWidth', 'claudeWidth'].forEach(k => { if (k in clean) clean[k] = Math.max(280, Math.min(1400, Math.round(+clean[k] || 420))); });
@@ -1723,7 +1818,8 @@ app.whenReady().then(async () => {
   await setupExtensions();
   setupUpdater();
   // abre o separador atual e carrega em segundo plano as apps com notificações
-  const t = cur(); if (t) ensureTabView(t);
+  // o Zeus abre sempre na página principal (hora, meteorologia, agenda e tarefas)
+  goHome();
   setTimeout(() => { S.apps.filter(a => a.preload && a.url).forEach(a => ensureAppView(a)); applyLayout(); pushState(); }, 2500);
   if (S.claudeOpen) ensureClaudeView();
   applyLayout();

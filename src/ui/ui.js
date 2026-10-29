@@ -376,6 +376,7 @@ function newtabHTML() {
       <button class="go" type="submit" aria-label="Ir">${ICON.arrow}</button>
       <div class="sugg" id="askSugg" role="listbox" aria-label="Sugestões" hidden></div>
     </form>
+    <div class="today" id="today"></div>
     <div class="section"><span class="lbl-mono">Atalhos</span><div class="shorts" id="shorts"></div></div>
     <div class="section" id="contSec"><span class="lbl-mono">Continuar onde ficaste</span><div class="cont" id="cont"></div></div>
   </div>`;
@@ -384,6 +385,7 @@ function mountNewtab() {
   tick();
   fillNewtabLists();
   loadWeather();
+  loadToday();
   const input = $('#askInput');
   if (input && !ov.open && !modal) setTimeout(() => input.focus(), 30);
 }
@@ -428,6 +430,87 @@ $('#pageSlot').addEventListener('submit', e => {
   if (claude) { Z.invoke('claude:ask', v); $('#askInput').value = ''; }
   else Z.invoke('navigate', v);
 });
+
+/* Agenda e tarefas do dia (contas Google ligadas em Definições › Página principal) */
+let todayData = null, todayBusy = false;
+const hhmm = iso => { const d = new Date(iso); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+async function loadToday(force) {
+  const box = $('#today'); if (!box) return;
+  if (!(S.settings.homeFeeds || []).length) {
+    box.innerHTML = `<div class="today-empty"><div><b>Agenda e tarefas de hoje</b><span>Liga as tuas contas Google para veres aqui os compromissos e as tarefas do dia.</span></div><button class="btn ghost" type="button" data-todaysetup>Ligar contas</button></div>`;
+    return;
+  }
+  if (todayData && !force) renderToday();
+  else box.innerHTML = `<div class="today-grid"><section><span class="lbl-mono">Agenda de hoje</span><p class="hint">A carregar…</p></section><section><span class="lbl-mono">Tarefas de hoje</span><p class="hint">A carregar…</p></section></div>`;
+  if (todayBusy) return; todayBusy = true;
+  try { todayData = await Z.invoke('home:today', !!force); } catch (e) { todayData = { events: [], tasks: [], errors: [{ label: 'Zeus', error: e.message }] }; }
+  todayBusy = false;
+  renderToday();
+}
+function renderToday() {
+  const box = $('#today'); if (!box || !todayData) return;
+  const multi = (S.settings.homeFeeds || []).length > 1;
+  const now = Date.now();
+  const tag = x => multi ? `<em class="acc">${esc(x.label)}</em>` : '';
+  const ev = todayData.events.map(e => {
+    const st = new Date(e.start).getTime(), en = new Date(e.end).getTime();
+    const state = e.allDay ? '' : en < now ? 'past' : st <= now ? 'now' : '';
+    return `<li class="ev ${state}"><span class="when">${e.allDay ? 'Todo o dia' : hhmm(e.start) + '<small>' + hhmm(e.end) + '</small>'}</span><span class="dot" style="background:${esc(e.color || 'var(--fg)')}"></span><span class="what"><b>${esc(e.title)}</b>${e.location ? `<small>${esc(e.location)}</small>` : ''}${tag(e)}</span>${e.meet ? `<button class="tbtn" type="button" data-go="${esc(e.meet)}">Meet</button>` : ''}</li>`;
+  }).join('');
+  const tk = todayData.tasks.map(t => `<li class="tk ${t.overdue ? 'late' : ''}"><button class="chk" type="button" data-taskdone="${esc(t.feed)}|${esc(t.list)}|${esc(t.id)}" aria-label="Marcar “${esc(t.title)}” como feita"></button><span class="what"><b>${esc(t.title)}</b><small>${t.overdue ? 'Atrasada · ' + esc(t.due.split('-').reverse().slice(0, 2).join('/')) + ' · ' : ''}${esc(t.listName || '')}</small>${tag(t)}</span></li>`).join('');
+  const errs = (todayData.errors || []).map(e => `<p class="err">${esc(e.label)}: ${esc(e.error)}</p>`).join('');
+  box.innerHTML = `<div class="today-grid">
+    <section><span class="lbl-mono">Agenda de hoje <button class="linkbtn" type="button" data-todayreload title="Atualizar">↻</button></span>${ev ? `<ul class="today-list">${ev}</ul>` : '<p class="hint">Nada marcado para hoje.</p>'}</section>
+    <section><span class="lbl-mono">Tarefas de hoje</span>${tk ? `<ul class="today-list">${tk}</ul>` : '<p class="hint">Sem tarefas para hoje.</p>'}</section>
+  </div>${errs}`;
+}
+$('#pageSlot').addEventListener('click', async e => {
+  if (e.target.closest('[data-todaysetup]')) { openHomeSetup(); return; }
+  if (e.target.closest('[data-todayreload]')) { loadToday(true); return; }
+  const d = e.target.closest('[data-taskdone]'); if (!d) return;
+  const [feed, list, task] = d.dataset.taskdone.split('|');
+  const li = d.closest('li'); li.classList.add('done'); d.disabled = true;
+  const r = await Z.invoke('home:taskDone', feed, list, task);
+  if (r && r.ok) { todayData.tasks = todayData.tasks.filter(t => !(t.id === task && t.list === list)); setTimeout(renderToday, 500); toast('Tarefa feita'); }
+  else { li.classList.remove('done'); d.disabled = false; toast((r && r.error) || 'Não foi possível marcar a tarefa.'); }
+});
+// atualiza sozinha a cada 5 minutos enquanto a página principal estiver aberta
+setInterval(() => { if ($('#today') && !document.hidden) loadToday(); }, 5 * 60 * 1000);
+
+/* Ligar uma conta Google à página principal (assistente) */
+function openHomeSetup() {
+  const gapps = S.apps.filter(a => a.url && /(^|\.)google\.com$/.test(hostOf(a.url)));
+  const feeds = S.settings.homeFeeds || [];
+  openModal('home-setup', `${modalHead('Agenda e tarefas na página principal')}
+    <div class="section">
+      ${feeds.length ? `<div class="list">${feeds.map(f => `<div class="li"><div class="grow"><span>${esc(f.label)}</span><small>${esc(f.account || 'conta ligada')}</small></div><button class="linkbtn" type="button" data-feedrm="${esc(f.id)}">Desligar</button></div>`).join('')}</div>` : ''}
+      <p class="hint">Cada conta liga-se uma vez, com um pequeno programa teu no Google Apps Script (corre na tua conta, só tu tens acesso, e só lê a agenda e as tarefas). O Zeus usa a sessão da app escolhida para o ler.</p>
+      <div class="field"><label for="hsApp">Conta (app da barra)</label>
+        <select class="inp" id="hsApp">${gapps.map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.isolated ? '' : ' (sessão partilhada)'}</option>`).join('') || '<option value="">Junta primeiro o Gmail como app da barra</option>'}</select></div>
+      <ol class="steps">
+        <li><button class="btn ghost" type="button" id="hsOpen">Abrir o Apps Script nesta conta</button> <span class="hint">(o código fica copiado)</span></li>
+        <li>No editor, apaga o que lá estiver e <b>cola</b> (⌘V). Dá um nome ao projeto, por exemplo “Zeus Hoje”.</li>
+        <li>Em <b>Serviços</b> (+, à esquerda), escolhe <b>Google Tasks API</b> › Adicionar.</li>
+        <li><b>Implementar</b> › Nova implementação › tipo <b>Aplicação Web</b> · Executar como: <b>Eu</b> · Quem tem acesso: <b>Só eu</b> › Implementar › autoriza.</li>
+        <li>Copia o <b>URL da aplicação Web</b> e cola-o aqui:</li>
+      </ol>
+      <div class="field"><input class="inp" id="hsUrl" type="text" placeholder="https://script.google.com/macros/s/…/exec" spellcheck="false"></div>
+      <p class="err" id="hsErr" hidden></p>
+      <div class="row-btns"><button class="btn" type="button" id="hsSave">Testar e ligar</button><button class="btn ghost" type="button" id="hsCopy">Copiar o código outra vez</button></div>
+    </div>`, 'wide');
+  $('#hsOpen').addEventListener('click', () => { const id = $('#hsApp').value; if (id) Z.invoke('home:setupOpen', id); toast('Código copiado — cola-o no editor do Apps Script'); });
+  $('#hsCopy').addEventListener('click', async () => { await Z.invoke('home:code'); toast('Código copiado'); });
+  $('#hsSave').addEventListener('click', async e => {
+    const b = e.currentTarget; const er = $('#hsErr'); er.hidden = true;
+    b.disabled = true; b.textContent = 'A testar…';
+    const r = await Z.invoke('home:feedAdd', { appId: $('#hsApp').value, url: $('#hsUrl').value });
+    b.disabled = false; b.textContent = 'Testar e ligar';
+    if (!r.ok) { er.textContent = r.error; er.hidden = false; return; }
+    toast(`Ligada: ${r.account || 'conta'} · ${r.events} compromissos, ${r.tasks} tarefas hoje`);
+    todayData = null; openHomeSetup(); loadToday(true);
+  });
+  $('#modal').querySelectorAll('[data-feedrm]').forEach(b => b.addEventListener('click', async () => { await Z.invoke('home:feedRemove', b.dataset.feedrm); todayData = null; openHomeSetup(); loadToday(true); }));
+}
 
 /* Meteorologia (Open-Meteo, sem chave nem registo) */
 const WX = c => {
@@ -1216,6 +1299,8 @@ async function openSettings() {
       <div class="row-btns"><button class="btn ghost" type="button" id="setStore">Abrir a Chrome Web Store</button><button class="btn ghost" type="button" id="setLoadExt">Carregar de uma pasta ou .zip…</button></div>
       <p class="hint">Para extensões tuas que não estão na loja (como as que usas no modo de programador do Chrome ou do Vivaldi). Ficam ativas nos separadores e em todas as apps da barra.</p></div>
     <div class="set-sec"><h3>Permissões dadas a sites</h3><div class="list" id="setPerm"><p class="hint">A carregar…</p></div></div>
+    <div class="set-sec"><h3>Página principal</h3>
+      <div class="set-row"><span>Agenda e tarefas de hoje: ${(st.homeFeeds || []).length ? esc((st.homeFeeds || []).map(f => f.label).join(', ')) : 'nenhuma conta ligada'}</span><button class="linkbtn" type="button" id="setHome">${(st.homeFeeds || []).length ? 'Gerir contas' : 'Ligar contas'}</button></div></div>
     <div class="set-sec"><h3>Histórico</h3>
       <p class="hint" id="histLine">Ao escrever um endereço, o Zeus sugere os sites que já visitaste e os que mais visitas.</p>
       <div class="row-btns" id="histImport"></div></div>
@@ -1238,6 +1323,7 @@ async function openSettings() {
     Z.invoke('settings:set', { [seg.dataset.setting]: v });
   }));
   $('#setCity').addEventListener('click', openCity);
+  $('#setHome').addEventListener('click', openHomeSetup);
   renderUpdate();
   $('#updCheck').addEventListener('click', async () => { U = await Z.invoke('update:check'); renderUpdate(); });
   $('#updInstall').addEventListener('click', installUpdate);
