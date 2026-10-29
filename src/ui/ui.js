@@ -690,6 +690,8 @@ Z.on('ui-command', c => {
   if (c.cmd === 'find') openFind();
   if (c.cmd === 'mosaic') ov.open ? closeMosaic() : openMosaic(false);
   if (c.cmd === 'edit-app') openEditApp(c.id);
+  if (c.cmd === 'mosaic-close') closeMosaic();
+  if (c.cmd === 'new-space-with') { if (!ov.open) openMosaic(false); ov.addingSpace = true; ov.moveAfterAdd = c.id; renderZones(); }
   if (c.cmd === 'share') { shareOpen ? closeShare() : openShare(); }
   if (c.cmd === 'focus-ask' || c.cmd === 'home') goHomeUI();
 });
@@ -840,6 +842,10 @@ $('#zones').addEventListener('click', e => {
   const ok = e.target.closest('[data-rmspace-ok]'); if (ok) { ov.confirmRm = null; Z.invoke('space:remove', ok.dataset.rmspaceOk); return; }
   if (e.target.closest('[data-rmspace-no]')) { ov.confirmRm = null; renderZones(); }
 });
+$('#zones').addEventListener('contextmenu', e => {
+  const c = e.target.closest('[data-card]'); if (!c) return;
+  e.preventDefault(); Z.invoke('tab:menu', +c.dataset.card);
+});
 $('#zones').addEventListener('dblclick', e => { const r = e.target.closest('[data-rename]'); if (r) { ov.renaming = r.dataset.rename; renderZones(); } });
 $('#zones').addEventListener('keydown', e => {
   if (e.target.id === 'renameInput') {
@@ -849,8 +855,12 @@ $('#zones').addEventListener('keydown', e => {
   }
   if (e.target.id === 'spaceInput') {
     e.stopPropagation();
-    if (e.key === 'Enter') { ov.addingSpace = false; Z.invoke('space:add', e.target.value); renderZones(); }
-    if (e.key === 'Escape') { ov.addingSpace = false; renderZones(); }
+    if (e.key === 'Enter') {
+      ov.addingSpace = false; const mv = ov.moveAfterAdd; ov.moveAfterAdd = null;
+      Z.invoke('space:add', e.target.value).then(sid => { if (mv && sid) Z.invoke('tab:move', mv, sid, null); });
+      renderZones();
+    }
+    if (e.key === 'Escape') { ov.addingSpace = false; ov.moveAfterAdd = null; renderZones(); }
   }
 }, true);
 $('#shelf').addEventListener('click', e => {

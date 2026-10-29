@@ -737,6 +737,32 @@ function removeTab(id, into) {
 }
 const closeTab = id => { removeTab(id, S.closed); S.closed = S.closed.slice(0, 15); };
 const laterTab = id => removeTab(id, S.later);
+// mover um separador para outro espaço (fica no topo desse espaço)
+function moveTabToSpace(id, space) {
+  const t = tabById(id); if (!t || !S.spaces.some(s => s.id === space) || t.space === space) return;
+  t.space = space; toTop(t);
+  const sp = S.spaces.find(s => s.id === space);
+  pushState(); saveState();
+  ui && ui.send('toast', 'Movido para ' + sp.name);
+}
+// clique direito num cartão do mosaico
+function tabMenu(id) {
+  const t = tabById(id); if (!t) return;
+  const others = S.spaces.filter(s => s.id !== t.space);
+  Menu.buildFromTemplate([
+    { label: 'Abrir', click: () => { ui.send('ui-command', { cmd: 'mosaic-close' }); openTab(id); } },
+    { type: 'separator' },
+    { label: 'Mover para', submenu: [
+      ...others.map(s => ({ label: s.name, click: () => moveTabToSpace(id, s.id) })),
+      ...(others.length ? [{ type: 'separator' }] : []),
+      { label: 'Espaço novo…', click: () => ui.send('ui-command', { cmd: 'new-space-with', id }) }
+    ] },
+    { type: 'separator' },
+    { label: 'Copiar endereço', enabled: t.url !== NEWTAB, click: () => clipboard.writeText(t.url) },
+    { label: 'Guardar em "Mais tarde"', click: () => laterTab(id) },
+    { label: 'Fechar separador', click: () => closeTab(id) }
+  ]).popup({ window: win });
+}
 
 function navigate(input) {
   const url = toURL(input);
@@ -1446,6 +1472,7 @@ function setupIPC() {
   handle('tab:open', id => openTab(id));
   handle('tab:close', id => closeTab(id));
   handle('tab:later', id => laterTab(id));
+  handle('tab:menu', id => tabMenu(id));
   // mover um separador: para outro espaço e/ou para outra posição (antes do separador "before"; sem ele, para o fim do espaço)
   handle('tab:move', (id, space, before) => {
     const t = tabById(id); if (!t || !S.spaces.some(s => s.id === space)) return;
@@ -1482,7 +1509,9 @@ function setupIPC() {
   });
   handle('space:add', name => {
     const nm = String(name || '').trim().slice(0, 30); if (!nm) return;
-    S.spaces.push({ id: 's' + Date.now().toString(36), name: nm }); pushState(); saveState();
+    const id = 's' + Date.now().toString(36);
+    S.spaces.push({ id, name: nm }); pushState(); saveState();
+    return id;
   });
   handle('space:rename', (id, name) => {
     const s = S.spaces.find(x => x.id === id); const nm = String(name || '').trim().slice(0, 30);
