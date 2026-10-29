@@ -643,6 +643,8 @@ function openTab(id) {
   S.currentId = id;
   fullApp = null;
   S.mru = [id, ...S.mru.filter(x => x !== id && tabById(x))];
+  // o separador onde se entra sobe para o topo do seu espaço: em cima fica sempre o último visto
+  if (prev !== id) toTop(tab);
   const view = ensureTabView(tab);
   if (view) { try { const ext = tabExts.get(id); if (ext) ext.selectTab(view.webContents); } catch (e) { /* ok */ } }
   applyLayout();
