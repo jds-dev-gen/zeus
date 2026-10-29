@@ -67,10 +67,9 @@ jobs:
   compilar:
     needs: preparar
     if: needs.preparar.outputs.publicar == 'true'
+    # as duas versões (Apple Silicon e Intel) compilam na mesma máquina: basta haver um Mac livre no GitHub
     runs-on: macos-14
-    strategy:
-      matrix:
-        arch: [arm64, x64]
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,12 +79,19 @@ jobs:
           node-version: 22
       - run: npm ci
       - name: Empacotar e assinar (ad-hoc)
-        run: node package-mac.js ${{ matrix.arch }}
+        run: |
+          node package-mac.js arm64
+          node package-mac.js x64
       - name: Comprimir
-        run: ditto -c -k --keepParent "out/Zeus-darwin-${{ matrix.arch }}/Zeus.app" "Zeus-${{ needs.preparar.outputs.version }}-mac-${{ matrix.arch }}.zip"
+        run: |
+          V=${{ needs.preparar.outputs.version }}
+          for A in arm64 x64; do
+            ditto -c -k --keepParent "out/Zeus-darwin-$A/Zeus.app" "Zeus-$V-mac-$A.zip"
+          done
+          ls -la Zeus-*.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: zeus-${{ matrix.arch }}
+          name: zeus-mac
           path: Zeus-*.zip
           retention-days: 3
 
