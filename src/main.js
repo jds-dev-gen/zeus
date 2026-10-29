@@ -241,7 +241,7 @@ function saveNow() {
       tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space, partition: t.partition || null, sessionLabel: t.sessionLabel || null })),
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
-      apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, driveLinks: true, newestFirst: true, settings: S.settings, permissions: S.permissions,
+      pendingKey: S.pendingKey || null, apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, driveLinks: true, newestFirst: true, settings: S.settings, permissions: S.permissions,
       visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
@@ -797,10 +797,11 @@ function withAccount(url, n) {
   if (n == null) return url;
   return url.replace(/\/(a\/macros\/[^/]+|macros)\/(u\/\d+\/)?s\//, (m, base) => `/${base}/u/${n}/s/`);
 }
-async function fetchFeedOnce(f, url, params) {
+async function fetchFeedOnce(f, url, params, cookies) {
   const u = new URL(url);
   Object.entries(params || {}).forEach(([k, v]) => u.searchParams.set(k, v));
-  const r = await feedSession(f).fetch(u.toString(), { credentials: 'include', redirect: 'follow', cache: 'no-store' });
+  if (f.key) u.searchParams.set('k', f.key);
+  const r = await feedSession(f).fetch(u.toString(), { credentials: cookies ? 'include' : 'omit', redirect: 'follow', cache: 'no-store' });
   const text = await r.text();
   let j = null; try { j = JSON.parse(text); } catch (e) { /* página de login ou de erro */ }
   if (j) { if (!j.ok) throw Object.assign(new Error(j.error || 'Erro no Apps Script.'), { fatal: true }); return j; }
@@ -809,20 +810,25 @@ async function fetchFeedOnce(f, url, params) {
   throw new Error(`resposta ${r.status}${title ? ' — ' + title : ''}`);
 }
 async function callFeed(f, params) {
-  const tries = f.authuser != null ? [f.authuser] : [null, 0, 1, 2, 3, 4];
+  // 1.º sem cookies (aplicação Web com acesso "Qualquer pessoa", protegida pela chave do Zeus)
   let last = null;
+  if (f.key || f.mode === 'anyone') {
+    try { return await fetchFeedOnce(f, f.url, params, false); } catch (e) { last = e; if (e.fatal) throw e; }
+  }
+  // depois com a sessão da app ("Só eu"), experimentando as contas /u/0/, /u/1/…
+  const tries = f.authuser != null ? [f.authuser] : [null, 0, 1, 2, 3, 4];
   for (const n of tries) {
     try {
-      const j = await fetchFeedOnce(f, withAccount(f.url, n), params);
+      const j = await fetchFeedOnce(f, withAccount(f.url, n), params, true);
       if (n != null && f.authuser !== n) { f.authuser = n; saveState(); }
       return j;
-    } catch (e) { last = e; if (e.fatal) throw e; }
+    } catch (e) { if (!last || last.message === 'login' || /404/.test(last.message)) last = e; if (e.fatal) throw e; }
   }
   // a conta guardada deixou de responder (ex.: ordem das contas mudou): volta a procurar na próxima vez
   if (f.authuser != null) { delete f.authuser; saveState(); }
   const app = (appById(f.appId) || {}).name || 'Gmail';
   if (last && last.message === 'login') throw new Error(`Nenhuma conta da app ${app} tem acesso a este Apps Script. Entra nessa conta na app ${app} (ou cria o Apps Script na conta certa).`);
-  throw new Error(`O endereço não devolveu a agenda (${last ? last.message : 'sem resposta'}). Confirma que é o URL da aplicação Web, que acaba em /exec, e que a implementação está como "Executar como: Eu".`);
+  throw new Error(`O endereço não devolveu a agenda (${last ? last.message : 'sem resposta'}). Confirma que colaste o código novo (com a chave), que é o URL da aplicação Web (acaba em /exec) e que a implementação está como "Executar como: Eu" e "Quem tem acesso: Qualquer pessoa".`);
 }
 const localDate = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 async function homeToday(force) {
@@ -850,8 +856,14 @@ async function homeTaskDone(feedId, list, task) {
   try { await callFeed(f, { action: 'done', list, task }); todayCache.t = 0; return { ok: true }; }
   catch (e) { return { ok: false, error: e.message }; }
 }
+// chave secreta da próxima ligação: vai dentro do código copiado e fica guardada só no Zeus
+let pendingKey = null;
 function homeScriptCode() {
-  try { return fs.readFileSync(path.join(__dirname, '..', 'assets', 'zeus-hoje.gs'), 'utf8'); } catch (e) { return ''; }
+  // guardada também no estado, para sobreviver a um reinício a meio da ligação
+  if (!pendingKey) pendingKey = S.pendingKey || require('crypto').randomBytes(18).toString('base64url');
+  S.pendingKey = pendingKey; saveState();
+  try { return fs.readFileSync(path.join(__dirname, '..', 'assets', 'zeus-hoje.gs'), 'utf8').replace("var ZEUS_KEY = '';", `var ZEUS_KEY = '${pendingKey}';`); }
+  catch (e) { return ''; }
 }
 // abre o Apps Script numa janela com a sessão (a conta) da app escolhida e copia o código
 // contas Google com sessão iniciada na app (pela ordem /u/0, /u/1, …), para abrir o Apps Script na conta certa
@@ -888,13 +900,18 @@ async function homeFeedAdd({ appId, url, label }) {
   const testOk = !app.isPackaged && process.env.ZEUS_TEST_SCRIPT && url.startsWith(process.env.ZEUS_TEST_SCRIPT);
   if (!SCRIPT_URL.test(url) && !testOk) return { ok: false, error: 'Cola o URL da aplicação Web (começa por https://script.google.com/ e acaba em /exec).' };
   const f = { id: 'f' + Date.now().toString(36), appId, url, label: String(label || a.name).slice(0, 30), account: '' };
+  if (pendingKey) f.key = pendingKey;
   try {
     const d = await callFeed(f, { date: localDate() });
+    if (f.key) { pendingKey = null; delete S.pendingKey; }
     f.account = d.account || '';
     S.settings.homeFeeds = [...(S.settings.homeFeeds || []), f];
     todayCache.t = 0; saveState(); pushState(true);
     return { ok: true, account: f.account, events: (d.events || []).length, tasks: (d.tasks || []).length };
-  } catch (e) { return { ok: false, error: e.message }; }
+  } catch (e) {
+    if (/Chave errada/.test(e.message)) return { ok: false, error: 'O código que está no Apps Script tem uma chave diferente. Carrega em "Copiar o código outra vez", cola-o no editor (substituindo tudo), guarda e cria uma versão nova da implementação.' };
+    return { ok: false, error: e.message };
+  }
 }
 function homeFeedRemove(id) {
   S.settings.homeFeeds = (S.settings.homeFeeds || []).filter(f => f.id !== id);

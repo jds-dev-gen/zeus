@@ -5,14 +5,17 @@
  *  1. Cola este código num projeto novo do Apps Script (script.new), substituindo o que lá estiver.
  *  2. Serviços (+) › "Google Tasks API" › Adicionar.
  *  3. Implementar › Nova implementação › Tipo: Aplicação Web.
- *     Executar como: Eu · Quem tem acesso: Só eu (ou só a tua organização, se não aparecer "Só eu").
+ *     Executar como: Eu · Quem tem acesso: Qualquer pessoa.
  *  4. Autoriza o acesso e copia o URL da aplicação Web para o Zeus.
  *
  * Só lê a agenda e as tarefas desta conta; a única alteração possível é marcar uma tarefa como concluída
- * (quando carregas no visto, no Zeus). Corre na tua conta Google e só tu tens acesso.
+ * (quando carregas no visto, no Zeus). Só responde a quem tiver a chave abaixo, que só o Zeus conhece.
  */
+var ZEUS_KEY = '';
+
 function doGet(e) {
   var p = (e && e.parameter) || {};
+  if (ZEUS_KEY && p.k !== ZEUS_KEY) return out_({ ok: false, error: 'Chave errada.' });
   try {
     if (p.action === 'done' && p.list && p.task) {
       Tasks.Tasks.patch({ status: 'completed' }, p.list, p.task);

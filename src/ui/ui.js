@@ -484,14 +484,14 @@ function openHomeSetup() {
   openModal('home-setup', `${modalHead('Agenda e tarefas na página principal')}
     <div class="section">
       ${feeds.length ? `<div class="list">${feeds.map(f => `<div class="li"><div class="grow"><span>${esc(f.label)}</span><small>${esc(f.account || 'conta ligada')}</small></div><button class="linkbtn" type="button" data-feedrm="${esc(f.id)}">Desligar</button></div>`).join('')}</div>` : ''}
-      <p class="hint">Se as duas contas estão na mesma app (por exemplo, o Email com a conta pessoal e a do Observador), escolhe essa app para as duas: o Zeus descobre sozinho qual das contas responde. Cada conta liga-se uma vez, com um pequeno programa teu no Google Apps Script (corre na tua conta, só tu tens acesso, e só lê a agenda e as tarefas). O Zeus usa a sessão da app escolhida para o ler.</p>
+      <p class="hint">Se as duas contas estão na mesma app (por exemplo, o Email com a conta pessoal e a do Observador), escolhe essa app para as duas. Cada conta liga-se uma vez, com um pequeno programa teu no Google Apps Script (corre na tua conta, só lê a agenda e as tarefas e só responde ao Zeus, com uma chave secreta).</p>
       <div class="field"><label for="hsApp">App onde tens a conta com sessão iniciada</label>
         <select class="inp" id="hsApp">${gapps.map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.isolated ? ' (sessão própria)' : ' (sessão partilhada)'}</option>`).join('') || '<option value="">Junta primeiro o Gmail como app da barra</option>'}</select></div>
       <ol class="steps">
         <li>Abre o Apps Script na conta que queres ligar (o código fica copiado):<div class="row-btns" id="hsAccts" style="margin-top:8px"><button class="btn ghost" type="button" data-hsopen="">Abrir o Apps Script</button></div></li>
         <li>No editor, apaga o que lá estiver e <b>cola</b> (⌘V). Dá um nome ao projeto, por exemplo “Zeus Hoje”.</li>
         <li>Em <b>Serviços</b> (+, à esquerda), escolhe <b>Google Tasks API</b> › Adicionar.</li>
-        <li><b>Implementar</b> › Nova implementação › tipo <b>Aplicação Web</b> · Executar como: <b>Eu</b> · Quem tem acesso: <b>Só eu</b> › Implementar › autoriza.</li>
+        <li><b>Implementar</b> › Nova implementação › tipo <b>Aplicação Web</b> · Executar como: <b>Eu</b> · Quem tem acesso: <b>Qualquer pessoa</b> › Implementar › autoriza. <span class="hint">O código tem uma chave secreta que só este Zeus conhece: sem ela, o endereço não mostra nada. Se já tinhas implementado, usa Implementar › Gerir implementações › lápis › Versão: <b>Nova versão</b>, com acesso Qualquer pessoa (o URL não muda).</span></li>
         <li>Copia o <b>URL da aplicação Web</b> e cola-o aqui:</li>
       </ol>
       <div class="field"><input class="inp" id="hsUrl" type="text" placeholder="https://script.google.com/macros/s/…/exec" spellcheck="false"></div>
