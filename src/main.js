@@ -791,17 +791,38 @@ function navigate(input) {
 const SCRIPT_URL = /^https:\/\/script\.google\.com\/(a\/macros\/[^/]+|macros)\/(u\/\d+\/)?s\/[\w-]+\/exec(\?.*)?$/;
 let todayCache = { t: 0, data: null };
 const feedSession = f => { const a = appById(f.appId); return a ? sessionForApp(a).ses : zeusSession; };
-async function callFeed(f, params) {
-  const u = new URL(f.url);
+// uma sessão pode ter várias contas Google (ex.: pessoal e Observador na mesma app): o Apps Script com acesso
+// "Só eu" só responde à conta dona, por isso tenta-se /u/0/, /u/1/… até encontrar a conta certa (e guarda-se)
+function withAccount(url, n) {
+  if (n == null) return url;
+  return url.replace(/\/(a\/macros\/[^/]+|macros)\/(u\/\d+\/)?s\//, (m, base) => `/${base}/u/${n}/s/`);
+}
+async function fetchFeedOnce(f, url, params) {
+  const u = new URL(url);
   Object.entries(params || {}).forEach(([k, v]) => u.searchParams.set(k, v));
   const r = await feedSession(f).fetch(u.toString(), { credentials: 'include', redirect: 'follow', cache: 'no-store' });
   const text = await r.text();
   let j = null; try { j = JSON.parse(text); } catch (e) { /* página de login ou de erro */ }
-  if (!j) throw new Error(/accounts\.google\.com|ServiceLogin|signin/i.test(r.url + text.slice(0, 2000))
-    ? 'É preciso entrar na conta na app ' + ((appById(f.appId) || {}).name || 'Gmail') + '.'
-    : 'O endereço não devolveu a agenda (confirma que é o da aplicação Web e que o acesso é "Só eu").');
-  if (!j.ok) throw new Error(j.error || 'Erro no Apps Script.');
-  return j;
+  if (j) { if (!j.ok) throw Object.assign(new Error(j.error || 'Erro no Apps Script.'), { fatal: true }); return j; }
+  const title = ((/<title>([^<]*)<\/title>/i.exec(text) || [])[1] || '').trim();
+  if (/accounts\.google\.com|ServiceLogin|signin/i.test(r.url + text.slice(0, 3000))) throw new Error('login');
+  throw new Error(`resposta ${r.status}${title ? ' — ' + title : ''}`);
+}
+async function callFeed(f, params) {
+  const tries = f.authuser != null ? [f.authuser] : [null, 0, 1, 2, 3, 4];
+  let last = null;
+  for (const n of tries) {
+    try {
+      const j = await fetchFeedOnce(f, withAccount(f.url, n), params);
+      if (n != null && f.authuser !== n) { f.authuser = n; saveState(); }
+      return j;
+    } catch (e) { last = e; if (e.fatal) throw e; }
+  }
+  // a conta guardada deixou de responder (ex.: ordem das contas mudou): volta a procurar na próxima vez
+  if (f.authuser != null) { delete f.authuser; saveState(); }
+  const app = (appById(f.appId) || {}).name || 'Gmail';
+  if (last && last.message === 'login') throw new Error(`Nenhuma conta da app ${app} tem acesso a este Apps Script. Entra nessa conta na app ${app} (ou cria o Apps Script na conta certa).`);
+  throw new Error(`O endereço não devolveu a agenda (${last ? last.message : 'sem resposta'}). Confirma que é o URL da aplicação Web, que acaba em /exec, e que a implementação está como "Executar como: Eu".`);
 }
 const localDate = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 async function homeToday(force) {
@@ -843,8 +864,10 @@ function homeSetupOpen(appId) {
   // janelas de autorização da Google abrem como janelas filhas, na mesma conta
   wc.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 700, parent: w, autoHideMenuBar: true, webPreferences: WEB_PREFS(ses) } }));
   wc.on('did-create-window', child => child.webContents.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(child.webContents, d.url); }));
-  googleUA(wc, 'https://script.new');
-  w.loadURL('https://script.new').catch(() => {});
+  // escolher a conta Google onde criar o Apps Script (quando há mais de uma na sessão)
+  const start = 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent('https://script.new');
+  googleUA(wc, start);
+  w.loadURL(start).catch(() => {});
   return { ok: true };
 }
 async function homeFeedAdd({ appId, url, label }) {

@@ -484,11 +484,11 @@ function openHomeSetup() {
   openModal('home-setup', `${modalHead('Agenda e tarefas na página principal')}
     <div class="section">
       ${feeds.length ? `<div class="list">${feeds.map(f => `<div class="li"><div class="grow"><span>${esc(f.label)}</span><small>${esc(f.account || 'conta ligada')}</small></div><button class="linkbtn" type="button" data-feedrm="${esc(f.id)}">Desligar</button></div>`).join('')}</div>` : ''}
-      <p class="hint">Cada conta liga-se uma vez, com um pequeno programa teu no Google Apps Script (corre na tua conta, só tu tens acesso, e só lê a agenda e as tarefas). O Zeus usa a sessão da app escolhida para o ler.</p>
-      <div class="field"><label for="hsApp">Conta (app da barra)</label>
-        <select class="inp" id="hsApp">${gapps.map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.isolated ? '' : ' (sessão partilhada)'}</option>`).join('') || '<option value="">Junta primeiro o Gmail como app da barra</option>'}</select></div>
+      <p class="hint">Se as duas contas estão na mesma app (por exemplo, o Email com a conta pessoal e a do Observador), escolhe essa app para as duas: o Zeus descobre sozinho qual das contas responde. Cada conta liga-se uma vez, com um pequeno programa teu no Google Apps Script (corre na tua conta, só tu tens acesso, e só lê a agenda e as tarefas). O Zeus usa a sessão da app escolhida para o ler.</p>
+      <div class="field"><label for="hsApp">App onde tens a conta com sessão iniciada</label>
+        <select class="inp" id="hsApp">${gapps.map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.isolated ? ' (sessão própria)' : ' (sessão partilhada)'}</option>`).join('') || '<option value="">Junta primeiro o Gmail como app da barra</option>'}</select></div>
       <ol class="steps">
-        <li><button class="btn ghost" type="button" id="hsOpen">Abrir o Apps Script nesta conta</button> <span class="hint">(o código fica copiado)</span></li>
+        <li><button class="btn ghost" type="button" id="hsOpen">Abrir o Apps Script</button> <span class="hint">— escolhe a conta (pessoal ou Observador); o código fica copiado</span></li>
         <li>No editor, apaga o que lá estiver e <b>cola</b> (⌘V). Dá um nome ao projeto, por exemplo “Zeus Hoje”.</li>
         <li>Em <b>Serviços</b> (+, à esquerda), escolhe <b>Google Tasks API</b> › Adicionar.</li>
         <li><b>Implementar</b> › Nova implementação › tipo <b>Aplicação Web</b> · Executar como: <b>Eu</b> · Quem tem acesso: <b>Só eu</b> › Implementar › autoriza.</li>
