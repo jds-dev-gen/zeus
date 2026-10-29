@@ -755,9 +755,8 @@ function renderZones() {
     const cards = list.map(t => {
       n++;
       const isCur = t.id === S.currentId;
-      const big = isCur && list.length >= 3 && !f;
-      return `<div class="card ${big ? 'big' : ''} ${t.id === ov.sel ? 'sel' : ''}" role="button" tabindex="-1" data-card="${t.id}" title="${esc(t.url === NEWTAB ? 'Página nova' : t.url)}">
-        <div class="thumb">${thumbHTML(t)}${n <= 9 ? `<span class="num">${n}${isCur ? '<span class="now">Atual</span>' : ''}</span>` : ''}${t.audible ? `<span class="snd">${ICON.snd}a tocar</span>` : ''}<button class="cx" type="button" data-cx="${t.id}" aria-label="Fechar">${ICON.x}</button></div>
+      return `<div class="card ${isCur ? 'cur' : ''} ${t.id === ov.sel ? 'sel' : ''}" role="button" tabindex="-1" data-card="${t.id}" title="${esc(t.url === NEWTAB ? 'Página nova' : t.url)}">
+        <div class="thumb">${thumbHTML(t)}${isCur ? '<span class="num"><span class="now">Atual</span></span>' : ''}${t.audible ? `<span class="snd">${ICON.snd}a tocar</span>` : ''}<button class="cx" type="button" data-cx="${t.id}" aria-label="Fechar">${ICON.x}</button></div>
         <div class="cap"><span class="fav">${favHTML(t)}</span><span class="ttl">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span>${t.sessionLabel ? `<span class="sess" title="Sessão de ${esc(t.sessionLabel)}">${esc(t.sessionLabel)}</span>` : ''}</div></div>`;
     }).join('');
     const head = ov.renaming === s.id
@@ -766,7 +765,7 @@ function renderZones() {
         ? `<span class="zconf">${S.tabs.filter(t => t.space === s.id).length} separador(es) passam para “${esc((S.spaces.find(x => x.id !== s.id) || {}).name || '')}”<button type="button" class="danger" data-rmspace-ok="${s.id}">Apagar</button><button type="button" data-rmspace-no>Cancelar</button></span>`
         : `<button class="zx" type="button" data-rmspace="${s.id}" aria-label="Apagar o espaço ${esc(s.name)}" title="Apagar o espaço">${ICON.x}</button>`}`;
     const isCurZone = curTab() && curTab().space === s.id;
-    return `<section class="zone ${isCurZone ? 'cur' : ''}" data-zone="${s.id}" style="flex:${basis} 1 ${basis >= 4 ? 460 : 230}px"><div class="zone-h"><i></i>${head}</div><div class="grid">${cards}${f ? '' : `<button class="card newc" type="button" data-newin="${s.id}">${ICON.plus}Separador neste espaço</button>`}</div></section>`;
+    return `<section class="zone ${isCurZone ? 'cur' : ''}" data-zone="${s.id}" style="flex:1 1 240px"><div class="zone-h"><i></i>${head}</div><div class="grid">${cards}${f ? '' : `<button class="card newc" type="button" data-newin="${s.id}">${ICON.plus}Separador neste espaço</button>`}</div></section>`;
   }).join('');
   if (ov.addingSpace) html += `<section class="zone" style="flex:1 1 230px"><div class="zone-h"><i></i><input id="spaceInput" placeholder="Nome do espaço" aria-label="Nome do espaço novo"></div></section>`;
   $('#zones').innerHTML = html || `<div class="empty">Nenhum separador com “${esc($('#mfilter').value.trim())}”. Carrega em Enter para o abrir como endereço ou pesquisa.</div>`;
@@ -779,7 +778,7 @@ function renderZones() {
 function renderKeys() {
   $('#keys').innerHTML = ov.hold
     ? `<span><b>${KEY}</b>largar para abrir</span><span><b>← → ↑ ↓</b>escolher</span><span><b>Esc</b>cancelar</span>`
-    : `<span><b>Enter</b>abrir</span><span><b>Esc</b>fechar</span><span><b>1–9</b>saltar direto</span><span><b>← → ↑ ↓</b>navegar</span><span><b>${isMac ? 'delete' : 'Backspace'}</b>fechar separador</span><span><b>${KEY} L</b>mais tarde</span><span>arrastar entre espaços</span>`;
+    : `<span><b>Enter</b>abrir</span><span><b>Esc</b>fechar</span><span><b>← → ↑ ↓</b>navegar</span><span><b>${isMac ? 'delete' : 'Backspace'}</b>fechar separador</span><span><b>${KEY} L</b>mais tarde</span><span>arrastar para reordenar</span>`;
 }
 function moveSel(d) {
   const v = visible(); if (!v.length) return;
@@ -834,14 +833,14 @@ function cardTarget(x, y, dragId) {
   const el = document.elementFromPoint(x, y);
   const z = el && el.closest('[data-zone]'); if (!z) return null;
   const cards = [...z.querySelectorAll('[data-card]')].filter(c => +c.dataset.card !== dragId);
-  // o cartão mais próximo do ponteiro, e de que lado (a grelha enche-se da esquerda para a direita)
+  // o cartão mais próximo do ponteiro, e se fica por cima ou por baixo dele (lista de cima para baixo)
   let best = null, bd = Infinity;
   for (const c of cards) {
     const r = c.getBoundingClientRect();
     const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
     const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
-    const d = dx * dx + dy * dy * 4;
-    if (d < bd) { bd = d; best = { c, after: x > r.left + r.width / 2 }; }
+    const d = dx * dx * 4 + dy * dy;
+    if (d < bd) { bd = d; best = { c, after: y > r.top + r.height / 2 }; }
   }
   return { zone: z.dataset.zone, z, card: best && best.c, after: best && best.after };
 }

@@ -614,6 +614,12 @@ async function captureThumb(id) {
   } catch (e) { /* sem miniatura */ }
 }
 
+// os separadores abertos há menos tempo ficam no topo do seu espaço
+function toTop(tab) {
+  const i = S.tabs.indexOf(tab); if (i >= 0) S.tabs.splice(i, 1);
+  const first = S.tabs.findIndex(x => x.space === tab.space);
+  if (first < 0) S.tabs.push(tab); else S.tabs.splice(first, 0, tab);
+}
 function newTab({ url, space, activate = true, title, partition = null, sessionLabel = null } = {}) {
   const tab = {
     id: nextId++,
@@ -623,9 +629,7 @@ function newTab({ url, space, activate = true, title, partition = null, sessionL
     partition: partition || null,
     sessionLabel: partition ? sessionLabel : null
   };
-  // os separadores abertos há menos tempo ficam no topo do seu espaço
-  const first = S.tabs.findIndex(x => x.space === tab.space);
-  if (first < 0) S.tabs.push(tab); else S.tabs.splice(first, 0, tab);
+  S.tabs.push(tab); toTop(tab);
   if (activate) openTab(tab.id);
   else { ensureTabView(tab); pushState(); saveState(); }
   return tab;
@@ -668,6 +672,8 @@ function navigate(input) {
   let tab = cur();
   if (!tab) tab = newTab({ url });
   if (url === NEWTAB) { tab.url = NEWTAB; destroyTabView(tab.id); applyLayout(); pushState(); return; }
+  // abrir um site a partir de uma página nova conta como separador acabado de abrir: vai para o topo
+  if (tab.url === NEWTAB) toTop(tab);
   fullApp = null;
   if (!tabViews.has(tab.id)) { tab.url = url; ensureTabView(tab); }
   else { tab.error = null; tabViews.get(tab.id).webContents.loadURL(url).catch(() => {}); }
@@ -682,7 +688,7 @@ function goHome() {
   const space = t ? t.space : S.spaces[0].id;
   if (!(t && t.url === NEWTAB && !fullApp)) {
     const blank = S.tabs.find(x => x.url === NEWTAB && x.space === space);
-    if (blank) openTab(blank.id); else newTab({ space });
+    if (blank) { toTop(blank); openTab(blank.id); } else newTab({ space });
   }
   // a interface fecha o mosaico (ou outra janela por cima) e põe o cursor na pesquisa
   ui.send('ui-command', { cmd: 'home' });
