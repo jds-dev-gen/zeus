@@ -854,7 +854,17 @@ function homeScriptCode() {
   try { return fs.readFileSync(path.join(__dirname, '..', 'assets', 'zeus-hoje.gs'), 'utf8'); } catch (e) { return ''; }
 }
 // abre o Apps Script numa janela com a sessão (a conta) da app escolhida e copia o código
-function homeSetupOpen(appId) {
+// contas Google com sessão iniciada na app (pela ordem /u/0, /u/1, …), para abrir o Apps Script na conta certa
+async function homeAccounts(appId) {
+  const a = appById(appId); if (!a) return [];
+  try {
+    const r = await sessionForApp(a).ses.fetch('https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard', { credentials: 'include', cache: 'no-store' });
+    const text = await r.text();
+    const seen = []; (text.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g) || []).forEach(e => { if (!seen.includes(e)) seen.push(e); });
+    return seen.slice(0, 6).map((email, n) => ({ n, email }));
+  } catch (e) { return []; }
+}
+function homeSetupOpen(appId, n) {
   const a = appById(appId); if (!a) return { ok: false };
   clipboard.writeText(homeScriptCode());
   const { ses } = sessionForApp(a);
@@ -864,8 +874,8 @@ function homeSetupOpen(appId) {
   // janelas de autorização da Google abrem como janelas filhas, na mesma conta
   wc.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 700, parent: w, autoHideMenuBar: true, webPreferences: WEB_PREFS(ses) } }));
   wc.on('did-create-window', child => child.webContents.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(child.webContents, d.url); }));
-  // escolher a conta Google onde criar o Apps Script (quando há mais de uma na sessão)
-  const start = 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent('https://script.new');
+  // projeto novo do Apps Script na conta escolhida (/u/N/ = N-ésima conta com sessão iniciada)
+  const start = Number.isInteger(n) && n >= 0 && n < 10 ? `https://script.google.com/u/${n}/home/projects/create` : 'https://script.google.com/home/projects/create';
   googleUA(wc, start);
   w.loadURL(start).catch(() => {});
   return { ok: true };
@@ -1606,7 +1616,8 @@ function setupIPC() {
   handle('history:suggest', q => suggest(q));
   handle('home:today', force => homeToday(!!force));
   handle('home:taskDone', (feed, list, task) => homeTaskDone(feed, list, task));
-  handle('home:setupOpen', appId => homeSetupOpen(appId));
+  handle('home:setupOpen', (appId, n) => homeSetupOpen(appId, n));
+  handle('home:accounts', appId => homeAccounts(appId));
   handle('home:feedAdd', d => homeFeedAdd(d || {}));
   handle('home:feedRemove', id => homeFeedRemove(id));
   handle('home:code', () => { clipboard.writeText(homeScriptCode()); return true; });

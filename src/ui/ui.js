@@ -488,7 +488,7 @@ function openHomeSetup() {
       <div class="field"><label for="hsApp">App onde tens a conta com sessão iniciada</label>
         <select class="inp" id="hsApp">${gapps.map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.isolated ? ' (sessão própria)' : ' (sessão partilhada)'}</option>`).join('') || '<option value="">Junta primeiro o Gmail como app da barra</option>'}</select></div>
       <ol class="steps">
-        <li><button class="btn ghost" type="button" id="hsOpen">Abrir o Apps Script</button> <span class="hint">— escolhe a conta (pessoal ou Observador); o código fica copiado</span></li>
+        <li>Abre o Apps Script na conta que queres ligar (o código fica copiado):<div class="row-btns" id="hsAccts" style="margin-top:8px"><button class="btn ghost" type="button" data-hsopen="">Abrir o Apps Script</button></div></li>
         <li>No editor, apaga o que lá estiver e <b>cola</b> (⌘V). Dá um nome ao projeto, por exemplo “Zeus Hoje”.</li>
         <li>Em <b>Serviços</b> (+, à esquerda), escolhe <b>Google Tasks API</b> › Adicionar.</li>
         <li><b>Implementar</b> › Nova implementação › tipo <b>Aplicação Web</b> · Executar como: <b>Eu</b> · Quem tem acesso: <b>Só eu</b> › Implementar › autoriza.</li>
@@ -498,7 +498,21 @@ function openHomeSetup() {
       <p class="err" id="hsErr" hidden></p>
       <div class="row-btns"><button class="btn" type="button" id="hsSave">Testar e ligar</button><button class="btn ghost" type="button" id="hsCopy">Copiar o código outra vez</button></div>
     </div>`, 'wide');
-  $('#hsOpen').addEventListener('click', () => { const id = $('#hsApp').value; if (id) Z.invoke('home:setupOpen', id); toast('Código copiado — cola-o no editor do Apps Script'); });
+  // um botão por conta com sessão iniciada nessa app
+  const loadAccts = async () => {
+    const id = $('#hsApp').value; const box = $('#hsAccts'); if (!id || !box) return;
+    const list = await Z.invoke('home:accounts', id);
+    if (list && list.length) box.innerHTML = list.map(x => `<button class="btn ghost" type="button" data-hsopen="${x.n}">Abrir em ${esc(x.email)}</button>`).join('');
+    else box.innerHTML = `<button class="btn ghost" type="button" data-hsopen="">Abrir o Apps Script</button><span class="hint">Se abrir na conta errada, muda de conta na fotografia, no canto superior direito.</span>`;
+  };
+  loadAccts();
+  $('#hsApp').addEventListener('change', loadAccts);
+  $('#hsAccts').addEventListener('click', e => {
+    const b = e.target.closest('[data-hsopen]'); if (!b) return;
+    const id = $('#hsApp').value; if (!id) return;
+    Z.invoke('home:setupOpen', id, b.dataset.hsopen === '' ? null : +b.dataset.hsopen);
+    toast('Código copiado — cola-o no editor do Apps Script');
+  });
   $('#hsCopy').addEventListener('click', async () => { await Z.invoke('home:code'); toast('Código copiado'); });
   $('#hsSave').addEventListener('click', async e => {
     const b = e.currentTarget; const er = $('#hsErr'); er.hidden = true;
