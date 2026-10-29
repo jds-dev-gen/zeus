@@ -731,6 +731,20 @@ async function pipToggle() {
 }
 
 /* Partilhar a página */
+// email novo numa janela própria, com a sessão (conta) da app: fecha sozinha depois de enviar
+// e não mexe no que a app tinha aberto
+function composeWindow(a, url) {
+  const { ses } = sessionForApp(a);
+  const w = new BrowserWindow({
+    width: 760, height: 680, parent: win, title: 'Email novo — ' + a.name,
+    autoHideMenuBar: true, backgroundColor: '#ffffff', webPreferences: WEB_PREFS(ses)
+  });
+  const wc = w.webContents;
+  wc.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(wc, d.url); });
+  wc.setWindowOpenHandler(({ url: u }) => { if (/^https?:/.test(u)) newTab({ url: u, partition: a.isolated ? appPartition(a.id) : null, sessionLabel: a.isolated ? a.name : null }); return { action: 'deny' }; });
+  googleUA(wc, url);
+  w.loadURL(url).catch(() => {});
+}
 function openInApp(a, url) {
   const view = ensureAppView(a); if (!view) return;
   view.webContents.loadURL(url).catch(() => {});
@@ -771,7 +785,7 @@ function shareDo(id, pos) {
   switch (kind) {
     case 'copy': clipboard.writeText(url); ui.send('toast', 'Endereço copiado.'); break;
     case 'copyboth': clipboard.writeText(both); ui.send('toast', 'Título e endereço copiados.'); break;
-    case 'gmail': if (a) { const u = appUser(a, /\/mail\/u\/(\d+)/); openInApp(a, `https://mail.google.com/mail/${u ? 'u/' + u + '/' : ''}?view=cm&fs=1&su=${enc(title)}&body=${enc(url)}`); } break;
+    case 'gmail': if (a) { const u = appUser(a, /\/mail\/u\/(\d+)/); composeWindow(a, `https://mail.google.com/mail/${u ? 'u/' + u + '/' : ''}?view=cm&fs=1&su=${enc(title)}&body=${enc(url)}`); } break;
     case 'proton': if (a) {
       // o Proton Mail abre um email novo a partir de um endereço mailto; o link fica também copiado, por segurança
       const u = appUser(a, /mail\.proton\.me\/u\/(\d+)/) || '0';
@@ -889,13 +903,25 @@ function ensureAppView(a) {
     const n = m ? parseInt(m[1], 10) : 0;
     if (badges[a.id] !== n) { badges[a.id] = n; pushState(); }
   });
+  let startedFromLast = false, triedHome = false, crashes = 0;
   wc.on('did-fail-load', (e, code, desc, url, isMain) => {
     if (!isMain || code === -3) return;
+    // se o último endereço guardado falhar, tenta uma vez a página inicial da app
+    if (startedFromLast && !triedHome) { triedHome = true; delete S.appLast[a.id]; wc.loadURL(a.url).catch(() => {}); return; }
     appErrors[a.id] = { code, desc, url }; applyLayout(); pushState();
   });
+  // a página da app rebentou (fica em branco): recarrega sozinha uma vez; depois mostra o aviso com "Tentar de novo"
+  wc.on('render-process-gone', (e, d) => {
+    if (d.reason === 'clean-exit') return;
+    if (++crashes <= 1) { setTimeout(() => { if (!wc.isDestroyed()) wc.reload(); }, 500); return; }
+    appErrors[a.id] = { code: 'crash', desc: 'A página da app deixou de responder.', url: wc.getURL() || a.url }; applyLayout(); pushState();
+  });
+  wc.on('unresponsive', () => { appErrors[a.id] = { code: 'hang', desc: 'A página da app não está a responder.', url: wc.getURL() || a.url }; applyLayout(); pushState(); });
+  wc.on('responsive', () => { if (appErrors[a.id] && appErrors[a.id].code === 'hang') { delete appErrors[a.id]; applyLayout(); pushState(); } });
   // lembrar onde a app estava (ex.: a Drive ou o Calendário da conta do trabalho)
   const keep = url => {
-    if (/^https?:/.test(url) && hostOf(url) === hostOf(a.url)) { S.appLast[a.id] = url; saveState(); }
+    const k = appLastFor(a, url);
+    if (k) { S.appLast[a.id] = k; saveState(); }
     pushState();
   };
   wc.on('did-navigate', (e, url) => keep(url));
@@ -903,10 +929,24 @@ function ensureAppView(a) {
   wc.on('did-start-navigation', d => {
     if (d.isMainFrame && !d.isSameDocument && appErrors[a.id]) { delete appErrors[a.id]; applyLayout(); pushState(); }
   });
-  const last = S.appLast[a.id];
-  const start = last && hostOf(last) === hostOf(a.url) ? last : a.url;
-  Promise.resolve(ready).then(() => { if (!wc.isDestroyed()) wc.loadURL(start).catch(() => {}); });
+  const last = appLastFor(a, S.appLast[a.id] || '');
+  const start = last || a.url;
+  startedFromLast = !!last && last !== a.url;
+  // espera pelas extensões da sessão, mas nunca mais de 4 segundos (se uma extensão encravar, a app abre na mesma)
+  const go = () => { if (!wc.isDestroyed() && !wc.getURL()) wc.loadURL(start).catch(() => {}); };
+  Promise.race([Promise.resolve(ready), new Promise(r => setTimeout(r, 4000))]).then(go, go);
   return view;
+}
+// que endereço guardar para a app voltar lá: só páginas do próprio site; no Gmail, só a caixa da conta
+// (nunca um email a escrever, ex. ?view=cm aberto pela partilha, que fica em branco depois de enviado)
+function appLastFor(a, url) {
+  if (!/^https?:/.test(url || '') || hostOf(url) !== hostOf(a.url)) return null;
+  if (hostOf(url) === 'mail.google.com') {
+    const m = /\/mail\/u\/(\d+)/.exec(url);
+    return 'https://mail.google.com/mail/' + (m ? 'u/' + m[1] + '/' : '');
+  }
+  if (/[?&](view=cm|compose=)/.test(url)) return null;
+  return url;
 }
 function destroyAppView(id) {
   const view = appViews.get(id); if (!view) return;
