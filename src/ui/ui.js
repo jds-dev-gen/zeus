@@ -126,7 +126,9 @@ function renderRail() {
   const key = JSON.stringify([S.apps, S.openPanel, S.fullApp]);
   if (key === railKey) return;
   railKey = key;
-  let h = '<div class="rail-apps" id="railApps">';
+  // em cima: hora e data (fixas); no meio: as apps (fazem scroll); em baixo: definições
+  let h = `<div class="rail-head"><div class="clock" aria-label="Hora"><b data-clock></b><span data-dshort></span></div></div>`;
+  h += '<div class="rail-apps" id="railApps">';
   S.apps.forEach((a, i) => {
     const on = S.openPanel === a.id || S.fullApp === a.id;
     let inner = a.icon === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>'
@@ -138,7 +140,6 @@ function renderRail() {
   });
   h += `<div class="app-item"><button class="app-btn add" type="button" data-add-app aria-label="Juntar site como app ou extensão" title="Juntar">${ICON.plus}</button><span class="lbl">Juntar</span></div>`;
   h += '</div><div class="rail-foot">';
-  h += `<div class="clock" aria-label="Hora"><b data-clock></b><span data-dshort></span></div>`;
   h += `<button class="icon-btn" type="button" data-settings aria-label="Definições" title="Definições (⌘,)">${ICON.gear}</button></div>`;
   const keepScroll = $('#railApps') ? $('#railApps').scrollTop : 0;
   $('#rail').innerHTML = h;
