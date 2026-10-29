@@ -1513,6 +1513,13 @@ function setupIPC() {
     S.spaces.push({ id, name: nm }); pushState(); saveState();
     return id;
   });
+  // nova ordem dos espaços (arrastar o título de um espaço no mosaico)
+  handle('space:reorder', ids => {
+    if (!Array.isArray(ids)) return;
+    const next = ids.map(id => S.spaces.find(s => s.id === id)).filter(Boolean);
+    S.spaces.forEach(s => { if (!next.includes(s)) next.push(s); });
+    S.spaces = next; pushState(); saveState();
+  });
   handle('space:rename', (id, name) => {
     const s = S.spaces.find(x => x.id === id); const nm = String(name || '').trim().slice(0, 30);
     if (s && nm) { s.name = nm; pushState(); saveState(); }

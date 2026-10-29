@@ -257,6 +257,12 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .zone { display: flex; flex-direction: column; gap: 12px; min-width: 0; border: 1px solid var(--zone-line); border-radius: 18px; padding: 12px 14px 14px; background: var(--zone-fill); transition: background .12s, border-color .12s; }
 .zone.cur { border-color: var(--zone-cur); }
 .zone.drop { background: var(--veil-fill); border-style: dashed; border-color: var(--fg); }
+.zone-h { cursor: grab; }
+.zone.zdragging { opacity: .45; }
+.zone.zdrop-before, .zone.zdrop-after { position: relative; }
+.zone.zdrop-before::before, .zone.zdrop-after::after { content: ""; position: absolute; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--fg); }
+.zone.zdrop-before::before { left: -11px; }
+.zone.zdrop-after::after { right: -11px; }
 .zone-h { display: flex; align-items: center; gap: 8px; height: 30px; padding-bottom: 10px; border-bottom: 1px solid var(--zone-line); font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; color: var(--soft); padding-left: 2px; text-transform: uppercase; }
 .zone-h em { font-style: normal; color: var(--muted); }
 .zone-h i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg); }

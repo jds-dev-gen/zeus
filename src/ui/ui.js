@@ -928,6 +928,52 @@ window.addEventListener('pointerup', e => {
   Z.invoke('tab:move', d.id, t.zone, before);
   if (from !== t.zone) { const sp = S.spaces.find(s => s.id === t.zone); if (sp) toast('Movido para ' + sp.name); }
 });
+/* Arrastar o título de um espaço muda a ordem dos espaços */
+let zoneDrag = null, zoneDragged = false;
+const clearZoneDrop = () => document.querySelectorAll('.zone.zdrop-before,.zone.zdrop-after,.zone.zdragging').forEach(z => z.classList.remove('zdrop-before', 'zdrop-after', 'zdragging'));
+function zoneTarget(x, y, id) {
+  let best = null, bd = Infinity;
+  document.querySelectorAll('[data-zone]').forEach(z => {
+    if (z.dataset.zone === id) return;
+    const r = z.getBoundingClientRect();
+    const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+    const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    const d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = { z, after: x > r.left + r.width / 2 }; }
+  });
+  return best;
+}
+$('#zones').addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  const h = e.target.closest('.zone-h'); if (!h || e.target.closest('button, input')) return;
+  const z = h.closest('[data-zone]'); if (!z) return;
+  zoneDrag = { id: z.dataset.zone, el: z, x: e.clientX, y: e.clientY, on: false };
+});
+window.addEventListener('pointermove', e => {
+  if (!zoneDrag) return;
+  if (!zoneDrag.on) {
+    if (Math.hypot(e.clientX - zoneDrag.x, e.clientY - zoneDrag.y) < 6) return;
+    zoneDrag.on = true; zoneDrag.el.classList.add('zdragging'); document.body.classList.add('dragging-card');
+  }
+  document.querySelectorAll('.zone.zdrop-before,.zone.zdrop-after').forEach(z => z.classList.remove('zdrop-before', 'zdrop-after'));
+  const t = zoneTarget(e.clientX, e.clientY, zoneDrag.id);
+  if (t) t.z.classList.add(t.after ? 'zdrop-after' : 'zdrop-before');
+});
+window.addEventListener('pointerup', e => {
+  if (!zoneDrag) return;
+  const d = zoneDrag; zoneDrag = null;
+  if (!d.on) return;
+  zoneDragged = true; setTimeout(() => { zoneDragged = false; }, 50);
+  document.body.classList.remove('dragging-card');
+  const t = zoneTarget(e.clientX, e.clientY, d.id);
+  clearZoneDrop();
+  if (!t) return;
+  const ids = S.spaces.map(s => s.id).filter(id => id !== d.id);
+  let i = ids.indexOf(t.z.dataset.zone); if (t.after) i += 1;
+  ids.splice(i, 0, d.id);
+  Z.invoke('space:reorder', ids);
+});
+$('#zones').addEventListener('click', e => { if (zoneDragged) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
 // sem o arrastar nativo das imagens (cancelaria o arrasto dos cartões)
 $('#zones').addEventListener('dragstart', e => e.preventDefault());
 window.addEventListener('pointercancel', () => { if (cardDrag) { cardDrag.el.classList.remove('drag'); document.body.classList.remove('dragging-card'); cardDrag = null; clearCardDrop(); } });
