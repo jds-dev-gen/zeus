@@ -767,9 +767,12 @@ function renderZones() {
         ? `<span class="zconf">${S.tabs.filter(t => t.space === s.id).length} separador(es) passam para “${esc((S.spaces.find(x => x.id !== s.id) || {}).name || '')}”<button type="button" class="danger" data-rmspace-ok="${s.id}">Apagar</button><button type="button" data-rmspace-no>Cancelar</button></span>`
         : `<button class="zx" type="button" data-rmspace="${s.id}" aria-label="Apagar o espaço ${esc(s.name)}" title="Apagar o espaço">${ICON.x}</button>`}`;
     const isCurZone = curTab() && curTab().space === s.id;
-    return `<section class="zone ${isCurZone ? 'cur' : ''}" data-zone="${s.id}" style="flex:1 1 240px"><div class="zone-h"><i></i>${head}</div><div class="grid">${cards}${f ? '' : `<button class="card newc" type="button" data-newin="${s.id}">${ICON.plus}Separador neste espaço</button>`}</div></section>`;
+    return `<section class="zone ${isCurZone ? 'cur' : ''}" data-zone="${s.id}"><div class="zone-h"><i></i>${head}</div><div class="grid">${cards}${f ? '' : `<button class="card newc" type="button" data-newin="${s.id}">${ICON.plus}Separador neste espaço</button>`}</div></section>`;
   }).join('');
-  if (ov.addingSpace) html += `<section class="zone" style="flex:1 1 230px"><div class="zone-h"><i></i><input id="spaceInput" placeholder="Nome do espaço" aria-label="Nome do espaço novo"></div></section>`;
+  if (ov.addingSpace) html += `<section class="zone"><div class="zone-h"><i></i><input id="spaceInput" placeholder="Nome do espaço" aria-label="Nome do espaço novo"></div></section>`;
+  // colunas iguais: tantas quantos os espaços mostrados, até 5
+  const shown = (html.match(/<section class="zone/g) || []).length;
+  $('#zones').style.setProperty('--cols', Math.max(1, Math.min(5, shown)));
   $('#zones').innerHTML = html || `<div class="empty">Nenhum separador com “${esc($('#mfilter').value.trim())}”. Carrega em Enter para o abrir como endereço ou pesquisa.</div>`;
   $('#mcount').textContent = S.tabs.length + (S.tabs.length === 1 ? ' aberto' : ' abertos');
   $('#shelf').innerHTML = `<div><span class="lbl-mono">Mais tarde</span>${S.later.length ? S.later.slice(0, 8).map((t, i) => `<button class="chip" type="button" data-restore="later:${i}" title="${esc(t.url)}">${esc(t.title || hostOf(t.url))}</button>`).join('') : '<span class="hint">Vazio</span>'}</div><div><span class="lbl-mono">Fechados há pouco</span>${S.closed.length ? S.closed.slice(0, 5).map((t, i) => `<button class="chip" type="button" data-restore="closed:${i}" title="${esc(t.url)}">${esc(t.title || hostOf(t.url))}</button>`).join('') : '<span class="hint">Nada</span>'}</div>`;

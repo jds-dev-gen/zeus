@@ -251,7 +251,9 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .msugg button:hover, .msugg button.sel { background: var(--inv-bg); color: var(--inv-fg); border-color: var(--inv-bg); }
 .msugg button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .msugg button em { font-style: normal; opacity: .6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
-.zones { display: flex; gap: 18px; flex-wrap: wrap; align-items: stretch; }
+/* espaços em colunas iguais: no máximo 5 por linha; as da linha seguinte têm a mesma largura */
+.zones { display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: 18px; align-items: stretch; }
+.zones > .empty { grid-column: 1 / -1; }
 .zone { display: flex; flex-direction: column; gap: 12px; min-width: 0; border: 1px solid var(--zone-line); border-radius: 18px; padding: 12px 14px 14px; background: var(--zone-fill); transition: background .12s, border-color .12s; }
 .zone.cur { border-color: var(--zone-cur); }
 .zone.drop { background: var(--veil-fill); border-style: dashed; border-color: var(--fg); }
@@ -266,7 +268,6 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .grid { display: flex; flex-direction: column; gap: 10px; }
 .grid > .card { height: 132px; flex-shrink: 0; }
 .grid > .card.newc { height: 52px; flex-direction: row; }
-.zone { max-width: 420px; }
 .card.cur { border-color: var(--fg); }
 .card { position: relative; padding: 0; text-align: left; background: var(--surface); border: 1px solid var(--veil-line); border-radius: 13px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; transition: transform .1s ease, box-shadow .1s ease; outline: none; }
 .card:hover { transform: translateY(-2px); }
