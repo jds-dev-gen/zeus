@@ -151,6 +151,13 @@ function loadState() {
   if (!S.tabs.length) S.tabs.push({ id: nextId++, url: NEWTAB, title: 'Página nova', space: S.spaces[0].id });
   S.currentId = (S.tabs[curIdx] || S.tabs[0]).id;
   S.mru = [S.currentId];
+  // 0.3.6: passam a ficar no topo os separadores abertos há menos tempo — inverte uma vez a ordem antiga de cada espaço
+  if (!S.newestFirst) {
+    const bySpace = new Map();
+    S.tabs.forEach(t => { if (!bySpace.has(t.space)) bySpace.set(t.space, []); bySpace.get(t.space).push(t); });
+    S.tabs = [...bySpace.values()].flatMap(list => list.reverse());
+    S.newestFirst = true;
+  }
 }
 let saveTimer = null;
 function saveState() {
@@ -164,7 +171,7 @@ function saveNow() {
       tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space, partition: t.partition || null, sessionLabel: t.sessionLabel || null })),
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
-      apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, driveLinks: true, settings: S.settings, permissions: S.permissions,
+      apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, driveLinks: true, newestFirst: true, settings: S.settings, permissions: S.permissions,
       visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
@@ -616,7 +623,9 @@ function newTab({ url, space, activate = true, title, partition = null, sessionL
     partition: partition || null,
     sessionLabel: partition ? sessionLabel : null
   };
-  S.tabs.push(tab);
+  // os separadores abertos há menos tempo ficam no topo do seu espaço
+  const first = S.tabs.findIndex(x => x.space === tab.space);
+  if (first < 0) S.tabs.push(tab); else S.tabs.splice(first, 0, tab);
   if (activate) openTab(tab.id);
   else { ensureTabView(tab); pushState(); saveState(); }
   return tab;
