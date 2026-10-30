@@ -358,40 +358,63 @@ function createWindow() {
   win.on('blur', () => ui && ui.send('alt', 'blur'));
 }
 
+/*
+ * Mostrar/esconder uma vista com o tamanho certo. Uma vista que recebe o tamanho novo enquanto está
+ * escondida (ex.: o Gmail ao lado, fechado e reaberto, ou passado de "ao lado" a página inteira) pode
+ * continuar desenhada com o tamanho antigo — fica "compactada" e cortada. Por isso, ao reaparecer ou
+ * mudar de tamanho, primeiro mostra-se e depois dá-se o tamanho, com um pequeno abanão (1 px) para a
+ * página voltar a medir a janela.
+ */
+const shownAt = new WeakMap();   // vista -> "x,y,w,h" com que foi mostrada
+function placeView(view, rect) {
+  if (!rect) {
+    if (view.getVisible && !view.getVisible()) return;
+    view.setVisible(false); shownAt.delete(view); return;
+  }
+  const key = rect.x + ',' + rect.y + ',' + rect.width + ',' + rect.height;
+  const wasHidden = view.getVisible ? !view.getVisible() : !shownAt.has(view);
+  if (!wasHidden && shownAt.get(view) === key) return;
+  view.setVisible(true);
+  view.setBounds(rect);
+  if (wasHidden || shownAt.get(view) !== key) {
+    const wc = view.webContents;
+    setTimeout(() => {
+      if (wc.isDestroyed() || shownAt.get(view) !== key) return;
+      view.setBounds({ x: rect.x, y: rect.y, width: Math.max(1, rect.width - 1), height: rect.height });
+      view.setBounds(rect);
+      try { wc.invalidate(); } catch (e) { /* ok */ }
+    }, 60);
+  }
+  shownAt.set(view, key);
+}
+
 function applyLayout() {
   if (!win) return;
   const ov = L.overlay;
-  const t = cur();
   // separadores
   for (const [id, view] of tabViews) {
     const tab = tabById(id);
     const show = !ov && !L.cover && !fullApp && id === S.currentId && tab && !tab.error && tab.url !== NEWTAB && L.page;
-    if (show) view.setBounds(L.page);
     // de volta ao separador do vídeo: o vídeo sai da janela flutuante e volta para a página
     if (show && pipTabs.has(id)) pipExit(id);
-    view.setVisible(!!show);
+    placeView(view, show ? L.page : null);
   }
   // apps
   for (const [id, view] of appViews) {
     let rect = null;
     if (!ov && !L.cover && !appErrors[id] && fullApp === id && L.page) rect = L.page;
     else if (!ov && !appErrors[id] && openPanel === id && L.panel) rect = L.panel;
-    if (rect) view.setBounds(rect);
-    view.setVisible(!!rect);
+    placeView(view, rect);
   }
   // Claude
-  if (claudeView) {
-    const show = !ov && S.claudeOpen && L.claude;
-    if (show) claudeView.setBounds(L.claude);
-    claudeView.setVisible(!!show);
-  }
+  if (claudeView) placeView(claudeView, !ov && S.claudeOpen && L.claude ? L.claude : null);
   // vídeo em ecrã inteiro por cima de tudo
   if (fullscreenView) {
     const [w, h] = win.getContentSize();
     fullscreenView.setBounds({ x: 0, y: 0, width: w, height: h });
     fullscreenView.setVisible(true);
+    shownAt.delete(fullscreenView);   // ao sair do ecrã inteiro volta a receber o tamanho normal
   }
-  void t;
 }
 
 let pushTimer = null;
