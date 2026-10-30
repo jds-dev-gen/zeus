@@ -34,7 +34,8 @@ const DEFAULT_APPS = [
   { id: 'cal', name: 'Calendário', url: 'https://calendar.google.com/', mode: 'full', icon: 'cal', preload: false },
   { id: 'notion', name: 'Notion', url: 'https://www.notion.so/', mode: 'full', icon: 'notion', preload: false },
   { id: 'pmail', name: 'Proton Mail', url: 'https://mail.proton.me/', mode: 'full', icon: 'pmail', preload: true },
-  { id: 'pluto', name: 'Pluto', url: '', mode: 'full', icon: 'pluto', preload: false }
+  { id: 'pluto', name: 'Pluto', url: '', mode: 'full', icon: 'pluto', preload: false },
+  { id: 'spotify', name: 'Spotify', url: 'https://open.spotify.com/', mode: 'full', icon: 'music', preload: false }
 ];
 const DEFAULT_SPACES = [
   { id: 'obs', name: 'Observador' },
@@ -1250,7 +1251,7 @@ function setAppMode(id, mode) {
   if (wasOpen) { if (a.mode === 'full') fullApp = id; else openPanel = id; }
   applyLayout(); pushState(true); saveState();
 }
-const ICONS = ['', 'mail', 'pmail', 'wa', 'cal', 'notion', 'pluto', 'apolo', 'work', 'globe', 'star', 'mic', 'play'];
+const ICONS = ['', 'mail', 'pmail', 'wa', 'cal', 'notion', 'pluto', 'apolo', 'work', 'globe', 'star', 'mic', 'play', 'music'];
 function addApp({ name, url, mode, icon, isolated }) {
   const u = toURL(url);
   if (!/^https?:/.test(u)) return { ok: false, error: 'Escreve um endereço web válido, por exemplo web.telegram.org.' };

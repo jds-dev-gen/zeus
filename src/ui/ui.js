@@ -21,6 +21,7 @@ const ICON = {
   globe: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z"/></svg>',
   star: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>',
   mic: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  music: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>',
   play: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>',
   plus: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   gear: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>',
@@ -1218,7 +1219,7 @@ $('#modalWrap').addEventListener('mousedown', e => { if (e.target.id === 'modalW
 const modalHead = t => `<div class="m-head"><h2>${esc(t)}</h2><button class="nb" type="button" data-mclose aria-label="Fechar">${ICON.x}</button></div>`;
 $('#modal').addEventListener('click', e => { if (e.target.closest('[data-mclose]')) closeModal(); });
 
-const ICON_CHOICES = [['', 'Letra'], ['mail', 'Email'], ['pmail', 'Email seguro'], ['wa', 'Conversa'], ['cal', 'Calendário'], ['notion', 'Documento'], ['work', 'Trabalho'], ['globe', 'Web'], ['star', 'Favorito'], ['mic', 'Áudio'], ['play', 'Vídeo'], ['pluto', 'Planeta'], ['apolo', 'Sol']];
+const ICON_CHOICES = [['', 'Letra'], ['mail', 'Email'], ['pmail', 'Email seguro'], ['wa', 'Conversa'], ['cal', 'Calendário'], ['notion', 'Documento'], ['work', 'Trabalho'], ['globe', 'Web'], ['star', 'Favorito'], ['mic', 'Áudio'], ['play', 'Vídeo'], ['music', 'Música'], ['pluto', 'Planeta'], ['apolo', 'Sol']];
 function iconPickerHTML(cur, name) {
   return `<div class="field"><span class="lab">Ícone</span><div class="icon-pick" id="iconPick" role="radiogroup" aria-label="Ícone">${ICON_CHOICES.map(([k, l]) => `<button type="button" role="radio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-icon="${k}" title="${l}" aria-label="${l}">${k === '' ? `<span class="letter">${esc((name || 'A').charAt(0).toUpperCase())}</span>` : k === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>' : ICON[k]}</button>`).join('')}</div></div>`;
 }
