@@ -366,3 +366,9 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .cap .sess { flex-shrink: 0; font-size: 10.5px; font-weight: 500; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--veil-line); color: var(--muted); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 #btnSpaces.on { background: var(--surface); color: var(--fg); }
+
+/* coluna para criar um espaço novo, à direita do último */
+.zone.zone-add { background: transparent; border-style: dashed; padding: 0; min-height: 180px; align-self: start; }
+.zone-add-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 0; background: none; color: var(--muted); font-size: 12.5px; border-radius: 18px; cursor: pointer; }
+.zone-add-btn svg { width: 26px; height: 26px; }
+.zone-add-btn:hover { color: var(--fg); background: var(--veil-fill); }

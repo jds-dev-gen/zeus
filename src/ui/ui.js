@@ -888,13 +888,17 @@ function renderZones() {
     }).join('');
     const head = ov.renaming === s.id
       ? `<input id="renameInput" value="${esc(s.name)}" aria-label="Nome do espaço">`
-      : `<span data-rename="${s.id}" title="Duplo clique para mudar o nome">${esc(s.name)}</span><em>· ${list.length}</em>${S.spaces.length < 2 ? '' : ov.confirmRm === s.id
-        ? `<span class="zconf">${S.tabs.filter(t => t.space === s.id).length} separador(es) passam para “${esc((S.spaces.find(x => x.id !== s.id) || {}).name || '')}”<button type="button" class="danger" data-rmspace-ok="${s.id}">Apagar</button><button type="button" data-rmspace-no>Cancelar</button></span>`
+      : `<span data-rename="${s.id}" title="Duplo clique para mudar o nome">${esc(s.name)}</span><em>· ${list.length}</em>${S.spaces.length < 2 ? '' : ov.confirmRm && ov.confirmRm.id === s.id
+        ? (ov.confirmRm.step === 1
+          ? `<span class="zconf">Apagar este espaço?<button type="button" class="danger" data-rmspace-step="${s.id}">Apagar</button><button type="button" data-rmspace-no>Cancelar</button></span>`
+          : `<span class="zconf">Tens a certeza?${(() => { const n = S.tabs.filter(t => t.space === s.id).length; return n ? ' ' + n + (n === 1 ? ' separador passa' : ' separadores passam') + ' para “' + esc((S.spaces.find(x => x.id !== s.id) || {}).name || '') + '”.' : ''; })()}<button type="button" class="danger" data-rmspace-ok="${s.id}">Sim, apagar</button><button type="button" data-rmspace-no>Cancelar</button></span>`)
         : `<button class="zx" type="button" data-rmspace="${s.id}" aria-label="Apagar o espaço ${esc(s.name)}" title="Apagar o espaço">${ICON.x}</button>`}`;
     const isCurZone = curTab() && curTab().space === s.id;
     return `<section class="zone ${isCurZone ? 'cur' : ''}" data-zone="${s.id}"><div class="zone-h"><i></i>${head}</div><div class="grid">${cards}${f ? '' : `<button class="card newc" type="button" data-newin="${s.id}">${ICON.plus}Separador neste espaço</button>`}</div></section>`;
   }).join('');
   if (ov.addingSpace) html += `<section class="zone"><div class="zone-h"><i></i><input id="spaceInput" placeholder="Nome do espaço" aria-label="Nome do espaço novo"></div></section>`;
+  // coluna "+" logo a seguir ao último espaço, para criar um espaço novo
+  else if (!f) html += `<section class="zone zone-add"><button type="button" class="zone-add-btn" data-addspace aria-label="Criar um espaço novo">${ICON.plus}<span>Espaço novo</span></button></section>`;
   // colunas iguais: tantas quantos os espaços mostrados, até 5
   const shown = (html.match(/<section class="zone/g) || []).length;
   $('#zones').style.setProperty('--cols', Math.max(1, Math.min(5, shown)));
@@ -963,10 +967,12 @@ $('#zones').addEventListener('click', e => {
   const rm = e.target.closest('[data-rmspace]');
   if (rm) {
     const id = rm.dataset.rmspace;
-    if (!S.tabs.some(t => t.space === id)) Z.invoke('space:remove', id);
-    else { ov.confirmRm = id; renderZones(); }
+    // apagar um espaço pede sempre duas confirmações
+    ov.confirmRm = { id, step: 1 }; renderZones();
     return;
   }
+  const st = e.target.closest('[data-rmspace-step]'); if (st) { ov.confirmRm = { id: st.dataset.rmspaceStep, step: 2 }; renderZones(); return; }
+  if (e.target.closest('[data-addspace]')) { ov.addingSpace = true; renderZones(); return; }
   const ok = e.target.closest('[data-rmspace-ok]'); if (ok) { ov.confirmRm = null; Z.invoke('space:remove', ok.dataset.rmspaceOk); return; }
   if (e.target.closest('[data-rmspace-no]')) { ov.confirmRm = null; renderZones(); }
 });
