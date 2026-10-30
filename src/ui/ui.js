@@ -639,7 +639,7 @@ function openAddr() {
   coverShot = null;
   Z.invoke('page:snapshot').then(img => { coverShot = img || ''; if (sug.open) showCover(true); });
 }
-function closeAddr() { addrOpen = false; $('#addr').hidden = true; closeSugg(); renderTop(); }
+function closeAddr() { addrOpen = false; $('#addr').hidden = true; closeSugg(); coverShot = null; showCover(false); renderTop(); }
 $('#addr').addEventListener('keydown', e => {
   if (suggKey(e, $('#addr'))) return;
   if (e.key === 'Enter') { const v = e.target.value.trim(); closeAddr(); if (v) Z.invoke('navigate', v); }
@@ -684,7 +684,7 @@ async function openShare() {
 function closeShare() {
   if (!shareOpen) return;
   shareOpen = false; $('#sharePop').hidden = true; $('#sharePop').innerHTML = '';
-  showCover(false);
+  coverShot = null; showCover(false);
 }
 $('#sharePop').addEventListener('click', e => {
   const b = e.target.closest('[data-share]'); if (!b) return;
@@ -700,14 +700,15 @@ document.addEventListener('keydown', e => { if (shareOpen && e.key === 'Escape')
 const sug = { open: false, list: [], sel: -1, input: null, box: null, typed: '', seq: 0 };
 let coverShot = null;
 function showCover(on) {
-  on = on || shareOpen;
+  // a imagem da página só serve por baixo do campo de endereço de cima e do menu de partilha
+  // (nunca na pesquisa da página principal, que é a própria interface)
+  const cover = (shareOpen || (on && sug.input === $('#addr'))) && coverShot !== null;
   const slot = $('#pageSlot'); let img = $('#coverImg');
-  if (on && coverShot) {
+  if (cover && coverShot) {
     if (!img) { img = document.createElement('img'); img.id = 'coverImg'; img.className = 'cover'; img.alt = ''; slot.appendChild(img); }
     img.src = coverShot;
   } else if (img) img.remove();
-  const cover = on && (shareOpen || sug.input === $('#addr')) && coverShot !== null;
-  if (cover !== sendLayout.cover) { sendLayout.cover = cover; lastLayout = ''; sendLayout(); }
+  if (cover !== !!sendLayout.cover) { sendLayout.cover = cover; lastLayout = ''; sendLayout(); }
 }
 function closeSugg() {
   sug.open = false; sug.list = []; sug.sel = -1;
