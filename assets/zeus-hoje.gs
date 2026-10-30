@@ -12,12 +12,14 @@
  * (quando carregas no visto, no Zeus). Só responde a quem tiver a chave abaixo, que só o Zeus conhece.
  */
 var ZEUS_KEY = '';
+var TASKS_MISSING = 'Falta o serviço Google Tasks API: no editor, Serviços (+) › Google Tasks API › Adicionar, e depois uma versão nova da implementação.';
 
 function doGet(e) {
   var p = (e && e.parameter) || {};
   if (ZEUS_KEY && p.k !== ZEUS_KEY) return out_({ ok: false, error: 'Chave errada.' });
   try {
     if (p.action === 'done' && p.list && p.task) {
+      if (typeof Tasks === 'undefined') return out_({ ok: false, error: TASKS_MISSING });
       Tasks.Tasks.patch({ status: 'completed' }, p.list, p.task);
       return out_({ ok: true });
     }
@@ -61,6 +63,9 @@ function hoje_(dateStr) {
 
   // tarefas: por fazer, com data até hoje (inclui as atrasadas)
   var tasks = [];
+  if (typeof Tasks === 'undefined') {
+    return { ok: true, v: 1, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: [], tasksError: TASKS_MISSING };
+  }
   var lists = (Tasks.Tasklists.list({ maxResults: 100 }).items) || [];
   lists.forEach(function (l) {
     var page = null;

@@ -804,7 +804,14 @@ async function fetchFeedOnce(f, url, params, cookies) {
   const r = await feedSession(f).fetch(u.toString(), { credentials: cookies ? 'include' : 'omit', redirect: 'follow', cache: 'no-store' });
   const text = await r.text();
   let j = null; try { j = JSON.parse(text); } catch (e) { /* página de login ou de erro */ }
-  if (j) { if (!j.ok) throw Object.assign(new Error(j.error || 'Erro no Apps Script.'), { fatal: true }); return j; }
+  if (j) {
+    if (!j.ok) {
+      // código antigo sem o serviço das tarefas ligado
+      const msg = /Tasks is not defined/i.test(j.error || '') ? 'Falta ligar o serviço das tarefas no Apps Script: no editor, Serviços (+) › Google Tasks API › Adicionar; depois Implementar › Gerir implementações › lápis › Versão: Nova versão › Implementar.' : (j.error || 'Erro no Apps Script.');
+      throw Object.assign(new Error(msg), { fatal: true });
+    }
+    return j;
+  }
   const title = ((/<title>([^<]*)<\/title>/i.exec(text) || [])[1] || '').trim();
   if (/accounts\.google\.com|ServiceLogin|signin/i.test(r.url + text.slice(0, 3000))) throw new Error('login');
   throw new Error(`resposta ${r.status}${title ? ' — ' + title : ''}`);
@@ -844,6 +851,7 @@ async function homeToday(force) {
     if (d.account && !f.account) { f.account = d.account; saveState(); }
     (d.events || []).forEach(ev => events.push(Object.assign({}, ev, { feed: f.id, label })));
     (d.tasks || []).forEach(t => tasks.push(Object.assign({}, t, { feed: f.id, label })));
+    if (d.tasksError) errors.push({ feed: f.id, label, error: d.tasksError });
   }
   events.sort((a, b) => (b.allDay - a.allDay) || a.start.localeCompare(b.start));
   tasks.sort((a, b) => (b.overdue - a.overdue) || a.due.localeCompare(b.due) || a.title.localeCompare(b.title));
@@ -907,7 +915,7 @@ async function homeFeedAdd({ appId, url, label }) {
     f.account = d.account || '';
     S.settings.homeFeeds = [...(S.settings.homeFeeds || []), f];
     todayCache.t = 0; saveState(); pushState(true);
-    return { ok: true, account: f.account, events: (d.events || []).length, tasks: (d.tasks || []).length };
+    return { ok: true, account: f.account, events: (d.events || []).length, tasks: (d.tasks || []).length, tasksError: d.tasksError || '' };
   } catch (e) {
     if (/Chave errada/.test(e.message)) return { ok: false, error: 'O código que está no Apps Script tem uma chave diferente. Carrega em "Copiar o código outra vez", cola-o no editor (substituindo tudo), guarda e cria uma versão nova da implementação.' };
     return { ok: false, error: e.message };

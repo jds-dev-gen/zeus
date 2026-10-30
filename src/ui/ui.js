@@ -520,8 +520,9 @@ function openHomeSetup() {
     const r = await Z.invoke('home:feedAdd', { appId: $('#hsApp').value, url: $('#hsUrl').value });
     b.disabled = false; b.textContent = 'Testar e ligar';
     if (!r.ok) { er.textContent = r.error; er.hidden = false; return; }
-    toast(`Ligada: ${r.account || 'conta'} · ${r.events} compromissos, ${r.tasks} tarefas hoje`);
+    toast(`Ligada: ${r.account || 'conta'} · ${r.events} compromissos${r.tasksError ? '' : ', ' + r.tasks + ' tarefas'} hoje`);
     todayData = null; openHomeSetup(); loadToday(true);
+    if (r.tasksError) { const e2 = $('#hsErr'); if (e2) { e2.textContent = 'A agenda ficou ligada. ' + r.tasksError; e2.hidden = false; } }
   });
   $('#modal').querySelectorAll('[data-feedrm]').forEach(b => b.addEventListener('click', async () => { await Z.invoke('home:feedRemove', b.dataset.feedrm); todayData = null; openHomeSetup(); loadToday(true); }));
 }
