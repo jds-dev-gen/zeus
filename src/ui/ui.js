@@ -216,6 +216,8 @@ function renderTop() {
   const away = full && S.fullAppURL && hostOf(S.fullAppURL) && hostOf(S.fullAppURL) !== hostOf(full.url) ? hostOf(S.fullAppURL) : '';
   $('#fullHome').hidden = !full || !away;
   $('#pipBtn').hidden = !!full || !(t && t.media);
+  // fechar o separador atual sem ir aos Espaços (numa app em página inteira, o × da app faz esse papel)
+  $('#closeTabBtn').hidden = !!full || !t;
   $('#shareBtn').disabled = full ? !/^https?:/.test(S.fullAppURL || '') : !(t && /^https?:/.test(t.url || ''));
   $('#fullBtns').hidden = !full;
   $('#claudeBtn').classList.toggle('on', S.claudeOpen);
@@ -610,6 +612,7 @@ function goHomeUI() {
   setTimeout(() => { const i = $('#askInput'); if (i) { i.focus(); i.select(); } }, 80);
 }
 $('#pipBtn').addEventListener('click', () => Z.invoke('pip:toggle'));
+$('#closeTabBtn').addEventListener('click', () => { const t = curTab(); if (t) Z.invoke('tab:close', t.id); });
 $('#shareBtn').addEventListener('click', () => { shareOpen ? closeShare() : openShare(); });
 $('#btnFwd').addEventListener('click', () => Z.invoke('nav', 'forward'));
 $('#btnReload').addEventListener('click', () => { const t = curTab(); Z.invoke('nav', t && t.error ? 'retry' : 'reload'); });
