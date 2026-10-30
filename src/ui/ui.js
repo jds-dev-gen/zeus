@@ -480,6 +480,26 @@ $('#pageSlot').addEventListener('click', async e => {
 setInterval(() => { if ($('#today') && !document.hidden) loadToday(); }, 5 * 60 * 1000);
 
 /* Ligar uma conta Google à página principal (assistente) */
+/* Site que pede nome de utilizador e palavra-passe (autenticação do browser) */
+function openAuth(c) {
+  openModal('auth', `${modalHead(c.proxy ? 'O proxy pede autenticação' : 'Iniciar sessão')}
+    <form class="section" id="authForm" autocomplete="on">
+      <p class="hint"><b>${esc(c.host)}</b> pede nome de utilizador e palavra-passe${c.realm ? ' (' + esc(c.realm) + ')' : ''}.${c.retry ? ' Os dados anteriores não foram aceites.' : ''}</p>
+      <div class="field"><label for="auU">Nome de utilizador</label><input class="inp" id="auU" type="text" autocomplete="username" spellcheck="false"></div>
+      <div class="field"><label for="auP">Palavra-passe</label><input class="inp" id="auP" type="password" autocomplete="current-password"></div>
+      <p class="hint">Fica lembrado só enquanto o Zeus estiver aberto.</p>
+      <div class="row-btns"><button class="btn" type="submit">Entrar</button><button class="btn ghost" type="button" id="auNo">Cancelar</button></div>
+    </form>`);
+  let answered = false;
+  const reply = (u, p) => { if (answered) return; answered = true; Z.invoke('auth:reply', c.id, u, p); };
+  setTimeout(() => $('#auU') && $('#auU').focus(), 30);
+  $('#authForm').addEventListener('submit', e => { e.preventDefault(); reply($('#auU').value, $('#auP').value); closeModal(); });
+  $('#auNo').addEventListener('click', () => { reply(null); closeModal(); });
+  // fechar a janela de outra forma conta como cancelar
+  const obs = new MutationObserver(() => { if ($('#modalWrap').hidden) { obs.disconnect(); reply(null); } });
+  obs.observe($('#modalWrap'), { attributes: true, attributeFilter: ['hidden'] });
+}
+
 function openHomeSetup() {
   const gapps = S.apps.filter(a => a.url && /(^|\.)google\.com$/.test(hostOf(a.url)));
   const feeds = S.settings.homeFeeds || [];
@@ -787,6 +807,7 @@ $('#findClose').addEventListener('click', closeFind);
 Z.on('find-result', r => { $('#findCount').textContent = r.total ? `${r.active}/${r.total}` : '0'; });
 
 Z.on('ui-command', c => {
+  if (c.cmd === 'auth') openAuth(c);
   if (c.cmd === 'settings') openSettings();
   if (c.cmd === 'address') openAddr();
   if (c.cmd === 'find') openFind();

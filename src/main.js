@@ -1639,6 +1639,7 @@ function setupIPC() {
   handle('navigate', input => navigate(input));
   handle('nav', a => navAction(a));
   handle('history:suggest', q => suggest(q));
+  handle('auth:reply', (id, user, pass) => authReply(id, user, pass));
   handle('home:today', force => homeToday(!!force));
   handle('home:taskDone', (feed, list, task) => homeTaskDone(feed, list, task));
   handle('home:setupOpen', (appId, n) => homeSetupOpen(appId, n));
@@ -1858,6 +1859,34 @@ app.on('web-contents-created', (e, wc) => {
 });
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+
+/*
+ * Sites com nome de utilizador e palavra-passe do próprio browser (autenticação HTTP, comum em
+ * ferramentas alojadas no Render, Netlify, etc.): o Electron não mostra a janela sozinho — sem isto,
+ * a página fica em branco. Pergunta-se na interface; fica lembrado só enquanto o Zeus estiver aberto.
+ */
+const authPending = new Map();   // id -> callback
+const authMemory = new Map();    // "host|realm" -> {user, pass}
+let authSeq = 0;
+app.on('login', (event, wc, details, authInfo, callback) => {
+  event.preventDefault();
+  const key = authInfo.host + '|' + (authInfo.realm || '');
+  const mem = authMemory.get(key);
+  // se a palavra-passe lembrada falhou (o site voltou a pedir), pergunta outra vez
+  if (mem && !mem.used) { mem.used = true; setTimeout(() => { mem.used = false; }, 4000); callback(mem.user, mem.pass); return; }
+  if (!ui || ui.isDestroyed()) { callback(); return; }
+  const id = ++authSeq;
+  authPending.set(id, { callback, key });
+  ui.send('ui-command', { cmd: 'auth', id, host: authInfo.host, realm: authInfo.realm || '', proxy: !!authInfo.isProxy, retry: !!mem });
+});
+function authReply(id, user, pass) {
+  const p = authPending.get(id); if (!p) return;
+  authPending.delete(id);
+  if (user == null) { p.callback(); return; }
+  authMemory.set(p.key, { user: String(user), pass: String(pass || ''), used: true });
+  setTimeout(() => { const m = authMemory.get(p.key); if (m) m.used = false; }, 4000);
+  p.callback(String(user), String(pass || ''));
+}
 
 app.whenReady().then(async () => {
   loadState();
