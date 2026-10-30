@@ -30,8 +30,8 @@ jobs:
       publicar: ${{ steps.v.outputs.publicar }}
       ref: ${{ steps.v.outputs.ref }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -67,14 +67,14 @@ jobs:
   compilar:
     needs: preparar
     if: needs.preparar.outputs.publicar == 'true'
-    # as duas versões (Apple Silicon e Intel) compilam na mesma máquina: basta haver um Mac livre no GitHub
-    runs-on: macos-14
+    # as duas versões (Apple Silicon e Intel) compilam na mesma máquina (macOS 15; o macOS 14 foi retirado em nov 2026): basta haver um Mac livre no GitHub
+    runs-on: macos-15
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.preparar.outputs.ref }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - run: npm ci
@@ -89,7 +89,7 @@ jobs:
             ditto -c -k --keepParent "out/Zeus-darwin-$A/Zeus.app" "Zeus-$V-mac-$A.zip"
           done
           ls -la Zeus-*.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: zeus-mac
           path: Zeus-*.zip
@@ -99,7 +99,7 @@ jobs:
     needs: [preparar, compilar]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: dist
           merge-multiple: true
