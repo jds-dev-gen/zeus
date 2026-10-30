@@ -222,6 +222,7 @@ function renderTop() {
   $('#fullBtns').hidden = !full;
   $('#claudeBtn').classList.toggle('on', S.claudeOpen);
   $('#mosaicBtn').classList.toggle('on', ov.open);
+  $('#btnSpaces').classList.toggle('on', ov.open);
   $('#progress').hidden = !(t && t.loading && !full && t.url !== NEWTAB);
   const mode = S.settings.tabMode;
   const tb = $('#titleBtn');
@@ -639,6 +640,7 @@ $('#btnReload').addEventListener('click', () => { const t = curTab(); Z.invoke('
 $('#titleBtn').addEventListener('click', openAddr);
 $('#claudeBtn').addEventListener('click', () => Z.invoke('claude:toggle'));
 $('#mosaicBtn').addEventListener('click', () => { ov.open ? closeMosaic() : openMosaic(false); });
+$('#btnSpaces').addEventListener('click', () => { ov.open ? closeMosaic() : openMosaic(false); });
 $('#fullSide').addEventListener('click', () => S.fullApp && Z.invoke('app:mode', S.fullApp, 'side'));
 $('#fullClose').addEventListener('click', () => S.fullApp && Z.invoke('app:open', S.fullApp));
 $('#panelFull').addEventListener('click', () => { if (S.openPanel) { Z.invoke('app:mode', S.openPanel, 'full'); toast('Esta app passa a abrir em página inteira'); } });
@@ -835,7 +837,7 @@ async function openMosaic(hold) {
   if (ov.bg) bg.src = ov.bg; else bg.removeAttribute('src');
   $('#mosaic').hidden = false;
   $('#pageSlot').style.visibility = 'hidden';
-  $('#mosaicBtn').classList.add('on');
+  $('#mosaicBtn').classList.add('on'); $('#btnSpaces').classList.add('on');
   renderZones(); renderKeys();
   sendLayout();
   if (hold) $('.m-inner').focus(); else $('#mfilter').focus();
@@ -846,12 +848,12 @@ function closeMosaic() {
   ov.open = false; ov.hold = false;
   $('#mosaic').hidden = true;
   $('#pageSlot').style.visibility = '';
-  $('#mosaicBtn').classList.remove('on');
+  $('#mosaicBtn').classList.remove('on'); $('#btnSpaces').classList.remove('on');
   sendLayout();
 }
 async function openSel(id) {
   ov.open = false; ov.hold = false;
-  $('#mosaic').hidden = true; $('#pageSlot').style.visibility = ''; $('#mosaicBtn').classList.remove('on');
+  $('#mosaic').hidden = true; $('#pageSlot').style.visibility = ''; $('#mosaicBtn').classList.remove('on'); $('#btnSpaces').classList.remove('on');
   await Z.invoke('tab:open', id);
   sendLayout();
 }

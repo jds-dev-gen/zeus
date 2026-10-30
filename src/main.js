@@ -330,8 +330,8 @@ function createWindow() {
     show: false,
     titleBarStyle: 'hidden',
     ...(isMac
-      ? { trafficLightPosition: { x: 14, y: 13 } }
-      : { titleBarOverlay: { color: '#0b0b0c', symbolColor: '#f6f6f4', height: 40 } }),
+      ? { trafficLightPosition: { x: 14, y: 15 } }
+      : { titleBarOverlay: { color: '#0b0b0c', symbolColor: '#f6f6f4', height: 44 } }),
     webPreferences: {
       preload: path.join(__dirname, '..', 'build', 'preload-ui.js'),
       sandbox: true,
