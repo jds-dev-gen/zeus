@@ -247,7 +247,7 @@ function saveNow() {
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
       pendingKey: S.pendingKey || null, apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, driveLinks: true, newestFirst: true, rightWideV: true, settings: S.settings, permissions: S.permissions,
-      visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
+      siteZoom: S.siteZoom || {}, visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
     fs.mkdirSync(path.dirname(stateFile()), { recursive: true });
@@ -399,14 +399,41 @@ function placeView(view, rect) {
  * pelo menos 1200 píxeis de largura (no máximo até 75%). Nos outros modos o zoom volta a 100%.
  */
 const DESKTOP_WIDTH = 1200;   // meio-termo: aspeto de computador sem o texto ficar demasiado pequeno
+// sites que só mostram o aspeto de computador a partir de uma largura maior
+const SITE_DESKTOP = { 'observador.pt': 1280 };
 const zoomedByUs = new WeakSet();
+const siteOf = wc => { try { return hostOf(wc.getURL()); } catch (e) { return ''; } };
 function fitZoom(view) {
   const wc = view.webContents; if (wc.isDestroyed() || !L.page) return;
+  const host = siteOf(wc);
+  const own = S.siteZoom && host && S.siteZoom[host];   // zoom escolhido à mão para este site (⌘− / ⌘+)
   const on = S.settings.tabMode === 'right' && S.settings.rightWide && S.settings.rightZoom !== false;
-  const z = on ? Math.max(0.75, Math.min(1, L.page.width / DESKTOP_WIDTH)) : 1;
-  if (!on && !zoomedByUs.has(view)) return;          // não mexer no zoom que o João tenha escolhido
+  let z;
+  if (own) z = own;
+  else if (on) z = Math.max(0.75, Math.min(1, L.page.width / (SITE_DESKTOP[host] || DESKTOP_WIDTH)));
+  else { if (!zoomedByUs.has(view)) return; z = 1; }
   if (Math.abs(wc.getZoomFactor() - z) > 0.005) wc.setZoomFactor(z);
-  if (z < 1) zoomedByUs.add(view); else zoomedByUs.delete(view);
+  if (z !== 1) zoomedByUs.add(view); else zoomedByUs.delete(view);
+}
+// ⌘− / ⌘+ / ⌘0 na página à frente: zoom por site, guardado
+function zoomStep(dir) {
+  const v = fullApp ? appViews.get(fullApp) : tabViews.get(S.currentId);
+  if (!v || v.webContents.isDestroyed()) return;
+  const wc = v.webContents; const host = siteOf(wc); if (!host) return;
+  S.siteZoom = S.siteZoom || {};
+  if (dir === 0) delete S.siteZoom[host];
+  else {
+    const steps = [0.5, 0.67, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.1, 1.25, 1.5, 1.75, 2];
+    const curZ = wc.getZoomFactor();
+    let i = steps.findIndex(x => x >= curZ - 0.001); if (i < 0) i = steps.length - 1;
+    if (dir > 0) i = steps[i] > curZ + 0.001 ? i : Math.min(steps.length - 1, i + 1);
+    else i = steps[i] < curZ - 0.001 ? i : Math.max(0, i - 1);
+    if (Math.abs(steps[i] - 1) < 0.001) delete S.siteZoom[host]; else S.siteZoom[host] = steps[i];
+  }
+  saveState();
+  if (!S.siteZoom[host]) { zoomedByUs.add(v); }
+  fitZoom(v);
+  ui && ui.send('toast', `Zoom ${Math.round(wc.getZoomFactor() * 100)}% em ${host}` + (S.siteZoom[host] ? '' : ' (automático)'));
 }
 
 function applyLayout() {
@@ -1868,7 +1895,10 @@ function buildMenu() {
         { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => { const w = curWC(); if (w) w.reload(); } },
         { label: 'Recarregar sem cache', accelerator: 'CmdOrCtrl+Shift+R', click: () => { const w = curWC(); if (w) w.reloadIgnoringCache(); } },
         { type: 'separator' },
-        { role: 'resetZoom', label: 'Tamanho real' }, { role: 'zoomIn', label: 'Aumentar' }, { role: 'zoomOut', label: 'Reduzir' },
+        { label: 'Tamanho real', accelerator: 'CmdOrCtrl+0', click: () => zoomStep(0) },
+        { label: 'Aumentar', accelerator: 'CmdOrCtrl+Plus', click: () => zoomStep(1) },
+        { label: 'Aumentar ', accelerator: 'CmdOrCtrl+=', visible: false, acceleratorWorksWhenHidden: true, click: () => zoomStep(1) },
+        { label: 'Reduzir', accelerator: 'CmdOrCtrl+-', click: () => zoomStep(-1) },
         { type: 'separator' },
         { role: 'togglefullscreen', label: 'Ecrã inteiro' },
         { label: 'Ferramentas de programador', accelerator: isMac ? 'Alt+Cmd+I' : 'Ctrl+Shift+I', click: () => { const w = curWC(); if (w) w.toggleDevTools(); } }
