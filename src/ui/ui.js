@@ -250,9 +250,21 @@ function renderRight() {
   const r = $('#right');
   r.hidden = S.settings.tabMode !== 'right';
   if (r.hidden) return;
-  const key = JSON.stringify([S.tabs.map(x => [x.id, x.title, x.favicon, x.space]), S.currentId, S.spaces]);
+  const wide = !!S.settings.rightWide;
+  const key = JSON.stringify([S.tabs.map(x => [x.id, x.title, x.favicon, x.space]), S.currentId, S.spaces, wide]);
   if (key === rightKey) return; rightKey = key;
-  r.innerHTML = S.spaces.map(s => {
+  r.classList.toggle('compact', !wide);
+  const toggle = `<button class="rt rt-toggle" type="button" data-rtoggle title="${wide ? 'Só ícones (a página fica mais larga)' : 'Mostrar os títulos'}" aria-label="${wide ? 'Mostrar só os ícones' : 'Mostrar os títulos'}">${wide ? '<span class="arr">›</span><span class="t">Só ícones</span>' : '<span class="arr">‹</span>'}</button>`;
+  if (!wide) {
+    // compacta: só o ícone de cada site; o nome aparece ao passar o rato
+    r.innerHTML = toggle + S.spaces.map(s => {
+      const list = S.tabs.filter(t => t.space === s.id);
+      if (!list.length) return '';
+      return `<div class="rt-sp" title="${esc(s.name)}"><span class="rt-sp-l">${esc(s.name.charAt(0).toUpperCase())}</span>${list.map(t => `<div class="rt ${t.id === S.currentId ? 'on' : ''}" role="button" tabindex="0" data-open="${t.id}" title="${esc(t.url === NEWTAB ? 'Página nova' : t.title)}"><span class="fav">${favHTML(t, 16)}</span></div>`).join('')}</div>`;
+    }).join('') + `<button class="rt" type="button" data-newtab title="Separador novo" aria-label="Separador novo">${ICON.plus}</button>`;
+    return;
+  }
+  r.innerHTML = toggle + S.spaces.map(s => {
     const list = S.tabs.filter(t => t.space === s.id);
     if (!list.length) return '';
     return `<div style="display:flex;flex-direction:column;gap:2px"><span class="lbl-mono" style="padding:0 8px 6px">${esc(s.name)}</span>${list.map(t => `<div class="rt ${t.id === S.currentId ? 'on' : ''}" role="button" tabindex="0" data-open="${t.id}"><span class="fav">${favHTML(t)}</span><span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><button class="nb x" type="button" data-close="${t.id}" aria-label="Fechar">${ICON.x}</button></div>`).join('')}</div>`;
@@ -265,6 +277,7 @@ function onTabListClick(e) {
   const o = e.target.closest('[data-open]');
   if (o) { Z.invoke('tab:open', +o.dataset.open); return; }
   if (e.target.closest('[data-newtab]')) Z.invoke('tab:new', {});
+  if (e.target.closest('[data-rtoggle]')) Z.invoke('settings:set', { rightWide: !S.settings.rightWide });
 }
 $('#topTabs').addEventListener('click', onTabListClick);
 $('#right').addEventListener('click', onTabListClick);

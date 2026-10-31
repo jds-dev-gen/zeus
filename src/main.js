@@ -44,6 +44,7 @@ const DEFAULT_SPACES = [
 ];
 const DEFAULT_SETTINGS = {
   tabMode: 'mosaic',          // mosaic | top | right
+  rightWide: false,           // separadores à direita: false = só ícones (a página fica larga), true = com títulos
   theme: 'dark',              // dark | light | system
   search: 'google',           // google | duckduckgo | startpage | brave
   city: { name: 'Lisboa', lat: 38.7223, lon: -9.1393 },
