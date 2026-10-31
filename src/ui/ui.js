@@ -1347,6 +1347,7 @@ async function openSettings() {
     <div class="set-sec" style="border-top:0;padding-top:0"><h3>Aspeto</h3>
       <div class="set-row"><span>Separadores</span>${segHTML('tabMode', st.tabMode, [['mosaic', 'Mosaico'], ['top', 'Em cima'], ['right', 'À direita']])}</div>
       <div class="set-row"><span>Tema</span>${segHTML('theme', st.theme, [['dark', 'Escuro'], ['light', 'Claro'], ['system', 'Sistema']])}</div>
+      <div class="set-row"><span>Com os títulos à direita</span>${segHTML('rightZoom', String(st.rightZoom !== false), [['true', 'Manter aspeto de computador'], ['false', 'Zoom normal']])}</div>
       <div class="set-row"><span>Vídeo ao mudar de separador</span>${segHTML('autoPip', String(st.autoPip !== false), [['true', 'Fica a flutuar'], ['false', 'Não']])}</div>
       <div class="set-row"><span>Ao abrir o Zeus</span>${segHTML('restoreTabs', String(st.restoreTabs !== false), [['true', 'Retomar separadores'], ['false', 'Página nova']])}</div>
       <p class="hint">Mosaico: mantém ${esc(KEYNAME)} premido para ver os separadores e larga para abrir o escolhido. Um toque rápido deixa-o aberto. Também abre com ⌘E.</p>

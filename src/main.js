@@ -44,7 +44,8 @@ const DEFAULT_SPACES = [
 ];
 const DEFAULT_SETTINGS = {
   tabMode: 'mosaic',          // mosaic | top | right
-  rightWide: false,           // separadores à direita: false = só ícones (a página fica larga), true = com títulos
+  rightWide: true,            // separadores à direita: true = com títulos (com zoom ajustado), false = só ícones
+  rightZoom: true,            // com os títulos à direita, reduzir o zoom das páginas para manterem o aspeto de computador
   theme: 'dark',              // dark | light | system
   search: 'google',           // google | duckduckgo | startpage | brave
   city: { name: 'Lisboa', lat: 38.7223, lon: -9.1393 },
@@ -204,6 +205,8 @@ function loadState() {
     if (!saved.waLinks) { S.apps.forEach(a => { if (a.id === 'wa' || hostOf(a.url || '') === 'web.whatsapp.com') a.linksInTabs = true; }); S.waLinks = true; }
     // 0.3.0: o Gmail também abre os links em separadores
     // 0.3.1: na Drive, navegar fica na app; documentos (Docs, Sheets, Slides) abrem em separadores
+    // 0.5.13: o João quer os títulos à direita (o zoom ajustado mantém o aspeto de computador)
+    if (!saved.rightWideV) S.settings.rightWide = true;
     if (!saved.driveLinks) { S.apps.forEach(a => { if (hostOf(a.url || '') === 'drive.google.com' && !a.linksInTabs) a.linksInTabs = 'external'; }); }
     if (!saved.gmailLinks) { S.apps.forEach(a => { if (hostOf(a.url || '') === 'mail.google.com') a.linksInTabs = true; }); }
   } catch (e) { /* primeiro arranque */ }
@@ -243,7 +246,7 @@ function saveNow() {
       tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space, partition: t.partition || null, sessionLabel: t.sessionLabel || null })),
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
-      pendingKey: S.pendingKey || null, apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, driveLinks: true, newestFirst: true, settings: S.settings, permissions: S.permissions,
+      pendingKey: S.pendingKey || null, apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, driveLinks: true, newestFirst: true, rightWideV: true, settings: S.settings, permissions: S.permissions,
       visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
@@ -390,6 +393,22 @@ function placeView(view, rect) {
   shownAt.set(view, key);
 }
 
+/*
+ * Separadores à direita com títulos: a página fica mais estreita e muitos sites passam para o aspeto
+ * de tablet/telemóvel. Para o evitar, reduz-se o zoom da página principal o suficiente para ela "ver"
+ * pelo menos 1280 píxeis de largura (no máximo até 75%). Nos outros modos o zoom volta a 100%.
+ */
+const DESKTOP_WIDTH = 1280;
+const zoomedByUs = new WeakSet();
+function fitZoom(view) {
+  const wc = view.webContents; if (wc.isDestroyed() || !L.page) return;
+  const on = S.settings.tabMode === 'right' && S.settings.rightWide && S.settings.rightZoom !== false;
+  const z = on ? Math.max(0.75, Math.min(1, L.page.width / DESKTOP_WIDTH)) : 1;
+  if (!on && !zoomedByUs.has(view)) return;          // não mexer no zoom que o João tenha escolhido
+  if (Math.abs(wc.getZoomFactor() - z) > 0.005) wc.setZoomFactor(z);
+  if (z < 1) zoomedByUs.add(view); else zoomedByUs.delete(view);
+}
+
 function applyLayout() {
   if (!win) return;
   const ov = L.overlay;
@@ -400,6 +419,7 @@ function applyLayout() {
     // de volta ao separador do vídeo: o vídeo sai da janela flutuante e volta para a página
     if (show && pipTabs.has(id)) pipExit(id);
     placeView(view, show ? L.page : null);
+    if (show) fitZoom(view);
   }
   // apps
   for (const [id, view] of appViews) {
@@ -407,6 +427,7 @@ function applyLayout() {
     if (!ov && !L.cover && !appErrors[id] && fullApp === id && L.page) rect = L.page;
     else if (!ov && !appErrors[id] && openPanel === id && L.panel) rect = L.panel;
     placeView(view, rect);
+    if (rect && rect === L.page) fitZoom(view);
   }
   // Claude
   if (claudeView) placeView(claudeView, !ov && S.claudeOpen && L.claude ? L.claude : null);
@@ -635,6 +656,8 @@ function ensureTabView(tab) {
   win.contentView.addChildView(view);
   view.setVisible(false);
   wireWeb(wc, 'tab', { tabId: tab.id });
+  // o zoom é por site: ao mudar de site volta a acertar-se (separadores à direita com títulos)
+  wc.on('did-navigate', () => { if (view.getVisible()) fitZoom(view); });
   try { if (rec.ext) rec.ext.addTab(wc, win); } catch (e) { /* extensões opcionais */ }
 
   const id = tab.id;
@@ -1166,6 +1189,7 @@ function ensureAppView(a) {
   view.setVisible(false);
   const wc = view.webContents;
   wireWeb(wc, 'app', { appId: a.id });
+  wc.on('did-navigate', () => { if (view.getVisible() && fullApp === a.id) fitZoom(view); });
   try { if (ext) ext.addTab(wc, win); } catch (e) { /* ok */ }
   wc.on('page-title-updated', (e, title) => {
     const m = /\((\d+)\)/.exec(title) || /^(\d+)\s/.exec(title);
@@ -1749,6 +1773,7 @@ function setupIPC() {
     ['panelWidth', 'claudeWidth'].forEach(k => { if (k in clean) clean[k] = Math.max(280, Math.min(1400, Math.round(+clean[k] || 420))); });
     if ('updateRepo' in clean) clean.updateRepo = String(clean.updateRepo || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '');
     S.settings = Object.assign({}, S.settings, clean);
+    if ('tabMode' in clean || 'rightWide' in clean || 'rightZoom' in clean) setTimeout(applyLayout, 50);
     if (clean.theme) nativeTheme.themeSource = clean.theme === 'system' ? 'system' : clean.theme;
     if (!isMac && clean.theme) updateOverlayColors();
     if ('updateRepo' in clean && updater) updater.check(true);
