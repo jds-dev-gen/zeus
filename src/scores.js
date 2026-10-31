@@ -14,7 +14,7 @@
 const SOFA = 'https://www.sofascore.com/api/v1';
 const SCHEDULE_EVERY = 15 * 60e3;
 const LIVE_EVERY = 20e3;
-const POST_WINDOW = 45 * 60e3;         // e jogos que acabaram há menos de 45 min (contado a partir de quando o Zeus viu o fim)
+const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 
 const LIVE_CODES = new Set([6, 7, 41, 42, 50]);   // 1.ª parte, 2.ª parte, prolongamento, penáltis
 const BREAK_CODES = new Set([31, 32, 33, 34]);    // intervalo e pausas antes do prolongamento/penáltis
@@ -45,6 +45,13 @@ class Scores {
     clearInterval(this.timers.sched);
     this.timers.sched = setInterval(() => this.refreshSchedule(), SCHEDULE_EVERY);
     setTimeout(() => this.refreshSchedule(), 4000);
+    this.atMidnight();
+  }
+  // à meia-noite, os jogos do dia anterior saem da barra
+  atMidnight() {
+    const m = new Date(); m.setHours(24, 0, 5, 0);
+    clearTimeout(this.timers.midnight);
+    this.timers.midnight = setTimeout(() => { this.prune(); this.emit(); this.refreshSchedule(); this.atMidnight(); }, m - Date.now());
   }
 
   /* ---------- pedidos ---------- */
@@ -105,8 +112,8 @@ class Scores {
     for (const [id, ev] of this.events) {
       const start = ev.startTimestamp * 1000;
       if (ev.status.type === 'notstarted' && start - now > 3 * 86400e3) continue;   // fica guardado, mas não aparece
-      if (ev.status.type === 'finished' && !this.endedAt.has(id) && now - start > 4 * 3600e3) this.events.delete(id);
-      if (this.endedAt.has(id) && now - this.endedAt.get(id) > 6 * 3600e3) { this.events.delete(id); this.endedAt.delete(id); }
+      // jogos acabados ficam até ao fim do dia do jogo
+      if (ev.status.type === 'finished' && !sameDay(this.endedAt.get(id) || start, now)) { this.events.delete(id); this.endedAt.delete(id); }
     }
   }
   store(ev, live) {
@@ -130,7 +137,7 @@ class Scores {
       if (isLive(ev) || BREAK_CODES.has(ev.status.code)) return true;
       // jogos marcados para hoje aparecem logo, com a hora prevista (e ficam se o início atrasar)
       if (ev.status.type === 'notstarted') return new Date(start).toDateString() === new Date(now).toDateString() || (start <= now && now - start < 3 * 3600e3);
-      if (ev.status.type === 'finished') return this.endedAt.has(ev.id) ? now - this.endedAt.get(ev.id) < POST_WINDOW : now - start < 2 * 3600e3 + POST_WINDOW;
+      if (ev.status.type === 'finished') return sameDay(this.endedAt.get(ev.id) || start, now);   // o resultado final fica até mudar o dia
       return false;
     }).sort((a, b) => a.startTimestamp - b.startTimestamp);
   }
