@@ -1169,6 +1169,8 @@ function navAction(a) {
   if (fullApp) {
     const v = appViews.get(fullApp); if (!v) return;
     const w = v.webContents, ap = appById(fullApp);
+    // no Radar, recarregar = ir buscar as notícias outra vez (e voltar ao topo das colunas)
+    if (v.__internal && ['reload', 'retry', 'hardreload', 'apphome'].includes(a)) { if (w === radarWC) w.send('radar:refresh'); return; }
     if (a === 'back' && w.navigationHistory.canGoBack()) w.navigationHistory.goBack();
     if (a === 'forward' && w.navigationHistory.canGoForward()) w.navigationHistory.goForward();
     if (a === 'reload' || a === 'retry') w.reload();
@@ -2000,7 +2002,7 @@ function buildMenu() {
         { label: 'Claude', accelerator: 'CmdOrCtrl+Shift+K', click: () => setClaude(!S.claudeOpen) },
         { label: 'Enviar esta página ao Claude', accelerator: 'CmdOrCtrl+Shift+J', click: () => sendPageToClaude() },
         { type: 'separator' },
-        { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => { const w = curWC(); if (w) w.reload(); } },
+        { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => { const w = curWC(); if (w && w === radarWC) w.send('radar:refresh'); else if (w) w.reload(); } },
         { label: 'Recarregar sem cache', accelerator: 'CmdOrCtrl+Shift+R', click: () => { const w = curWC(); if (w) w.reloadIgnoringCache(); } },
         { type: 'separator' },
         { label: 'Tamanho real', accelerator: 'CmdOrCtrl+0', click: () => zoomStep(0) },

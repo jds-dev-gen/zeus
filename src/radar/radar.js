@@ -8,8 +8,8 @@
 const R = window.radar;
 const $ = s => document.querySelector(s);
 
-const REFRESH_EVERY = 15 * 60e3;   // atualiza sozinho a cada 15 min (se estiver aberto)
-const STALE = 10 * 60e3;           // ao voltar ao Radar, atualiza se já passaram 10 min
+const REFRESH_EVERY = 5 * 60e3;    // atualiza sozinho a cada 5 min (pedido do João)
+const STALE = 5 * 60e3;            // ao voltar ao Radar, atualiza se já passaram 5 min
 const PER_FEED = 30, PER_COL = 120, KEEP_READ_DAYS = 21;
 
 const F = (title, url, site) => ({ title, url, site });
@@ -47,7 +47,7 @@ const SUGGEST = {
 };
 
 let D = null;              // { v, cols, cache: {url: {at, ok, error, items}}, read: {link: ts}, lastRefresh }
-let busy = false, saveT = null, modalCol = null;
+let busy = false, saveT = null, modalCol = null, toTop = false;
 const save = () => { clearTimeout(saveT); saveT = setTimeout(() => R.save(D), 400); };
 
 /* ---------- utilidades ---------- */
@@ -145,7 +145,7 @@ async function refresh(force) {
   if (busy) return;
   const all = D.cols.flatMap(c => c.sources);
   const todo = all.filter(s => force || !D.cache[s.url] || Date.now() - (D.cache[s.url].at || 0) > STALE);
-  if (!todo.length) { status(); return; }
+  if (!todo.length) { toTop = false; status(); return; }
   busy = true; $('#refresh').classList.add('spin'); $('#refresh').disabled = true;
   let done = 0;
   status(`A atualizar ${todo.length} fontes…`);
@@ -161,6 +161,7 @@ async function refresh(force) {
   };
   await Promise.all(Array.from({ length: 6 }, worker));
   D.lastRefresh = Date.now();
+  toTop = false;
   busy = false; $('#refresh').classList.remove('spin'); $('#refresh').disabled = false;
   pruneRead(); save(); renderCols(); status();
 }
@@ -192,7 +193,7 @@ function renderCols() {
   const box = $('#cols');
   const unreadOnly = $('#unreadOnly').checked;
   box.style.setProperty('--n', D.cols.length);
-  const scroll = [...box.querySelectorAll('.c-list')].map(l => l.scrollTop);
+  const scroll = toTop ? [] : [...box.querySelectorAll('.c-list')].map(l => l.scrollTop);
   box.replaceChildren(...D.cols.map((col, ci) => {
     let items = colItems(col);
     const unread = items.filter(i => !D.read[i.link]).length;
@@ -339,13 +340,22 @@ async function start() {
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && D && Date.now() - (D.lastRefresh || 0) > STALE) refresh(false); });
 window.addEventListener('focus', () => { if (D && !busy && Date.now() - (D.lastRefresh || 0) > STALE) refresh(false); if (D) status(); });
-$('#refresh').addEventListener('click', () => refresh(true));
+// Atualizar à mão: todas as colunas voltam ao topo, para mostrar as notícias mais recentes
+// (a atualização automática não mexe onde estás a ler)
+function manualRefresh() {
+  document.querySelectorAll('.c-list').forEach(l => l.scrollTo({ top: 0, behavior: 'smooth' }));
+  if (busy) return;
+  toTop = true;
+  refresh(true);
+}
+$('#refresh').addEventListener('click', manualRefresh);
+R.onRefresh(manualRefresh);   // ⌘R e o botão de recarregar do Zeus
 $('#unreadOnly').addEventListener('change', e => { try { localStorage.setItem('radar.unreadOnly', e.target.checked ? '1' : '0'); } catch (x) { /* ok */ } renderCols(); });
 $('#mClose').addEventListener('click', closeModal);
 $('#modal').addEventListener('mousedown', e => { if (e.target.id === 'modal') closeModal(); });
 $('#mSearch').addEventListener('submit', e => { e.preventDefault(); search($('#mQuery').value); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#modal').hidden) closeModal();
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') { e.preventDefault(); refresh(true); }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') { e.preventDefault(); manualRefresh(); }
 });
 start();
