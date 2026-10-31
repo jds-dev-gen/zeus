@@ -14,7 +14,6 @@
 const SOFA = 'https://www.sofascore.com/api/v1';
 const SCHEDULE_EVERY = 15 * 60e3;
 const LIVE_EVERY = 20e3;
-const PRE_WINDOW = 60 * 60e3;          // mostra jogos que começam dentro de 1 hora
 const POST_WINDOW = 45 * 60e3;         // e jogos que acabaram há menos de 45 min (contado a partir de quando o Zeus viu o fim)
 
 const LIVE_CODES = new Set([6, 7, 41, 42, 50]);   // 1.ª parte, 2.ª parte, prolongamento, penáltis
@@ -129,7 +128,8 @@ class Scores {
     return [...this.events.values()].filter(ev => {
       const start = ev.startTimestamp * 1000;
       if (isLive(ev) || BREAK_CODES.has(ev.status.code)) return true;
-      if (ev.status.type === 'notstarted') return start - now < PRE_WINDOW && now - start < 3 * 3600e3;
+      // jogos marcados para hoje aparecem logo, com a hora prevista (e ficam se o início atrasar)
+      if (ev.status.type === 'notstarted') return new Date(start).toDateString() === new Date(now).toDateString() || (start <= now && now - start < 3 * 3600e3);
       if (ev.status.type === 'finished') return this.endedAt.has(ev.id) ? now - this.endedAt.get(ev.id) < POST_WINDOW : now - start < 2 * 3600e3 + POST_WINDOW;
       return false;
     }).sort((a, b) => a.startTimestamp - b.startTimestamp);

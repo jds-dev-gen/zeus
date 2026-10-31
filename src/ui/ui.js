@@ -1443,7 +1443,7 @@ async function openSettings() {
     <div class="set-sec"><h3>Futebol em direto</h3>
       <div class="set-row"><span>Equipas: ${(st.teams || []).length ? esc(st.teams.map(t => t.name).join(', ')) : 'nenhuma ainda'}</span><button class="linkbtn" type="button" id="setTeams">Escolher equipas</button></div>
       <div class="set-row"><span>Aviso quando há golo</span>${segHTML('goalAlerts', String(st.goalAlerts !== false), [['true', 'Notificação'], ['false', 'Não']])}</div>
-      <p class="hint">Quando uma destas equipas joga, aparece uma barra em baixo com o resultado em direto (dados do Sofascore), desde uma hora antes do jogo até pouco depois do fim.</p></div>
+      <p class="hint">Quando uma destas equipas joga, aparece uma barra em baixo com o resultado em direto (dados do Sofascore), desde a manhã do dia do jogo (com a hora prevista) até pouco depois do fim.</p></div>
     <div class="set-sec"><h3>Histórico</h3>
       <p class="hint" id="histLine">Ao escrever um endereço, o Zeus sugere os sites que já visitaste e os que mais visitas.</p>
       <div class="row-btns" id="histImport"></div></div>
