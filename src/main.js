@@ -29,6 +29,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 /* ------------------------------------------------------------------ */
 const DEFAULT_APPS = [
   { id: 'apolo', name: 'Apolo', url: '', mode: 'full', icon: 'apolo', preload: false, linksInTabs: true },
+  { id: 'radar', name: 'Radar', url: 'zeus://radar', mode: 'full', icon: 'radar', preload: false, internal: 'radar' },
   { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true, linksInTabs: true },
   { id: 'mail', name: 'Email', url: 'https://mail.google.com/', mode: 'full', icon: 'mail', preload: true, linksInTabs: true },
   { id: 'cal', name: 'Calendário', url: 'https://calendar.google.com/', mode: 'full', icon: 'cal', preload: false },
@@ -199,6 +200,11 @@ function loadState() {
     // apps novas por defeito entram sem apagar as do João
     const ids = new Set(S.apps.map(a => a.id));
     DEFAULT_APPS.forEach(a => { if (!ids.has(a.id) && !(saved.removedApps || []).includes(a.id)) S.apps.push(a); });
+    // 0.6.0: o Radar (notícias) entra logo a seguir ao Apolo
+    if (!ids.has('radar')) {
+      const i = S.apps.findIndex(a => a.id === 'radar'), j = S.apps.findIndex(a => a.id === 'apolo');
+      if (i > -1 && j > -1 && i !== j + 1) S.apps.splice(j + 1, 0, ...S.apps.splice(i, 1));
+    }
     // 0.2.8: no Apolo os links abrem em separadores (as outras apps abrem tudo dentro de si)
     S.apps.forEach(a => { if (a.id === 'apolo' && a.linksInTabs === undefined) a.linksInTabs = true; });
     // 0.2.9: o WhatsApp também abre os links em separadores
@@ -404,6 +410,7 @@ const SITE_DESKTOP = { 'observador.pt': 1280 };
 const zoomedByUs = new WeakSet();
 const siteOf = wc => { try { return hostOf(wc.getURL()); } catch (e) { return ''; } };
 function fitZoom(view) {
+  if (view.__internal) return;   // páginas do próprio Zeus (Radar) ajustam-se sozinhas
   const wc = view.webContents; if (wc.isDestroyed() || !L.page) return;
   const host = siteOf(wc);
   const own = S.siteZoom && host && S.siteZoom[host];   // zoom escolhido à mão para este site (⌘− / ⌘+)
@@ -1236,6 +1243,7 @@ function extFor(id) { const a = appById(id); const r = a && a.isolated ? appSess
 function ensureAppView(a) {
   if (appViews.has(a.id)) return appViews.get(a.id);
   if (!a.url) return null;
+  if (a.internal && INTERNAL[a.internal]) return ensureInternalView(a);
   const { ses, ext, ready } = sessionForApp(a);
   const view = new WebContentsView({ webPreferences: WEB_PREFS(ses) });
   view.setBackgroundColor('#ffffff');
@@ -1284,6 +1292,75 @@ function ensureAppView(a) {
   const go = () => { if (!wc.isDestroyed() && !wc.getURL()) wc.loadURL(start).catch(() => {}); };
   Promise.race([Promise.resolve(ready), new Promise(r => setTimeout(r, 4000))]).then(go, go);
   return view;
+}
+/* Apps internas: páginas feitas pelo próprio Zeus (não são sites), com uma ponte própria e limitada.
+   O Radar só pode: ler e guardar o seu ficheiro, ir buscar feeds/páginas públicas (sem cookies) e abrir links em separadores. */
+const INTERNAL = {
+  radar: { file: path.join(__dirname, 'radar', 'index.html'), preload: path.join(__dirname, 'radar', 'preload.js') }
+};
+let radarWC = null;
+const isDark = () => S.settings.theme === 'dark' || (S.settings.theme === 'system' && nativeTheme.shouldUseDarkColors);
+function ensureInternalView(a) {
+  const def = INTERNAL[a.internal];
+  const view = new WebContentsView({ webPreferences: {
+    partition: 'persist:zeus-' + a.internal, preload: def.preload,
+    sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, spellcheck: true
+  } });
+  view.__internal = true;
+  view.setBackgroundColor(isDark() ? '#0b0b0c' : '#ffffff');
+  appViews.set(a.id, view);
+  win.contentView.addChildView(view);
+  view.setVisible(false);
+  const wc = view.webContents;
+  if (a.internal === 'radar') radarWC = wc;
+  wc.on('will-navigate', (e, url) => { e.preventDefault(); if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); });
+  wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); return { action: 'deny' }; });
+  wc.on('render-process-gone', (e, d) => { if (d.reason !== 'clean-exit') setTimeout(() => { if (!wc.isDestroyed()) wc.reload(); }, 500); });
+  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; });
+  wc.loadFile(def.file).catch(() => {});
+  return view;
+}
+const RADAR_FILE = () => path.join(app.getPath('userData'), 'radar.json');
+function radarLoad() { try { return JSON.parse(fs.readFileSync(RADAR_FILE(), 'utf8')); } catch (e) { return null; } }
+function radarSave(d) {
+  try {
+    const txt = JSON.stringify(d || {});
+    if (txt.length > 20e6) return false;
+    const tmp = RADAR_FILE() + '.tmp'; fs.writeFileSync(tmp, txt); fs.renameSync(tmp, RADAR_FILE()); return true;
+  } catch (e) { return false; }
+}
+// vai buscar um feed (ou a página de um site, para lhe descobrir o feed); sem cookies, até 5 MB, 15 s no máximo
+async function radarFetch(url) {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return { ok: false, error: 'Endereço inválido.' };
+  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const r = await zeusSession.fetch(url, {
+      signal: ctl.signal, credentials: 'omit', redirect: 'follow',
+      headers: { Accept: 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, application/json;q=0.8, text/html;q=0.7, */*;q=0.5' }
+    });
+    let buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > 5e6) buf = buf.subarray(0, 5e6);
+    const type = r.headers.get('content-type') || '';
+    const head = buf.subarray(0, 4000).toString('latin1');
+    const cs = (/charset=["']?([\w-]+)/i.exec(type) || /encoding=["']([\w-]+)/i.exec(head) || /<meta[^>]+charset=["']?([\w-]+)/i.exec(head) || [])[1] || 'utf-8';
+    let text; try { text = new TextDecoder(cs).decode(buf); } catch (e) { text = new TextDecoder('utf-8').decode(buf); }
+    return { ok: r.ok, status: r.status, url: r.url || url, type, text };
+  } catch (e) {
+    return { ok: false, error: e && e.name === 'AbortError' ? 'O site demorou demasiado a responder.' : 'Não foi possível ligar ao site.' };
+  } finally { clearTimeout(timer); }
+}
+function radarIPC() {
+  const ok = e => radarWC && !radarWC.isDestroyed() && e.sender === radarWC;
+  ipcMain.handle('radar:load', e => ok(e) ? radarLoad() : null);
+  ipcMain.handle('radar:save', (e, d) => ok(e) ? radarSave(d) : false);
+  ipcMain.handle('radar:fetch', (e, url) => ok(e) ? radarFetch(url) : null);
+  ipcMain.handle('radar:theme', e => ok(e) ? (isDark() ? 'dark' : 'light') : null);
+  ipcMain.handle('radar:open', (e, url, background) => {
+    if (!ok(e) || typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false;
+    newTab({ url, space: spaceForOpener(), activate: !background });
+    if (background) ui && ui.send('toast', 'Aberto num separador em segundo plano.');
+    return true;
+  });
 }
 // que endereço guardar para a app voltar lá: só páginas do próprio site; no Gmail, só a caixa da conta
 // (nunca um email a escrever, ex. ?view=cm aberto pela partilha, que fica em branco depois de enviado)
@@ -1758,6 +1835,7 @@ function setupIPC() {
   handle('share:do', (id, pos) => shareDo(id, pos));
   handle('pip:toggle', () => pipToggle());
   handle('pip:sound', () => pipSound());
+  radarIPC();
   handle('page:snapshot', async () => {
     const wc = pageWC(); if (!wc) return '';
     try { const img = await wc.capturePage(); return img.isEmpty() ? '' : 'data:image/jpeg;base64,' + img.toJPEG(80).toString('base64'); } catch (e) { return ''; }
@@ -1831,6 +1909,7 @@ function setupIPC() {
     S.settings = Object.assign({}, S.settings, clean);
     if ('tabMode' in clean || 'rightWide' in clean || 'rightZoom' in clean) setTimeout(applyLayout, 50);
     if (clean.theme) nativeTheme.themeSource = clean.theme === 'system' ? 'system' : clean.theme;
+    if (clean.theme && radarWC && !radarWC.isDestroyed()) radarWC.send('radar:theme', isDark() ? 'dark' : 'light');
     if (!isMac && clean.theme) updateOverlayColors();
     if ('updateRepo' in clean && updater) updater.check(true);
     pushState(true); saveState();
