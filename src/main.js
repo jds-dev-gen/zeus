@@ -14,6 +14,7 @@ const fs = require('fs');
 const { ElectronChromeExtensions } = require('electron-chrome-extensions');
 const { installChromeWebStore, uninstallExtension, loadAllExtensions } = require('electron-chrome-web-store');
 const { Updater } = require('./updater');
+const { Scores } = require('./scores');
 const PKG = require('../package.json');
 
 const isMac = process.platform === 'darwin';
@@ -56,6 +57,8 @@ const DEFAULT_SETTINGS = {
   claudeWidth: 420,
   autoUpdate: true,
   autoPip: true,
+  teams: [],                  // equipas seguidas no futebol em direto (Sofascore): [{ id, name }]
+  goalAlerts: true,           // notificação do Mac quando há golo num desses jogos
   homeFeeds: [],              // contas Google ligadas à página principal (agenda e tarefas do dia)              // ao sair de um separador com vídeo a tocar, o vídeo fica a flutuar
   updateRepo: ''              // utilizador/repositório no GitHub com as versões do Zeus
 };
@@ -1838,6 +1841,17 @@ function setupIPC() {
   handle('pip:toggle', () => pipToggle());
   handle('pip:sound', () => pipSound());
   radarIPC();
+  handle('scores:get', () => scoreList);
+  handle('scores:search', q => scores ? scores.search(q) : []);
+  handle('scores:teams', list => {
+    const clean = (Array.isArray(list) ? list : []).slice(0, 30)
+      .map(t => ({ id: Math.floor(+t.id), name: String(t.name || '').slice(0, 80), country: String(t.country || '').slice(0, 60) }))
+      .filter(t => t.id > 0 && t.name);
+    S.settings.teams = clean; saveState(); pushState(true);
+    if (scores) scores.setTeams(clean);
+    return clean;
+  });
+  handle('scores:open', id => { const u = scores && scores.url(id); if (u) newTab({ url: u, space: spaceForOpener() }); });
   handle('page:snapshot', async () => {
     const wc = pageWC(); if (!wc) return '';
     try { const img = await wc.capturePage(); return img.isEmpty() ? '' : 'data:image/jpeg;base64,' + img.toJPEG(80).toString('base64'); } catch (e) { return ''; }
@@ -1903,7 +1917,7 @@ function setupIPC() {
   handle('claude:ask', text => sendToClaude(String(text || '')));
   handle('claude:new', () => { setClaude(true); claudeView.webContents.loadURL('https://claude.ai/new').catch(() => {}); });
   handle('settings:set', (patch = {}) => {
-    const ALLOWED = Object.keys(DEFAULT_SETTINGS).filter(k => k !== 'homeFeeds');
+    const ALLOWED = Object.keys(DEFAULT_SETTINGS).filter(k => k !== 'homeFeeds' && k !== 'teams');
     const clean = {};
     for (const k of Object.keys(patch)) if (ALLOWED.includes(k)) clean[k] = patch[k];
     ['panelWidth', 'claudeWidth'].forEach(k => { if (k in clean) clean[k] = Math.max(280, Math.min(1400, Math.round(+clean[k] || 420))); });
@@ -1951,6 +1965,25 @@ function setupUpdater() {
     onStatus: st => { if (ui && !ui.isDestroyed()) ui.send('update', st); }
   });
   updater.start();
+}
+
+/* Futebol em direto (ver scores.js): a barra de resultados em baixo e o aviso de golo */
+let scores = null, scoreList = [];
+function setupScores() {
+  scores = new Scores({
+    session: zeusSession, BrowserWindow,
+    base: !app.isPackaged && process.env.ZEUS_TEST_SCORES ? process.env.ZEUS_TEST_SCORES : undefined,
+    log: m => console.log(m),
+    onChange: list => { scoreList = list; if (ui && !ui.isDestroyed()) ui.send('scores', list); },
+    onGoal: m => {
+      if (S.settings.goalAlerts === false || !Notification.isSupported()) return;
+      const who = m.goalSide === 'home' ? m.home : m.away;
+      const n = new Notification({ title: `⚽ Golo ${who.mine ? 'do ' : ''}${who.full}!`, body: `${m.home.full} ${m.home.score}–${m.away.score} ${m.away.full}${m.label ? ' · ' + m.label : ''}`, silent: false });
+      n.on('click', () => { if (win) { win.show(); win.focus(); } newTab({ url: m.url, space: spaceForOpener() }); });
+      n.show();
+    }
+  });
+  scores.start(S.settings.teams || []);
 }
 
 function updateOverlayColors() {
@@ -2095,6 +2128,7 @@ app.whenReady().then(async () => {
   createWindow();
   await setupExtensions();
   setupUpdater();
+  setupScores();
   // abre o separador atual e carrega em segundo plano as apps com notificações
   // o Zeus abre sempre na página principal (hora, meteorologia, agenda e tarefas)
   goHome();

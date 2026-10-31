@@ -655,6 +655,73 @@ function setPipSound(p) {
   b.title = p.muted ? 'Ligar o som do vídeo a flutuar' : 'Tirar o som do vídeo a flutuar';
 }
 Z.on('pip', setPipSound);
+/* ---------- Futebol em direto: barra de resultados em baixo ---------- */
+let scoreList = [], scoreHidden = new Set(), scoreGoalSeen = new Map();
+function renderScores(list) {
+  if (list) scoreList = list;
+  const bar = $('#scorebar');
+  // um golo novo faz a barra voltar a aparecer, mesmo que tenha sido fechada
+  scoreList.forEach(m => { if (m.goalAt && scoreGoalSeen.get(m.id) !== m.goalAt) { scoreGoalSeen.set(m.id, m.goalAt); scoreHidden.delete(m.id); } });
+  const show = scoreList.filter(m => !scoreHidden.has(m.id));
+  const was = !bar.hidden;
+  bar.hidden = !show.length;
+  if (show.length) {
+    const fresh = m => m.goalAt && Date.now() - m.goalAt < 60e3;
+    const side = (t, sideName, m) => `<span class="sc-team ${t.mine ? 'mine' : ''} ${fresh(m) && m.goalSide === sideName ? 'goal' : ''}"><img src="${esc(t.logo)}" alt="" referrerpolicy="no-referrer" loading="lazy">${esc(t.name)}</span>`;
+    bar.innerHTML = show.map(m => `<div class="sc ${m.state} ${fresh(m) ? 'flash' : ''}">
+      <button class="sc-main" type="button" data-scopen="${m.id}" title="${esc(m.comp)} — abrir o jogo no Sofascore">
+        <span class="sc-st">${m.state === 'live' ? '<i class="sc-dot"></i>' : ''}${esc(m.label)}</span>
+        ${side(m.home, 'home', m)}
+        <b class="sc-score">${m.state === 'pre' ? '–' : `${m.home.score ?? 0}<span>–</span>${m.away.score ?? 0}`}</b>
+        ${side(m.away, 'away', m)}
+        ${m.pens ? `<small>pen. ${esc(m.pens)}</small>` : ''}
+        <small class="sc-comp">${esc(m.comp)}</small>
+      </button>
+      <button class="sc-x" type="button" data-schide="${m.id}" aria-label="Esconder este jogo" title="Esconder este jogo">${ICON.x}</button></div>`).join('');
+  } else bar.innerHTML = '';
+  if (was !== !bar.hidden) sendLayout();
+}
+Z.on('scores', renderScores);
+// emblemas que não carregam ficam invisíveis (em vez do ícone de imagem partida)
+document.addEventListener('error', e => { const t = e.target; if (t && t.matches && t.matches('.tm-logo, .sc-team img')) t.style.visibility = 'hidden'; }, true);
+Z.invoke('scores:get').then(l => renderScores(l || []));
+setInterval(() => { if (scoreList.some(m => m.goalAt && Date.now() - m.goalAt < 70e3)) renderScores(); }, 15e3);
+$('#scorebar').addEventListener('click', e => {
+  const h = e.target.closest('[data-schide]'); if (h) { scoreHidden.add(+h.dataset.schide); renderScores(); return; }
+  const o = e.target.closest('[data-scopen]'); if (o) Z.invoke('scores:open', +o.dataset.scopen);
+});
+function openTeams() {
+  const draw = () => {
+    const teams = S.settings.teams || [];
+    $('#tmList').innerHTML = teams.length ? teams.map(t => `<div class="li"><img class="tm-logo" src="https://img.sofascore.com/api/v1/team/${+t.id}/image" alt="" referrerpolicy="no-referrer"><div class="grow"><span>${esc(t.name)}</span>${t.country ? `<small>${esc(t.country)}</small>` : ''}</div><button class="nb" type="button" data-tmrm="${+t.id}" aria-label="Deixar de seguir ${esc(t.name)}">${ICON.x}</button></div>`).join('') : '<p class="hint">Ainda não segues nenhuma equipa.</p>';
+  };
+  openModal('teams', `${modalHead('Equipas que segues')}
+    <div class="list" id="tmList"></div>
+    <form id="tmForm" class="section" autocomplete="off" style="margin-top:14px">
+      <div class="field"><label for="tmQ">Procurar equipa</label>
+        <div style="display:flex;gap:8px"><input class="inp" id="tmQ" style="flex:1" type="text" placeholder="Ex.: Benfica, Sporting, Liverpool, Portugal" spellcheck="false"><button class="btn" type="submit">Procurar</button></div></div>
+      <div class="list" id="tmRes"></div>
+    </form>`);
+  draw();
+  const save = async list => { const clean = await Z.invoke('scores:teams', list); S.settings.teams = clean; draw(); };
+  $('#tmList').addEventListener('click', e => { const b = e.target.closest('[data-tmrm]'); if (b) save((S.settings.teams || []).filter(t => t.id !== +b.dataset.tmrm)); });
+  let found = [];
+  $('#tmForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const q = $('#tmQ').value.trim(); if (!q) return;
+    $('#tmRes').innerHTML = '<p class="hint">A procurar…</p>';
+    found = await Z.invoke('scores:search', q).catch(() => []) || [];
+    const have = new Set((S.settings.teams || []).map(t => t.id));
+    $('#tmRes').innerHTML = found.length ? found.map((t, i) => `<div class="li"><img class="tm-logo" src="${esc(t.logo)}" alt="" referrerpolicy="no-referrer"><div class="grow"><span>${esc(t.name)}${t.women && !/\(W\)/.test(t.name) ? ' (feminino)' : ''}</span><small>${esc(t.country)}</small></div>${have.has(t.id) ? '<small>A seguir</small>' : `<button class="btn ghost" type="button" data-tmadd="${i}">Seguir</button>`}</div>`).join('')
+      : '<p class="hint">Não encontrei nenhuma equipa com esse nome. Se nada aparecer para equipas conhecidas, o Sofascore pode estar a recusar o pedido — tenta daqui a um bocado.</p>';
+  });
+  $('#tmRes').addEventListener('click', async e => {
+    const b = e.target.closest('[data-tmadd]'); if (!b) return;
+    const t = found[+b.dataset.tmadd];
+    await save([...(S.settings.teams || []), { id: t.id, name: t.name, country: t.country }]);
+    b.replaceWith(Object.assign(document.createElement('small'), { textContent: 'A seguir' }));
+  });
+}
 $('#pipSound').addEventListener('click', async () => { const st = await Z.invoke('pip:sound'); setPipSound({ on: !!st, muted: st === 'muted' }); });
 $('#closeTabBtn').addEventListener('click', () => { const t = curTab(); if (t) Z.invoke('tab:close', t.id); });
 $('#shareBtn').addEventListener('click', () => { shareOpen ? closeShare() : openShare(); });
@@ -1373,6 +1440,10 @@ async function openSettings() {
     <div class="set-sec"><h3>Permissões dadas a sites</h3><div class="list" id="setPerm"><p class="hint">A carregar…</p></div></div>
     <div class="set-sec"><h3>Página principal</h3>
       <div class="set-row"><span>Agenda e tarefas de hoje: ${(st.homeFeeds || []).length ? esc((st.homeFeeds || []).map(f => f.label).join(', ')) : 'nenhuma conta ligada'}</span><button class="linkbtn" type="button" id="setHome">${(st.homeFeeds || []).length ? 'Gerir contas' : 'Ligar contas'}</button></div></div>
+    <div class="set-sec"><h3>Futebol em direto</h3>
+      <div class="set-row"><span>Equipas: ${(st.teams || []).length ? esc(st.teams.map(t => t.name).join(', ')) : 'nenhuma ainda'}</span><button class="linkbtn" type="button" id="setTeams">Escolher equipas</button></div>
+      <div class="set-row"><span>Aviso quando há golo</span>${segHTML('goalAlerts', String(st.goalAlerts !== false), [['true', 'Notificação'], ['false', 'Não']])}</div>
+      <p class="hint">Quando uma destas equipas joga, aparece uma barra em baixo com o resultado em direto (dados do Sofascore), desde uma hora antes do jogo até pouco depois do fim.</p></div>
     <div class="set-sec"><h3>Histórico</h3>
       <p class="hint" id="histLine">Ao escrever um endereço, o Zeus sugere os sites que já visitaste e os que mais visitas.</p>
       <div class="row-btns" id="histImport"></div></div>
@@ -1396,6 +1467,7 @@ async function openSettings() {
   }));
   $('#setCity').addEventListener('click', openCity);
   $('#setHome').addEventListener('click', openHomeSetup);
+  $('#setTeams').addEventListener('click', openTeams);
   renderUpdate();
   $('#updCheck').addEventListener('click', async () => { U = await Z.invoke('update:check'); renderUpdate(); });
   $('#updInstall').addEventListener('click', installUpdate);
