@@ -396,9 +396,9 @@ function placeView(view, rect) {
 /*
  * Separadores à direita com títulos: a página fica mais estreita e muitos sites passam para o aspeto
  * de tablet/telemóvel. Para o evitar, reduz-se o zoom da página principal o suficiente para ela "ver"
- * pelo menos 1280 píxeis de largura (no máximo até 75%). Nos outros modos o zoom volta a 100%.
+ * pelo menos 1200 píxeis de largura (no máximo até 75%). Nos outros modos o zoom volta a 100%.
  */
-const DESKTOP_WIDTH = 1280;
+const DESKTOP_WIDTH = 1200;   // meio-termo: aspeto de computador sem o texto ficar demasiado pequeno
 const zoomedByUs = new WeakSet();
 function fitZoom(view) {
   const wc = view.webContents; if (wc.isDestroyed() || !L.page) return;

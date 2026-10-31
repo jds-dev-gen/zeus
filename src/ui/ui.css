@@ -164,7 +164,7 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 /* ---------- área da página ---------- */
 .viewport { flex: 1; min-width: 0; position: relative; background: var(--bg); overflow: hidden; display: flex; flex-direction: column; }
 #pageSlot { flex: 1; overflow-y: auto; }
-.right { width: 260px; flex-shrink: 0; border-left: 1px solid var(--line); background: var(--bg); overflow-y: auto; padding: 12px 10px; display: flex; flex-direction: column; gap: 14px; }
+.right { width: 220px; flex-shrink: 0; border-left: 1px solid var(--line); background: var(--bg); overflow-y: auto; padding: 12px 10px; display: flex; flex-direction: column; gap: 14px; }
 .right.compact { width: 56px; padding: 10px 6px; gap: 10px; align-items: center; }
 .right.compact .rt { width: 40px; height: 36px; padding: 0; justify-content: center; }
 .right.compact .rt .fav { margin: 0; }
