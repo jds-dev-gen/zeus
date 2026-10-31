@@ -94,3 +94,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .results .hint { color: var(--muted); font-size: 12.5px; padding: 8px; }
 .results .hint:hover { background: none; }
 .added { font-size: 12px; color: var(--muted); padding: 0 6px; }
+
+/* pesquisa por termos */
+.q { display: flex; align-items: center; gap: 8px; height: 34px; width: min(380px, 34vw); padding: 0 8px 0 11px; border: 1px solid var(--line2); border-radius: 10px; background: var(--surface); color: var(--muted); }
+.q:focus-within { border-color: var(--muted); color: var(--fg); }
+.q input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--fg); font: inherit; font-size: 13.5px; }
+.q input::-webkit-search-cancel-button { display: none; }
+.q-x { border: 0; background: transparent; color: var(--muted); font-size: 12px; padding: 2px 4px; border-radius: 5px; }
+.q-x:hover { color: var(--fg); background: var(--surface2); }
+mark { background: #f5d76e; color: #0b0b0c; border-radius: 3px; padding: 0 1px; }
+.it.read mark { opacity: .7; }
+.col.web .c-name { background: var(--inv-bg); color: var(--inv-fg); }

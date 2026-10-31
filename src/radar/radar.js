@@ -121,7 +121,9 @@ function parseFeed(text, base) {
     if (!img) { const m = /<img[^>]+src=["']([^"']+)["']/i.exec(body); if (m) img = m[1].replace(/&amp;/g, '&'); }
     try { img = img ? new URL(img, link).href : ''; } catch (e) { img = ''; }
     const t = plain(txt(it, 'title')) || '(sem título)';
-    items.push({ link, title: t, date, img: httpOnly(img) || '', summary: plain(body).slice(0, 280) });
+    const srcName = txt(it, 'source');
+    const srcEl = kids(it, 'source')[0], srcSite = srcEl ? hostOf(srcEl.getAttribute('url') || '') : '';
+    items.push({ link, title: srcName && t.endsWith(' - ' + srcName) ? t.slice(0, -(srcName.length + 3)) : t, date, img: httpOnly(img) || '', summary: plain(body).slice(0, 280), srcName: srcName || undefined, srcSite: srcSite || undefined });
   }
   if (!chan && !items.length) return null;
   return { title: plain(title), site: siteLink, items };
@@ -178,21 +180,56 @@ function status(msg) {
 }
 
 /* ---------- colunas ---------- */
+/* ---------- pesquisa por termos ---------- */
+// sem acentos e sem maiúsculas, mantendo as posições (para sublinhar o que encontrou)
+const fold = t => [...String(t || '')].map(c => (c.normalize('NFD').replace(/\p{M}/gu, '')[0] || c).toLowerCase()).join('');
+let Q = '', QT = [], web = null, webT = null;   // termos da pesquisa; resultados da web { q, items, loading, error }
+const matches = it => QT.every(w => fold(it.title + ' ' + (it.summary || '') + ' ' + (it.srcName || (it.src && it.src.title) || '')).includes(w));
+function marked(text) {
+  if (!QT.length) return text;
+  const f = fold(text), hit = new Array(text.length).fill(false);
+  for (const w of QT) { let i = f.indexOf(w); while (i > -1) { for (let k = i; k < i + w.length; k++) hit[k] = true; i = f.indexOf(w, i + w.length); } }
+  const out = []; let i = 0;
+  while (i < text.length) { let j = i; while (j < text.length && hit[j] === hit[i]) j++; const part = text.slice(i, j); out.push(hit[i] ? h('mark', {}, part) : part); i = j; }
+  return out;
+}
+function setQuery(q) {
+  Q = q.trim(); QT = fold(Q).split(/\s+/).filter(Boolean);
+  $('#qClear').hidden = !Q;
+  document.body.classList.toggle('searching', !!Q);
+  clearTimeout(webT);
+  if (!Q) web = null;
+  else if (Q.length >= 3 && (!web || web.q !== Q)) webT = setTimeout(() => searchWeb(Q), 700);
+  renderCols();
+}
+// também procura no Google Notícias (notícias de todos os jornais sobre o tema, em português)
+async function searchWeb(q) {
+  web = { q, items: [], loading: true };
+  renderCols();
+  const r = await R.fetch(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=pt-PT&gl=PT&ceid=PT:pt-150`);
+  if (!web || web.q !== q) return;
+  const f = r && r.text && parseFeed(r.text, r.url);
+  web = { q, loading: false, items: f ? f.items.slice(0, 30).sort((a, b) => b.date - a.date) : [], error: f ? '' : 'Não foi possível procurar no Google Notícias.' };
+  renderCols();
+}
+
 function colItems(col) {
   const out = [], seen = new Set();
   for (const s of col.sources) {
     const c = D.cache[s.url];
     for (const it of (c && c.items) || []) {
       if (seen.has(it.link)) continue; seen.add(it.link);
+      if (QT.length && !matches({ ...it, src: s })) continue;
       out.push({ ...it, src: s });
     }
   }
-  return out.sort((a, b) => b.date - a.date).slice(0, PER_COL);
+  return out.sort((a, b) => b.date - a.date).slice(0, QT.length ? 300 : PER_COL);
 }
 function renderCols() {
   const box = $('#cols');
   const unreadOnly = $('#unreadOnly').checked;
-  box.style.setProperty('--n', D.cols.length);
+  const webCol = !!Q && !!web;
+  box.style.setProperty('--n', D.cols.length + (webCol ? 1 : 0));
   const scroll = toTop ? [] : [...box.querySelectorAll('.c-list')].map(l => l.scrollTop);
   box.replaceChildren(...D.cols.map((col, ci) => {
     let items = colItems(col);
@@ -203,7 +240,7 @@ function renderCols() {
       !col.sources.length
         ? h('p', { class: 'c-empty' }, 'Ainda não há fontes nesta coluna. ', h('button', { type: 'button', onclick: () => openModal(col.id) }, 'Adicionar fontes'))
         : !items.length
-          ? h('p', { class: 'c-empty' }, busy || col.sources.some(s => !D.cache[s.url]) ? 'A carregar…' : unreadOnly ? 'Já leste tudo nesta coluna.' : 'Sem notícias de momento.')
+          ? h('p', { class: 'c-empty' }, Q ? `Nada sobre “${Q}” nesta coluna.` : busy || col.sources.some(s => !D.cache[s.url]) ? 'A carregar…' : unreadOnly ? 'Já leste tudo nesta coluna.' : 'Sem notícias de momento.')
           : items.map(itemEl),
       errs.length ? h('button', { class: 'c-err', type: 'button', onclick: () => openModal(col.id) }, errs.length === 1 ? `Não foi possível ler “${errs[0].title}”.` : `${errs.length} fontes com problemas.`, ' Ver fontes') : null
     );
@@ -212,11 +249,16 @@ function renderCols() {
         h('span', { class: 'c-name', title: col.name }, col.name, unread ? h('em', {}, String(unread)) : null),
         h('button', { class: 'c-add', type: 'button', title: 'Fontes desta coluna', onclick: () => openModal(col.id) }, '+ Fontes')),
       list);
-  }));
+  }), webCol ? h('section', { class: 'col web' },
+    h('div', { class: 'c-head' }, h('span', { class: 'c-name', title: 'Notícias de todos os jornais, no Google Notícias' }, 'Na web', web.items.length ? h('em', {}, String(web.items.length)) : null)),
+    h('div', { class: 'c-list' }, web.loading ? h('p', { class: 'c-empty' }, `A procurar “${web.q}” no Google Notícias…`)
+      : web.error ? h('p', { class: 'c-empty' }, web.error)
+      : !web.items.length ? h('p', { class: 'c-empty' }, `O Google Notícias não tem nada sobre “${web.q}”.`)
+      : web.items.map(it => itemEl({ ...it, src: { title: it.srcName || 'Google Notícias', site: '' } })))) : null);
   box.querySelectorAll('.c-list').forEach((l, i) => { if (scroll[i]) l.scrollTop = scroll[i]; });
 }
 function itemEl(it) {
-  const host = it.src.site || hostOf(it.link);
+  const host = it.srcSite || it.src.site || hostOf(it.link);
   const fresh = Date.now() - it.date < 3600e3 && !D.read[it.link];
   const open = bg => { D.read[it.link] = Date.now(); save(); R.open(it.link, bg); renderCols(); };
   return h('a', {
@@ -226,8 +268,8 @@ function itemEl(it) {
   },
   h('div', { class: 'it-main' },
     h('div', { class: 'it-meta' }, fresh ? h('i', { class: 'new', title: 'Na última hora' }) : null,
-      h('img', { src: fav(host), alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }), h('b', {}, it.src.title), h('span', {}, '· ' + ago(it.date))),
-    h('div', { class: 'it-title' }, it.title)),
+      h('img', { src: fav(host), alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }), h('b', {}, it.srcName || it.src.title), h('span', {}, '· ' + ago(it.date))),
+    h('div', { class: 'it-title' }, marked(it.title))),
   it.img ? h('img', { class: 'it-thumb', src: it.img, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: e => e.target.remove() }) : null);
 }
 
@@ -354,8 +396,17 @@ $('#unreadOnly').addEventListener('change', e => { try { localStorage.setItem('r
 $('#mClose').addEventListener('click', closeModal);
 $('#modal').addEventListener('mousedown', e => { if (e.target.id === 'modal') closeModal(); });
 $('#mSearch').addEventListener('submit', e => { e.preventDefault(); search($('#mQuery').value); });
+let qT = null;
+$('#q').addEventListener('input', e => { clearTimeout(qT); qT = setTimeout(() => setQuery(e.target.value), 140); });
+$('#q').addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.target.value = ''; setQuery(''); e.target.blur(); }
+  if (e.key === 'Enter') { clearTimeout(qT); setQuery(e.target.value); if (Q) { clearTimeout(webT); if (!web || web.q !== Q || web.error) searchWeb(Q); } }
+});
+$('#qClear').addEventListener('click', () => { $('#q').value = ''; setQuery(''); $('#q').focus(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#modal').hidden) closeModal();
+  // "/" ou ⌘K vão para a pesquisa
+  if ((e.key === '/' && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) { e.preventDefault(); $('#q').focus(); $('#q').select(); }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') { e.preventDefault(); manualRefresh(); }
 });
 start();
