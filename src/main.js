@@ -1033,7 +1033,35 @@ async function inFrames(wc, code) {
   for (const f of frames) { try { out.push(await f.executeJavaScript(code, true)); } catch (e) { /* moldura sem acesso */ } }
   return out;
 }
-async function pipEnter(wc, force) { const r = await inFrames(wc, PIP_ENTER(force)); return r.includes('ok') || r.includes('already'); }
+async function pipEnter(wc, force) {
+  const r = await inFrames(wc, PIP_ENTER(force));
+  const ok = r.includes('ok') || r.includes('already');
+  if (ok) pipWatch(wc);
+  return ok;
+}
+/* Som do vídeo a flutuar: a janela de vídeo flutuante do Chromium não tem botão de som, por isso o Zeus põe um na barra de cima
+   enquanto houver um vídeo a flutuar (sites como o RTP Play começam o direto sem som). */
+const PIP_INFO = `(() => { const v = document.pictureInPictureElement; return v ? (v.muted || v.volume === 0 ? 'muted' : 'sound') : null; })()`;
+const PIP_SOUND = `(() => { const v = document.pictureInPictureElement; if (!v) return null;
+  if (v.muted || v.volume === 0) { v.muted = false; if (v.volume === 0) v.volume = 1; if (v.paused) v.play().catch(() => {}); } else v.muted = true;
+  return v.muted ? 'muted' : 'sound'; })()`;
+let pipWC = null, pipTimer = null, pipSent = '';
+const pipFind = async wc => (await inFrames(wc, PIP_INFO)).find(x => x === 'muted' || x === 'sound') || null;
+function pipSend(state) { const k = state || ''; if (k !== pipSent) { pipSent = k; ui && ui.send('pip', { on: !!state, muted: state === 'muted' }); } }
+function pipWatch(wc) {
+  pipWC = wc; clearInterval(pipTimer);
+  const tick = async () => {
+    const st = pipWC && !pipWC.isDestroyed() ? await pipFind(pipWC) : null;
+    pipSend(st);
+    if (!st) { clearInterval(pipTimer); pipTimer = null; pipWC = null; }
+  };
+  setTimeout(tick, 300); pipTimer = setInterval(tick, 1500);
+}
+async function pipSound() {
+  if (!pipWC || pipWC.isDestroyed()) return null;
+  const st = (await inFrames(pipWC, PIP_SOUND)).find(x => x === 'muted' || x === 'sound') || null;
+  pipSend(st); return st;
+}
 const pipTabs = new Set();   // separadores cujo vídeo passou a flutuar automaticamente
 function autoPip(tabId) {
   if (S.settings.autoPip === false) return;
@@ -1729,6 +1757,7 @@ function setupIPC() {
   handle('share:info', () => shareInfo());
   handle('share:do', (id, pos) => shareDo(id, pos));
   handle('pip:toggle', () => pipToggle());
+  handle('pip:sound', () => pipSound());
   handle('page:snapshot', async () => {
     const wc = pageWC(); if (!wc) return '';
     try { const img = await wc.capturePage(); return img.isEmpty() ? '' : 'data:image/jpeg;base64,' + img.toJPEG(80).toString('base64'); } catch (e) { return ''; }

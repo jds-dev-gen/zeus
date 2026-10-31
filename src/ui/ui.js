@@ -647,6 +647,14 @@ function goHomeUI() {
   setTimeout(() => { const i = $('#askInput'); if (i) { i.focus(); i.select(); } }, 80);
 }
 $('#pipBtn').addEventListener('click', () => Z.invoke('pip:toggle'));
+const SPK = muted => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke-width="1.5"/>${muted ? '<path d="m16 9 5 6M21 9l-5 6"/>' : '<path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'}</svg>`;
+function setPipSound(p) {
+  const b = $('#pipSound'); b.hidden = !(p && p.on); if (b.hidden) return;
+  b.innerHTML = SPK(p.muted); b.classList.toggle('on', !p.muted);
+  b.title = p.muted ? 'Ligar o som do vídeo a flutuar' : 'Tirar o som do vídeo a flutuar';
+}
+Z.on('pip', setPipSound);
+$('#pipSound').addEventListener('click', async () => { const st = await Z.invoke('pip:sound'); setPipSound({ on: !!st, muted: st === 'muted' }); });
 $('#closeTabBtn').addEventListener('click', () => { const t = curTab(); if (t) Z.invoke('tab:close', t.id); });
 $('#shareBtn').addEventListener('click', () => { shareOpen ? closeShare() : openShare(); });
 $('#btnFwd').addEventListener('click', () => Z.invoke('nav', 'forward'));
