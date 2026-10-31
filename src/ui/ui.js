@@ -267,7 +267,7 @@ function renderRight() {
   r.innerHTML = toggle + S.spaces.map(s => {
     const list = S.tabs.filter(t => t.space === s.id);
     if (!list.length) return '';
-    return `<div style="display:flex;flex-direction:column;gap:2px"><span class="lbl-mono" style="padding:0 8px 6px">${esc(s.name)}</span>${list.map(t => `<div class="rt ${t.id === S.currentId ? 'on' : ''}" role="button" tabindex="0" data-open="${t.id}"><span class="fav">${favHTML(t)}</span><span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><button class="nb x" type="button" data-close="${t.id}" aria-label="Fechar">${ICON.x}</button></div>`).join('')}</div>`;
+    return `<div style="display:flex;flex-direction:column;gap:2px"><span class="rt-head">${esc(s.name)}</span>${list.map(t => `<div class="rt ${t.id === S.currentId ? 'on' : ''}" role="button" tabindex="0" data-open="${t.id}"><span class="fav">${favHTML(t)}</span><span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><button class="nb x" type="button" data-close="${t.id}" aria-label="Fechar">${ICON.x}</button></div>`).join('')}</div>`;
   }).join('') + `<button class="rt" type="button" data-newtab>${ICON.plus}<span class="t">Separador novo</span></button>`;
 }
 
@@ -309,7 +309,7 @@ function makeResizer(handle, panel, side, key) {
     const startX = e.clientX, startW = panel.getBoundingClientRect().width;
     const move = ev => {
       let w = side === 'right' ? startW + (ev.clientX - startX) : startW - (ev.clientX - startX);
-      const max = Math.max(320, window.innerWidth - 84 - 380);
+      const max = Math.max(320, window.innerWidth - 74 - 380);
       w = Math.max(300, Math.min(max, w));
       panel.style.width = Math.round(w) + 'px';
       sendLayout();

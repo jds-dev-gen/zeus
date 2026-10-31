@@ -10,6 +10,7 @@
   --veil: rgba(11, 11, 12, .66); --veil-line: rgba(255, 255, 255, .13); --veil-fill: rgba(255, 255, 255, .07);
   --zone-line: rgba(255, 255, 255, .22); --zone-fill: rgba(255, 255, 255, .035); --zone-cur: rgba(255, 255, 255, .55);
   --shadow: rgba(0, 0, 0, .45);
+  --sph-bg: #3a3a3e; --sph-fg: #f6f6f4;
   --font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   color-scheme: dark;
@@ -22,6 +23,7 @@
   --veil: rgba(246, 246, 247, .72); --veil-line: rgba(0, 0, 0, .1); --veil-fill: rgba(0, 0, 0, .05);
   --zone-line: rgba(0, 0, 0, .2); --zone-fill: rgba(255, 255, 255, .5); --zone-cur: rgba(0, 0, 0, .55);
   --shadow: rgba(0, 0, 0, .18);
+  --sph-bg: #47474c; --sph-fg: #ffffff;
   color-scheme: light;
 }
 
@@ -108,7 +110,7 @@ browser-action-list::part(action):hover { background-color: var(--surface); }
 .main { flex: 1; min-height: 0; display: flex; position: relative; }
 
 /* ---------- barra de apps ---------- */
-.rail { width: 84px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; border-right: 1px solid var(--line); background: var(--rail); overflow: hidden; }
+.rail { width: 74px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; border-right: 1px solid var(--line); background: var(--rail); overflow: hidden; }
 /* só os ícones fazem scroll; a hora e as definições ficam sempre visíveis em baixo */
 .rail-apps { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 14px 0 12px; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
 .rail-apps::-webkit-scrollbar { display: none; }
@@ -118,8 +120,8 @@ browser-action-list::part(action):hover { background-color: var(--surface); }
 .app-btn { position: relative; width: 50px; height: 50px; border-radius: 16px; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line2); transition: transform .12s ease; }
 .app-btn:hover { transform: translateY(-1px); }
 .app-item.on .app-btn { background: var(--inv-bg); border-color: var(--inv-bg); color: var(--inv-fg); }
-.app-item.on::before { content: ""; position: absolute; left: -17px; top: 11px; width: 4px; height: 28px; border-radius: 0 4px 4px 0; background: var(--fg); }
-.app-item .lbl { font-size: 10.5px; color: var(--muted); max-width: 78px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-item.on::before { content: ""; position: absolute; left: -12px; top: 11px; width: 4px; height: 28px; border-radius: 0 4px 4px 0; background: var(--fg); }
+.app-item .lbl { font-size: 10.5px; color: var(--muted); max-width: 70px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-item.on .lbl { color: var(--fg); font-weight: 600; }
 .app-btn .letter { font-size: 18px; font-weight: 700; }
 .badge { position: absolute; top: -5px; right: -6px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: var(--fg); color: var(--bg); font-size: 10.5px; font-weight: 700; display: grid; place-items: center; border: 2px solid var(--rail); pointer-events: none; }
@@ -169,7 +171,8 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .right.compact .rt { width: 40px; height: 36px; padding: 0; justify-content: center; }
 .right.compact .rt .fav { margin: 0; }
 .rt-sp { display: flex; flex-direction: column; align-items: center; gap: 3px; padding-top: 8px; border-top: 1px solid var(--line); width: 100%; }
-.rt-sp-l { font-family: var(--mono); font-size: 9.5px; color: var(--muted); letter-spacing: .06em; padding-bottom: 2px; }
+.rt-sp-l { font-family: var(--mono); font-size: 9.5px; font-weight: 600; color: var(--sph-fg); background: var(--sph-bg); letter-spacing: .06em; padding: 2px 6px; border-radius: 5px; margin-bottom: 2px; }
+.rt-head { display: block; font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--sph-fg); background: var(--sph-bg); padding: 5px 8px; border-radius: 6px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rt-toggle .arr { width: 20px; text-align: center; font-size: 16px; color: var(--muted); }
 .rt { position: relative; display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 6px 0 7px; border-radius: 7px; border: 0; background: transparent; width: 100%; font-size: 12px; color: var(--soft); text-align: left; }
 .rt:hover { background: var(--surface); }
