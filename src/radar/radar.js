@@ -317,6 +317,7 @@ R.onPreviewState(st => { if (PV) $('#pvSlot').classList.toggle('loading', !!st.l
 $('#pvClose').addEventListener('click', () => closePreview());
 $('#pvPrev').addEventListener('click', () => stepPreview(-1));
 $('#pvNext').addEventListener('click', () => stepPreview(1));
+$('#pvShare').addEventListener('click', e => { if (!PV) return; const r = e.currentTarget.getBoundingClientRect(); R.share({ x: r.left, y: r.bottom + 4 }, PV.it.title); });
 $('#pvTab').addEventListener('click', async () => { if (!PV) return; PV = null; await R.previewToTab(); document.body.classList.remove('previewing'); $('#pv').hidden = true; renderCols(); });
 new ResizeObserver(() => { if (PV) R.previewRect(slotRect()); }).observe($('#pvSlot'));
 window.addEventListener('resize', () => { if (PV) R.previewRect(slotRect()); });

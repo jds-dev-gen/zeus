@@ -1149,8 +1149,8 @@ function shareInfo() {
   return Object.assign(c, { targets: shareTargets(), mac: isMac });
 }
 function appUser(a, re) { const m = re.exec(S.appLast[a.id] || ''); return m ? m[1] : null; }
-function shareDo(id, pos) {
-  const c = shareCurrent();
+function shareDo(id, pos, page) {
+  const c = page && /^https?:/.test(page.url || '') ? page : shareCurrent();
   if (!c) { ui.send('toast', 'Esta página não pode ser partilhada.'); return; }
   const { url, title } = c; const enc = encodeURIComponent; const both = title + '\n' + url;
   const [kind, appId] = String(id).split(':'); const a = appId ? appById(appId) : null;
@@ -1425,6 +1425,26 @@ function radarIPC() {
   });
   ipcMain.handle('radar:previewRect', (e, rect) => { if (ok(e) && radarPrevRect) { radarPrevRect = okRect(rect) || radarPrevRect; placeRadarPreview(); } });
   ipcMain.handle('radar:previewClose', e => { if (ok(e)) radarPreviewClose(false); });
+  // partilhar a notícia da pré-visualização: o mesmo menu de partilha do Zeus, num menu do sistema junto ao botão
+  ipcMain.handle('radar:share', (e, at, fallbackTitle) => {
+    if (!ok(e) || !radarPrev || radarPrev.webContents.isDestroyed()) return false;
+    const pw = radarPrev.webContents, url = pw.getURL();
+    if (!/^https?:/.test(url)) return false;
+    const page = { url, title: pw.getTitle() || String(fallbackTitle || '') || hostOf(url) };
+    const rv = appViews.get('radar'), b = rv ? rv.getBounds() : { x: 0, y: 0 };
+    const pos = at && Number.isFinite(+at.x) ? { x: b.x + Math.round(+at.x), y: b.y + Math.round(+at.y) } : undefined;
+    const go = id => shareDo(id, pos, page);
+    const items = shareTargets().map(t => ({ label: t.label, click: () => go(t.id) }));
+    Menu.buildFromTemplate([
+      ...items,
+      { type: 'separator' },
+      { label: 'Copiar endereço', click: () => go('copy') },
+      { label: 'Copiar título e endereço', click: () => go('copyboth') },
+      ...(isMac ? [{ label: 'Mais opções do Mac…', click: () => go('native') }] : []),
+      { label: 'Abrir no browser do sistema', click: () => go('browser') }
+    ]).popup({ window: win, ...(pos || {}) });
+    return true;
+  });
   // passa a página da pré-visualização para um separador (fica onde estava, sem a recarregar do zero)
   ipcMain.handle('radar:previewToTab', e => {
     if (!ok(e) || !radarPrev || radarPrev.webContents.isDestroyed()) return false;

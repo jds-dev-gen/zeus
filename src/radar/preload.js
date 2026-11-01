@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('radar', {
   previewRect: rect => ipcRenderer.invoke('radar:previewRect', rect),
   previewClose: () => ipcRenderer.invoke('radar:previewClose'),
   previewToTab: () => ipcRenderer.invoke('radar:previewToTab'),
+  share: (at, title) => ipcRenderer.invoke('radar:share', at, title),
   onPreviewState: fn => { ipcRenderer.on('radar:previewState', (e, st) => fn(st)); },
   onPreviewClosed: fn => { ipcRenderer.on('radar:previewClosed', () => fn()); }
 });
