@@ -765,7 +765,7 @@ function renderDlList() {
     const live = d.state === 'progressing', ok = d.state === 'completed' && !d.missing;
     const pct = live && d.total ? Math.round(d.received / d.total * 100) : 0;
     return `<div class="dl ${d.state} ${d.missing ? 'missing' : ''}" data-dl="${esc(d.id)}">
-      <button class="dl-ico ${ok && dlThumbCache.get(d.id) ? 'has-thumb' : ''}" type="button" data-dla="preview" title="${ok ? 'Pré-visualizar' : ''}" ${ok ? '' : 'disabled'}>${ok && dlThumbCache.get(d.id) ? `<img src="${dlThumbCache.get(d.id)}" alt="">` : ''}<span>${esc(extOf(d.name) || '—')}</span></button>
+      <button class="dl-ico ${ok && dlThumbCache.get(d.id) ? 'has-thumb' : ''}" type="button" data-dla="preview" title="${ok ? 'Pré-visualizar' : ''}" ${ok ? '' : 'disabled'}>${ok && dlThumbCache.get(d.id) ? `<span class="dl-th"><img src="${dlThumbCache.get(d.id)}" alt=""><span>${esc(extOf(d.name) || '—')}</span></span>` : `<span>${esc(extOf(d.name) || '—')}</span>`}</button>
       <div class="dl-main">
         <button class="dl-name" type="button" data-dla="open" title="${esc(d.name)}" ${ok ? '' : 'disabled'}>${esc(d.name)}</button>
         <small>${esc(dlState(d))} · ${esc(hostOf(d.url) || '')} · ${esc(dlWhen(d.startedAt))}</small>
@@ -785,7 +785,7 @@ function renderDlList() {
       if (!u) return;
       dlThumbCache.set(d.id, u);
       const b = document.querySelector(`.dl[data-dl="${CSS.escape(d.id)}"] .dl-ico`);
-      if (b && !b.querySelector('img')) { b.classList.add('has-thumb'); b.insertAdjacentHTML('afterbegin', `<img src="${u}" alt="">`); }
+      if (b && !b.querySelector('img')) { b.classList.add('has-thumb'); b.innerHTML = `<span class="dl-th"><img src="${u}" alt=""><span>${esc(extOf(d.name) || '—')}</span></span>`; }
     }).catch(() => {});
   });
 }

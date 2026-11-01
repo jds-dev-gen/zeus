@@ -1666,8 +1666,9 @@ async function dlThumb(id) {
   let url = '';
   try {
     let img = null;
-    if (isMac || process.platform === 'win32') img = await nativeImage.createThumbnailFromPath(d.path, { width: 320, height: 320 });
-    else if (IMG_EXT.test(d.path) && st.size < 40e6) img = nativeImage.createFromPath(d.path);
+    // fotos: a própria imagem (mantém a proporção exata); o resto: miniatura do Quick Look
+    if (IMG_EXT.test(d.path) && st.size < 40e6) img = nativeImage.createFromPath(d.path);
+    if ((!img || img.isEmpty()) && (isMac || process.platform === 'win32')) img = await nativeImage.createThumbnailFromPath(d.path, { width: 320, height: 320 });
     if (img && !img.isEmpty()) {
       const sz = img.getSize();
       if (sz.width > 320 || sz.height > 320) img = img.resize(sz.width >= sz.height ? { width: 320 } : { height: 320 });
