@@ -1612,7 +1612,7 @@ async function openSettings() {
     const hm = t => new Date(t).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
     const parts = [];
     parts.push(st.okAt ? `Sofascore: último contacto às ${hm(st.okAt)} (${st.via})` : 'Sofascore: ainda sem resposta');
-    if (st.big) parts.push(st.bigErr ? st.bigErr : st.bigAt ? `${st.bigTotal} jogos hoje; grandes: ${st.bigFound.length ? st.bigFound.join(', ') : 'nenhum'}` : 'jogos de hoje ainda por ler');
+    if (st.big) parts.push(st.bigErr ? st.bigErr : st.bigAt ? `${st.bigTotal} jogos hoje nas ligas principais (${st.bigLeagues || 0} de 8 lidas); grandes: ${st.bigFound.length ? st.bigFound.join(', ') : 'nenhum'}` : 'jogos de hoje ainda por ler');
     if (st.err && st.errAt > st.okAt) parts.push('Último erro: ' + st.err);
     el.textContent = parts.join(' · ');
   };

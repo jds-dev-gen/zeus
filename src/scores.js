@@ -140,14 +140,23 @@ class Scores {
     this.prune(); this.emit(); this.planLive();
   }
   // os jogos de hoje das principais ligas europeias entre clubes grandes
+  // o Sofascore deixou de ter a lista de todos os jogos do dia (/sport/football/scheduled-events/{dia} dá 404):
+  // pede-se a lista de hoje de cada competição principal (/unique-tournament/{id}/scheduled-events/{dia})
   async loadBig() {
     const d = new Date(), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const j = await this.get(`/sport/football/scheduled-events/${day}`);
-    if (!j || !Array.isArray(j.events)) { this.diag.bigErr = 'Não consegui ler a lista de jogos de hoje. ' + (this.diag.err || ''); return; }
+    const res = await Promise.all([...BIG_TOURNAMENTS].map(id => this.get(`/unique-tournament/${id}/scheduled-events/${day}`).catch(() => null)));
+    const ok = res.filter(j => j && Array.isArray(j.events));
+    if (!ok.length) { this.diag.bigErr = 'Não consegui ler os jogos de hoje das ligas. ' + (this.diag.err || ''); return; }
     this.bigAt = Date.now();
     const found = [];
-    for (const ev of j.events) if (ev && ev.id && isBigEvent(ev) && new Date(ev.startTimestamp * 1000).toDateString() === d.toDateString()) { ev.__big = true; this.store(ev, false); found.push(`${ev.homeTeam.shortName || ev.homeTeam.name}–${ev.awayTeam.shortName || ev.awayTeam.name}`); }
-    this.diag.bigAt = Date.now(); this.diag.bigTotal = j.events.length; this.diag.bigFound = found; this.diag.bigErr = '';
+    let total = 0;
+    for (const j of ok) for (const ev of j.events) {
+      if (!ev || !ev.id || new Date(ev.startTimestamp * 1000).toDateString() !== d.toDateString()) continue;
+      total++;
+      if (isBigEvent(ev)) { ev.__big = true; this.store(ev, false); found.push(`${ev.homeTeam.shortName || ev.homeTeam.name}–${ev.awayTeam.shortName || ev.awayTeam.name}`); }
+    }
+    this.diag.bigAt = Date.now(); this.diag.bigTotal = total; this.diag.bigFound = found; this.diag.bigErr = '';
+    this.diag.bigLeagues = ok.length;
   }
   prune() {
     const now = Date.now();
