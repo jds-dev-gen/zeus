@@ -535,6 +535,8 @@ function wireWeb(wc, kind, ctx = {}) {
 
   wc.setWindowOpenHandler(({ url, disposition, features }) => {
     if (/^(mailto|tel):/i.test(url)) { shell.openExternal(url); return { action: 'deny' }; }
+    // ficheiros gerados pela própria página (o WhatsApp faz isto ao transferir fotos, vídeos e documentos): transferir
+    if (/^(blob|data):/i.test(url)) { try { wc.downloadURL(url); } catch (e) { /* ok */ } return { action: 'deny' }; }
     if (!/^(https?:|about:blank|chrome-extension:)/i.test(url)) return { action: 'deny' };
     const isPopup = disposition === 'new-window' || (features && /width|height|popup/i.test(features));
     if (isPopup) {
@@ -578,7 +580,12 @@ function wireWeb(wc, kind, ctx = {}) {
         }
         setImmediate(() => { try { if (!child.isDestroyed()) child.close(); } catch (e) { /* ok */ } });
       };
-      cw.on('did-start-navigation', d => { if (d.isMainFrame && /^https?:/.test(d.url)) finish(d.url); });
+      cw.on('did-start-navigation', d => {
+        if (!d.isMainFrame) return;
+        if (/^https?:/.test(d.url)) finish(d.url);
+        // a janela em branco recebeu um ficheiro (blob/data): transfere-o pela página que o pediu
+        else if (/^(blob|data):/i.test(d.url)) { const u = d.url; setImmediate(() => { try { if (!wc.isDestroyed()) wc.downloadURL(u); } catch (e) { /* ok */ } }); finish(null); }
+      });
       cw.setWindowOpenHandler(({ url }) => { finish(url); return { action: 'deny' }; });
       setTimeout(() => finish(null), 15000);
       return;
@@ -597,6 +604,8 @@ function wireWeb(wc, kind, ctx = {}) {
   wc.on('context-menu', (e, p) => { const ap = kind === 'app' ? appById(ctx.appId) : null; contextMenu(wc, p, ap && !ap.linksInTabs ? 'app' : kind); });
   // apps com "outros sites em separadores" (ex.: Drive): abrir um documento do Google Docs/Sheets/Slides
   // dentro da própria página vai para um separador, na sessão da app
+  // a página tenta abrir um ficheiro gerado (blob/data) por cima de si própria: transfere-o em vez disso
+  wc.on('will-navigate', (e, url) => { if (/^(blob|data):/i.test(url)) { e.preventDefault(); try { wc.downloadURL(url); } catch (x) { /* ok */ } } });
   if (kind === 'app') wc.on('will-navigate', (e, url) => {
     const ap = appById(ctx.appId);
     if (!ap || ap.linksInTabs !== 'external') return;
@@ -641,6 +650,9 @@ function contextMenu(wc, p, kind) {
       { label: 'Copiar endereço do link', click: () => clipboard.writeText(p.linkURL) },
       { type: 'separator' }
     );
+  }
+  if ((p.mediaType === 'video' || p.mediaType === 'audio') && p.srcURL && !/^mediasource:/i.test(p.srcURL)) {
+    items.push({ label: p.mediaType === 'video' ? 'Guardar vídeo…' : 'Guardar áudio…', click: () => wc.downloadURL(p.srcURL) }, { type: 'separator' });
   }
   if (p.mediaType === 'image' && p.srcURL) {
     items.push(
@@ -1586,6 +1598,8 @@ const ASK = {
 /* Transferências: vão sempre para a pasta Transferências do Mac, com histórico */
 /* ------------------------------------------------------------------ */
 const DL_MAX = 300;
+// ficheiros sem extensão (ex.: blobs do WhatsApp) ganham-na pelo tipo
+const EXT_BY_MIME = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/aac': 'aac', 'audio/wav': 'wav', 'application/zip': 'zip', 'text/plain': 'txt', 'text/csv': 'csv', 'application/msword': 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'application/vnd.ms-excel': 'xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx', 'application/vnd.ms-powerpoint': 'ppt', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx' };
 const dlItems = new Map();      // id -> DownloadItem (só as que estão a decorrer)
 let dlSeq = 0, dlPushT = null;
 const wiredDL = new WeakSet();
@@ -1601,7 +1615,9 @@ function wireDownloads(ses) {
   if (wiredDL.has(ses)) return; wiredDL.add(ses);
   ses.on('will-download', (e, item, wc) => {
     const id = Date.now().toString(36) + '-' + (++dlSeq);
-    const save = uniquePath(app.getPath('downloads'), item.getFilename());
+    let fname = item.getFilename() || 'transferencia';
+    if (!path.extname(fname)) { const ext = EXT_BY_MIME[(item.getMimeType() || '').split(';')[0].trim().toLowerCase()]; if (ext) fname += '.' + ext; }
+    const save = uniquePath(app.getPath('downloads'), fname);
     item.setSavePath(save);
     let page = '';
     try { page = wc && !wc.isDestroyed() ? wc.getURL() : ''; } catch (x) { /* ok */ }
