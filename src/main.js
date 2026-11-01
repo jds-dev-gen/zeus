@@ -470,6 +470,7 @@ function applyLayout() {
   }
   // Claude
   if (claudeView) placeView(claudeView, !ov && S.claudeOpen && L.claude ? L.claude : null);
+  placeRadarPreview();
   // vídeo em ecrã inteiro por cima de tudo
   if (fullscreenView) {
     const [w, h] = win.getContentSize();
@@ -1368,12 +1369,70 @@ async function radarFetch(url) {
     return { ok: false, error: e && e.name === 'AbortError' ? 'O site demorou demasiado a responder.' : 'Não foi possível ligar ao site.' };
   } finally { clearTimeout(timer); }
 }
+/* Pré-visualização de notícias dentro do Radar: uma página web verdadeira (sessão do Zeus, com as assinaturas
+   iniciadas), por cima do painel que o Radar reserva para ela. */
+let radarPrev = null, radarPrevRect = null;
+function placeRadarPreview() {
+  if (!radarPrev || radarPrev.webContents.isDestroyed()) return;
+  const rv = appViews.get('radar');
+  const vis = rv && rv.getVisible() && radarPrevRect && !L.overlay && !L.cover && (fullApp === 'radar' || openPanel === 'radar');
+  if (!vis) { placeView(radarPrev, null); return; }
+  const b = rv.getBounds(), r = radarPrevRect;
+  placeView(radarPrev, { x: b.x + Math.round(r.x), y: b.y + Math.round(r.y), width: Math.max(50, Math.round(r.width)), height: Math.max(50, Math.round(r.height)) });
+}
+function radarPreviewOpen(url, rect) {
+  if (!radarPrev || radarPrev.webContents.isDestroyed()) {
+    radarPrev = new WebContentsView({ webPreferences: WEB_PREFS(zeusSession) });
+    radarPrev.setBackgroundColor('#ffffff');
+    win.contentView.addChildView(radarPrev);
+    radarPrev.setVisible(false);
+    const wc = radarPrev.webContents;
+    wireWeb(wc, 'tab', {});
+    try { if (extensions) extensions.addTab(wc, win); } catch (e) { /* ok */ }
+    wc.on('before-input-event', (e, input) => {
+      if (input.type === 'keyDown' && input.key === 'Escape' && !wc.isFullScreen?.()) { e.preventDefault(); radarPreviewClose(true); }
+    });
+    wc.on('page-title-updated', (e, t) => { if (radarWC && !radarWC.isDestroyed()) radarWC.send('radar:previewState', { title: t, url: wc.getURL(), loading: wc.isLoading() }); });
+    wc.on('did-stop-loading', () => { if (radarWC && !radarWC.isDestroyed()) radarWC.send('radar:previewState', { title: wc.getTitle(), url: wc.getURL(), loading: false }); });
+    wc.on('did-start-loading', () => { if (radarWC && !radarWC.isDestroyed()) radarWC.send('radar:previewState', { loading: true }); });
+  } else {
+    // traz para cima de tudo (pode ter sido criada antes de outras vistas)
+    try { win.contentView.removeChildView(radarPrev); win.contentView.addChildView(radarPrev); } catch (e) { /* ok */ }
+  }
+  radarPrevRect = rect;
+  radarPrev.webContents.loadURL(url).catch(() => {});
+  placeRadarPreview();
+}
+function radarPreviewClose(tell) {
+  radarPrevRect = null;
+  if (radarPrev && !radarPrev.webContents.isDestroyed()) {
+    placeView(radarPrev, null);
+    radarPrev.webContents.loadURL('about:blank').catch(() => {});   // para o som e os vídeos
+  }
+  if (tell && radarWC && !radarWC.isDestroyed()) radarWC.send('radar:previewClosed');
+  if (radarWC && !radarWC.isDestroyed()) radarWC.focus();
+}
 function radarIPC() {
   const ok = e => radarWC && !radarWC.isDestroyed() && e.sender === radarWC;
   ipcMain.handle('radar:load', e => ok(e) ? radarLoad() : null);
   ipcMain.handle('radar:save', (e, d) => ok(e) ? radarSave(d) : false);
   ipcMain.handle('radar:fetch', (e, url) => ok(e) ? radarFetch(url) : null);
   ipcMain.handle('radar:theme', e => ok(e) ? (isDark() ? 'dark' : 'light') : null);
+  const okRect = r => r && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(+r[k])) ? { x: +r.x, y: +r.y, width: +r.width, height: +r.height } : null;
+  ipcMain.handle('radar:preview', (e, url, rect) => {
+    if (!ok(e) || typeof url !== 'string' || !/^https?:\/\//i.test(url) || !okRect(rect)) return false;
+    radarPreviewOpen(url, okRect(rect)); return true;
+  });
+  ipcMain.handle('radar:previewRect', (e, rect) => { if (ok(e) && radarPrevRect) { radarPrevRect = okRect(rect) || radarPrevRect; placeRadarPreview(); } });
+  ipcMain.handle('radar:previewClose', e => { if (ok(e)) radarPreviewClose(false); });
+  // passa a página da pré-visualização para um separador (fica onde estava, sem a recarregar do zero)
+  ipcMain.handle('radar:previewToTab', e => {
+    if (!ok(e) || !radarPrev || radarPrev.webContents.isDestroyed()) return false;
+    const u = radarPrev.webContents.getURL();
+    radarPreviewClose(false);
+    if (/^https?:/.test(u)) newTab({ url: u, space: spaceForOpener() });
+    return true;
+  });
   ipcMain.handle('radar:open', (e, url, background) => {
     if (!ok(e) || typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false;
     newTab({ url, space: spaceForOpener(), activate: !background });

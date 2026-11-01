@@ -244,12 +244,12 @@ function renderCols() {
           : items.map(itemEl),
       errs.length ? h('button', { class: 'c-err', type: 'button', onclick: () => openModal(col.id) }, errs.length === 1 ? `Não foi possível ler “${errs[0].title}”.` : `${errs.length} fontes com problemas.`, ' Ver fontes') : null
     );
-    return h('section', { class: 'col' },
+    return h('section', { class: 'col' + (PV && PV.col === 'c' + ci ? ' active' : ''), 'data-col': 'c' + ci },
       h('div', { class: 'c-head' },
         h('span', { class: 'c-name', title: col.name }, col.name, unread ? h('em', {}, String(unread)) : null),
         h('button', { class: 'c-add', type: 'button', title: 'Fontes desta coluna', onclick: () => openModal(col.id) }, '+ Fontes')),
       list);
-  }), webCol ? h('section', { class: 'col web' },
+  }), webCol ? h('section', { class: 'col web' + (PV && PV.col === 'web' ? ' active' : ''), 'data-col': 'web' },
     h('div', { class: 'c-head' }, h('span', { class: 'c-name', title: 'Notícias de todos os jornais, no Google Notícias' }, 'Na web', web.items.length ? h('em', {}, String(web.items.length)) : null)),
     h('div', { class: 'c-list' }, web.loading ? h('p', { class: 'c-empty' }, `A procurar “${web.q}” no Google Notícias…`)
       : web.error ? h('p', { class: 'c-empty' }, web.error)
@@ -262,8 +262,9 @@ function itemEl(it) {
   const fresh = Date.now() - it.date < 3600e3 && !D.read[it.link];
   const open = bg => { D.read[it.link] = Date.now(); save(); R.open(it.link, bg); renderCols(); };
   return h('a', {
-    class: 'it' + (D.read[it.link] ? ' read' : ''), href: it.link, title: it.summary || it.title,
-    onclick: e => { e.preventDefault(); open(e.metaKey || e.ctrlKey); },
+    class: 'it' + (D.read[it.link] ? ' read' : '') + (PV && PV.link === it.link ? ' current' : ''), href: it.link, title: it.summary || it.title, 'data-link': it.link,
+    // clique: pré-visualizar aqui dentro; ⌘-clique: separador em segundo plano; ⇧-clique: separador já
+    onclick: e => { e.preventDefault(); if (e.metaKey || e.ctrlKey) open(true); else if (e.shiftKey) open(false); else openPreview(it, e.currentTarget.closest('[data-col]').dataset.col); },
     onauxclick: e => { if (e.button === 1) { e.preventDefault(); open(true); } }
   },
   h('div', { class: 'it-main' },
@@ -273,9 +274,57 @@ function itemEl(it) {
   it.img ? h('img', { class: 'it-thumb', src: it.img, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: e => e.target.remove() }) : null);
 }
 
+/* ---------- pré-visualização dentro do Radar ---------- */
+let PV = null;   // { link, col, it }
+const slotRect = () => { const r = $('#pvSlot').getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; };
+function openPreview(it, col) {
+  D.read[it.link] = Date.now(); save();
+  const first = !PV;
+  PV = { link: it.link, col, it };
+  document.body.classList.add('previewing');
+  $('#pv').hidden = false;
+  const host = it.srcSite || it.src.site || hostOf(it.link);
+  $('#pvFav').src = fav(host);
+  $('#pvSrc').textContent = it.srcName || it.src.title;
+  $('#pvWhen').textContent = ago(it.date);
+  $('#pvTitle').textContent = it.title;
+  $('#pvSlot').classList.add('loading');
+  renderCols();
+  // a coluna ativa fica à esquerda, com a notícia atual à vista
+  requestAnimationFrame(() => {
+    const cur = document.querySelector('.it.current'); if (cur && first) cur.scrollIntoView({ block: 'nearest' });
+    R.preview(it.link, slotRect());
+  });
+}
+function closePreview(fromMain) {
+  if (!PV) return;
+  PV = null;
+  if (!fromMain) R.previewClose();
+  document.body.classList.remove('previewing');
+  $('#pv').hidden = true;
+  renderCols();
+}
+function stepPreview(dir) {
+  if (!PV) return;
+  const list = [...document.querySelectorAll(`[data-col="${PV.col}"] .it`)];
+  const i = list.findIndex(a => a.dataset.link === PV.link);
+  const next = list[i + dir]; if (!next) return;
+  next.click();
+  next.scrollIntoView({ block: 'nearest' });
+}
+R.onPreviewClosed(() => closePreview(true));
+R.onPreviewState(st => { if (PV) $('#pvSlot').classList.toggle('loading', !!st.loading); });
+$('#pvClose').addEventListener('click', () => closePreview());
+$('#pvPrev').addEventListener('click', () => stepPreview(-1));
+$('#pvNext').addEventListener('click', () => stepPreview(1));
+$('#pvTab').addEventListener('click', async () => { if (!PV) return; PV = null; await R.previewToTab(); document.body.classList.remove('previewing'); $('#pv').hidden = true; renderCols(); });
+new ResizeObserver(() => { if (PV) R.previewRect(slotRect()); }).observe($('#pvSlot'));
+window.addEventListener('resize', () => { if (PV) R.previewRect(slotRect()); });
+
 /* ---------- janela das fontes ---------- */
 const colById = id => D.cols.find(c => c.id === id);
 function openModal(id) {
+  closePreview();   // a página da pré-visualização ficaria por cima da janela
   modalCol = id;
   $('#modal').hidden = false;
   $('#mResults').replaceChildren();
@@ -405,6 +454,11 @@ $('#q').addEventListener('keydown', e => {
 $('#qClear').addEventListener('click', () => { $('#q').value = ''; setQuery(''); $('#q').focus(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#modal').hidden) closeModal();
+  else if (e.key === 'Escape' && PV) closePreview();
+  if (PV && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) {
+    if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); stepPreview(1); }
+    if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); stepPreview(-1); }
+  }
   // "/" ou ⌘K vão para a pesquisa
   if ((e.key === '/' && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) { e.preventDefault(); $('#q').focus(); $('#q').select(); }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') { e.preventDefault(); manualRefresh(); }

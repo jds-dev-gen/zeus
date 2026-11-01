@@ -26,7 +26,24 @@
     </button>
   </div>
 </header>
-<main class="cols" id="cols"></main>
+<div class="stage">
+  <main class="cols" id="cols"></main>
+  <aside class="pv" id="pv" hidden aria-label="Pré-visualização da notícia">
+    <div class="pv-head">
+      <div class="pv-nav">
+        <button class="icon" type="button" id="pvPrev" title="Notícia anterior (↑)" aria-label="Notícia anterior"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
+        <button class="icon" type="button" id="pvNext" title="Notícia seguinte (↓)" aria-label="Notícia seguinte"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <div class="pv-meta">
+        <div class="pv-src"><img id="pvFav" alt="" referrerpolicy="no-referrer"><b id="pvSrc"></b><span id="pvWhen"></span></div>
+        <div class="pv-title" id="pvTitle"></div>
+      </div>
+      <button class="btn small" type="button" id="pvTab" title="Continuar a ler num separador do Zeus">Abrir num separador</button>
+      <button class="icon" type="button" id="pvClose" title="Fechar a pré-visualização (Esc)" aria-label="Fechar a pré-visualização">✕</button>
+    </div>
+    <div class="pv-slot" id="pvSlot"><p>A abrir a notícia…</p></div>
+  </aside>
+</div>
 
 <div class="modal" id="modal" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mTitle">
