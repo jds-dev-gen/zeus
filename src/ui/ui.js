@@ -117,7 +117,7 @@ mq.addEventListener('change', applyTheme);
 Z.on('state', st => {
   S = st;
   applyTheme();
-  renderRail(); renderTop(); renderPanels(); renderPage(); renderRight();
+  renderRail(); renderTop(); renderPanels(); renderPage(); renderRight(); renderBallOn();
   if (ov.open) renderZones();
   if (modal === 'settings') refreshSettingsApps();
   requestAnimationFrame(sendLayout);
@@ -132,6 +132,7 @@ function renderRail() {
   let h = `<div class="rail-head"><div class="clock" aria-label="Hora"><b data-clock></b><span data-dshort></span></div></div>`;
   h += '<div class="rail-apps" id="railApps">';
   S.apps.forEach((a, i) => {
+    if (a.hidden) return;
     const on = S.openPanel === a.id || S.fullApp === a.id;
     let inner = a.icon === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>'
       : (ICON[a.icon] && typeof ICON[a.icon] === 'string' ? ICON[a.icon] : `<span class="letter">${esc((a.name || '?').charAt(0).toUpperCase())}</span>`);
@@ -710,56 +711,9 @@ $('#scorebar').addEventListener('click', e => {
   const h = e.target.closest('[data-schide]'); if (h) { scoreHidden.add(+h.dataset.schide); saveHidden(); renderScores(); return; }
   const o = e.target.closest('[data-scopen]'); if (o) Z.invoke('scores:open', +o.dataset.scopen);
 });
-/* ---------- Futebol: página com cada jogo numa coluna ---------- */
-let fbTimer = null;
-const INC_ICON = { goal: '⚽', pen: '⚽', own: '⚽', yellow: '<i class="fb-card y"></i>', red: '<i class="fb-card r"></i>', yellowred: '<i class="fb-card yr"></i>', sub: '⇄', var: 'VAR' };
-function fbMin(i) { return i.min == null ? '' : `${i.min}${i.add ? '+' + i.add : ''}'`; }
-function fbColumn(m) {
-  const fresh = m.goalAt && Date.now() - m.goalAt < 60e3;
-  const team = (t, side) => `<div class="fb-team ${t.mine ? 'mine' : ''}"><img src="${esc(t.logo)}" alt="" referrerpolicy="no-referrer"><span>${esc(t.full || t.name)}</span></div>`;
-  const evs = [...(m.incidents || [])].reverse().filter(i => i.type !== 'period' || i.text === 'HT' || i.text === 'FT');
-  const timeline = evs.length ? `<ol class="fb-tl">${evs.map(i => i.type === 'period'
-      ? `<li class="fb-per">${i.text === 'HT' ? 'Intervalo' : 'Final'}${i.score ? ' · ' + esc(i.score) : ''}</li>`
-      : `<li class="${i.home ? 'h' : 'a'} t-${i.type}"><b>${fbMin(i)}</b><span class="ic">${INC_ICON[i.type] || ''}</span><span class="who">${esc(i.player)}${i.type === 'own' ? ' (p.b.)' : i.type === 'pen' ? ' (g.p.)' : ''}${i.assist ? `<small>assist. ${esc(i.assist)}</small>` : ''}${i.type === 'sub' && i.out ? `<small>sai ${esc(i.out)}</small>` : ''}</span>${(i.type === 'goal' || i.type === 'pen' || i.type === 'own') && i.score ? `<em>${esc(i.score)}</em>` : ''}</li>`).join('')}</ol>` : '';
-  const stats = (m.stats || []).length ? `<div class="fb-sec"><span class="lbl-mono">Estatísticas</span>${m.stats.map(x => { const tot = (x.hv + x.av) || 1; return `<div class="fb-stat"><div class="fb-sv"><b>${esc(x.home)}</b><span>${esc(x.label)}</span><b>${esc(x.away)}</b></div><div class="fb-bar"><i style="width:${Math.round(x.hv / tot * 100)}%"></i><i style="width:${Math.round(x.av / tot * 100)}%"></i></div></div>`; }).join('')}</div>` : '';
-  const info = [m.round, m.venue && (m.venue + (m.city ? ', ' + m.city : '')), m.referee && 'Árbitro: ' + m.referee].filter(Boolean);
-  return `<section class="fb-col ${m.state} ${fresh ? 'flash' : ''}">
-    <div class="fb-comp">${esc(m.comp)}${m.big ? '<span>Liga europeia</span>' : ''}</div>
-    <div class="fb-head">
-      ${team(m.home, 'home')}
-      <div class="fb-score"><b>${m.state === 'pre' ? esc(m.label) : `${m.home.score ?? 0}<span>–</span>${m.away.score ?? 0}`}</b>
-        <small>${m.state === 'live' ? '<i class="sc-dot"></i>' : ''}${m.state === 'pre' ? 'Hoje' : esc(m.label)}${m.pens ? ' · pen. ' + esc(m.pens) : ''}</small></div>
-      ${team(m.away, 'away')}
-    </div>
-    <div class="fb-body">
-      ${m.state === 'pre' ? '<p class="hint">O jogo ainda não começou. Os golos, cartões e estatísticas aparecem aqui quando começar.</p>' : ''}
-      ${timeline ? `<div class="fb-sec"><span class="lbl-mono">Golos, cartões e substituições</span>${timeline}</div>` : (m.state !== 'pre' ? '<p class="hint">Ainda sem golos nem cartões.</p>' : '')}
-      ${stats}
-      ${info.length ? `<div class="fb-sec"><span class="lbl-mono">Jogo</span>${info.map(x => `<p class="fb-info">${esc(x)}</p>`).join('')}</div>` : ''}
-    </div>
-    <button class="btn ghost sm fb-open" type="button" data-scopen="${m.id}">Abrir no Sofascore</button>
-  </section>`;
-}
-async function loadFootball() {
-  const box = $('#fbCols'); if (!box || modal !== 'football') return;
-  const list = await Z.invoke('scores:details').catch(() => null);
-  if (modal !== 'football') return;
-  const keep = box.scrollLeft;
-  if (!list || !list.length) box.innerHTML = '<p class="hint" style="padding:30px">Não há jogos hoje das tuas equipas nem jogos grandes das ligas europeias.</p>';
-  else box.innerHTML = list.map(fbColumn).join('');
-  box.scrollLeft = keep;
-  $('#fbWhen').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-function openFootball() {
-  openModal('football', `<div class="m-head"><h2>⚽ Futebol hoje</h2><small id="fbWhen" class="hint" style="margin:0 auto 0 12px">A carregar…</small><button class="nb" type="button" data-mclose aria-label="Fechar">${ICON.x}</button></div>
-    <div class="fb-cols" id="fbCols"><p class="hint" style="padding:30px">A carregar os jogos…</p></div>`, 'full');
-  loadFootball();
-  clearInterval(fbTimer);
-  fbTimer = setInterval(() => { if (modal !== 'football') { clearInterval(fbTimer); return; } loadFootball(); }, 20e3);
-  $('#fbCols').addEventListener('click', e => { const o = e.target.closest('[data-scopen]'); if (o) { closeModal(); Z.invoke('scores:open', +o.dataset.scopen); } });
-  $('#fbCols').addEventListener('wheel', e => { const c = e.currentTarget; if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.target.closest('.fb-body')) { c.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
-}
-$('#scBall').addEventListener('click', () => (modal === 'football' ? closeModal() : openFootball()));
+/* ---------- Futebol: a bola abre a página "Futebol hoje" (página própria do Zeus, como o Radar) ---------- */
+$('#scBall').addEventListener('click', () => Z.invoke('app:open', 'futebol'));
+const renderBallOn = () => $('#scBall').classList.toggle('on', S && S.fullApp === 'futebol');
 
 function openTeams() {
   const draw = () => {
@@ -1691,7 +1645,7 @@ async function openSettings() {
 }
 function refreshSettingsApps() {
   const box = $('#setApps'); if (!box) return;
-  box.innerHTML = S.apps.map(a => `<div class="li"><div class="grow"><span>${esc(a.name)}</span><small>${esc(a.url || 'Endereço por definir')}${a.isolated ? ' · sessão separada' : ''}</small></div>
+  box.innerHTML = S.apps.filter(a => !a.hidden).map(a => `<div class="li"><div class="grow"><span>${esc(a.name)}</span><small>${esc(a.url || 'Endereço por definir')}${a.isolated ? ' · sessão separada' : ''}</small></div>
     <div class="seg" data-appmode="${esc(a.id)}"><button type="button" data-v="side" class="${a.mode === 'side' ? 'on' : ''}">Ao lado</button><button type="button" data-v="full" class="${a.mode === 'full' ? 'on' : ''}">Inteira</button></div>
     <button class="linkbtn" type="button" data-editapp="${esc(a.id)}">Editar</button><button class="linkbtn" type="button" data-rmapp="${esc(a.id)}">Remover</button></div>`).join('');
 }

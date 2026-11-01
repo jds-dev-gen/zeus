@@ -31,6 +31,8 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 const DEFAULT_APPS = [
   { id: 'apolo', name: 'Apolo', url: '', mode: 'full', icon: 'apolo', preload: false, linksInTabs: true },
   { id: 'radar', name: 'Radar', url: 'zeus://radar', mode: 'full', icon: 'radar', preload: false, internal: 'radar' },
+  // página "Futebol hoje": abre pela bola da barra dos resultados, não aparece na barra das apps
+  { id: 'futebol', name: 'Futebol', url: 'zeus://futebol', mode: 'full', icon: '', preload: false, internal: 'futebol', hidden: true },
   { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true, linksInTabs: true },
   { id: 'mail', name: 'Email', url: 'https://mail.google.com/', mode: 'full', icon: 'mail', preload: true, linksInTabs: true },
   { id: 'cal', name: 'Calendário', url: 'https://calendar.google.com/', mode: 'full', icon: 'cal', preload: false },
@@ -1321,9 +1323,10 @@ function ensureAppView(a) {
 /* Apps internas: páginas feitas pelo próprio Zeus (não são sites), com uma ponte própria e limitada.
    O Radar só pode: ler e guardar o seu ficheiro, ir buscar feeds/páginas públicas (sem cookies) e abrir links em separadores. */
 const INTERNAL = {
-  radar: { file: path.join(__dirname, 'radar', 'index.html'), preload: path.join(__dirname, 'radar', 'preload.js') }
+  radar: { file: path.join(__dirname, 'radar', 'index.html'), preload: path.join(__dirname, 'radar', 'preload.js') },
+  futebol: { file: path.join(__dirname, 'futebol', 'index.html'), preload: path.join(__dirname, 'futebol', 'preload.js') }
 };
-let radarWC = null;
+let radarWC = null, futebolWC = null;
 const isDark = () => S.settings.theme === 'dark' || (S.settings.theme === 'system' && nativeTheme.shouldUseDarkColors);
 function ensureInternalView(a) {
   const def = INTERNAL[a.internal];
@@ -1338,10 +1341,11 @@ function ensureInternalView(a) {
   view.setVisible(false);
   const wc = view.webContents;
   if (a.internal === 'radar') radarWC = wc;
+  if (a.internal === 'futebol') futebolWC = wc;
   wc.on('will-navigate', (e, url) => { e.preventDefault(); if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); });
   wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); return { action: 'deny' }; });
   wc.on('render-process-gone', (e, d) => { if (d.reason !== 'clean-exit') setTimeout(() => { if (!wc.isDestroyed()) wc.reload(); }, 500); });
-  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; });
+  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; });
   wc.loadFile(def.file).catch(() => {});
   return view;
 }
@@ -2065,6 +2069,12 @@ function setupIPC() {
     return clean;
   });
   handle('scores:details', () => scores ? scores.details() : []);
+  // a página Futebol (página própria do Zeus, como o Radar) só pode ler os jogos, abrir um jogo e saber o tema
+  const fromFut = e => futebolWC && !futebolWC.isDestroyed() && e.sender === futebolWC;
+  ipcMain.handle('futebol:details', e => fromFut(e) && scores ? scores.details() : []);
+  ipcMain.handle('futebol:open', (e, id) => { if (!fromFut(e)) return; const u = scores && scores.url(id); if (u) newTab({ url: u, space: spaceForOpener() }); });
+  ipcMain.handle('futebol:theme', e => fromFut(e) ? (isDark() ? 'dark' : 'light') : null);
+  ipcMain.handle('futebol:close', e => { if (fromFut(e) && fullApp === 'futebol') openApp('futebol'); });
   handle('scores:status', () => scores ? scores.status() : null);
   handle('scores:refresh', () => scores ? scores.refreshNow() : null);
   handle('scores:open', id => { const u = scores && scores.url(id); if (u) newTab({ url: u, space: spaceForOpener() }); });
@@ -2142,6 +2152,7 @@ function setupIPC() {
     if ('tabMode' in clean || 'rightWide' in clean || 'rightZoom' in clean) setTimeout(applyLayout, 50);
     if (clean.theme) nativeTheme.themeSource = clean.theme === 'system' ? 'system' : clean.theme;
     if (clean.theme && radarWC && !radarWC.isDestroyed()) radarWC.send('radar:theme', isDark() ? 'dark' : 'light');
+    if (clean.theme && futebolWC && !futebolWC.isDestroyed()) futebolWC.send('futebol:theme', isDark() ? 'dark' : 'light');
     if (!isMac && clean.theme) updateOverlayColors();
     if ('updateRepo' in clean && updater) updater.check(true);
     if ('bigGames' in clean && scores) scores.setBig(clean.bigGames !== false);
@@ -2191,7 +2202,7 @@ function setupScores() {
     session: zeusSession, BrowserWindow,
     base: !app.isPackaged && process.env.ZEUS_TEST_SCORES ? process.env.ZEUS_TEST_SCORES : undefined,
     log: m => console.log(m),
-    onChange: list => { scoreList = list; if (ui && !ui.isDestroyed()) ui.send('scores', list); },
+    onChange: list => { scoreList = list; if (ui && !ui.isDestroyed()) ui.send('scores', list); if (futebolWC && !futebolWC.isDestroyed()) futebolWC.send('futebol:changed'); },
     onGoal: m => {
       if (S.settings.goalAlerts === false || !Notification.isSupported() || m.big) return;   // só avisa nos jogos das equipas seguidas
       const who = m.goalSide === 'home' ? m.home : m.away;
