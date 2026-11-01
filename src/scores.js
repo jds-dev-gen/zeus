@@ -264,6 +264,32 @@ class Scores {
     this.onChange && this.onChange(list);
   }
   url(id) { const ev = this.events.get(+id); return ev ? matchURL(ev) : null; }
+  /* Página de detalhe: golos, cartões, substituições e estatísticas de cada jogo da barra */
+  async details() {
+    const list = this.relevant();
+    this.detCache = this.detCache || new Map();
+    const out = await Promise.all(list.map(async ev => {
+      const v = this.view(ev);
+      const extra = {
+        venue: (ev.venue && ((ev.venue.stadium && ev.venue.stadium.name) || ev.venue.name)) || '',
+        city: (ev.venue && ev.venue.city && ev.venue.city.name) || '',
+        referee: (ev.referee && ev.referee.name) || '',
+        round: (ev.roundInfo && (ev.roundInfo.name || (ev.roundInfo.round ? 'Jornada ' + ev.roundInfo.round : ''))) || ''
+      };
+      if (ev.status.type === 'notstarted') return { ...v, ...extra, incidents: [], stats: [] };
+      // jogos acabados não mudam: guardados; a decorrer: no máximo de 20 em 20 s
+      const c = this.detCache.get(ev.id);
+      const fresh = c && (ev.status.type === 'finished' ? c.final : Date.now() - c.at < 20e3);
+      let det = fresh ? c.det : null;
+      if (!det) {
+        const [inc, sta] = await Promise.all([this.get(`/event/${ev.id}/incidents`), this.get(`/event/${ev.id}/statistics`)]);
+        det = { incidents: simplifyIncidents(inc), stats: simplifyStats(sta) };
+        this.detCache.set(ev.id, { at: Date.now(), det, final: ev.status.type === 'finished' });
+      }
+      return { ...v, ...extra, ...det };
+    }));
+    return out.sort((a, b) => (a.big === b.big ? 0 : a.big ? 1 : -1));
+  }
   stop() { clearInterval(this.timers.sched); this.stopLive(); clearTimeout(this.timers.soon); try { if (this.page) this.page.destroy(); } catch (e) { /* ok */ } }
 }
 
@@ -280,6 +306,31 @@ function minute(ev) {
   const m = base + Math.floor((Date.now() / 1000 - t.currentPeriodStartTimestamp) / 60) + 1;
   if (m > max) return `${max}+${Math.min(m - max, 15)}'`;
   return `${Math.max(1, m)}'`;
+}
+const KIND = { regular: 'goal', ownGoal: 'own', penalty: 'pen', yellow: 'yellow', red: 'red', yellowRed: 'yellowred' };
+function simplifyIncidents(j) {
+  const inc = (j && j.incidents) || [];
+  return inc.filter(i => ['goal', 'card', 'substitution', 'period', 'varDecision'].includes(i.incidentType)).map(i => {
+    const who = p => (p && (p.shortName || p.name)) || '';
+    const base = { min: i.time != null ? i.time : null, add: i.addedTime || 0, home: !!i.isHome };
+    if (i.incidentType === 'goal') return { ...base, type: KIND[i.incidentClass] === 'own' ? 'own' : KIND[i.incidentClass] === 'pen' ? 'pen' : 'goal', player: who(i.player) || i.playerName || '', assist: who(i.assist1), score: i.homeScore != null ? `${i.homeScore}–${i.awayScore}` : '' };
+    if (i.incidentType === 'card') return { ...base, type: KIND[i.incidentClass] || 'yellow', player: who(i.player) || i.playerName || '' };
+    if (i.incidentType === 'substitution') return { ...base, type: 'sub', player: who(i.playerIn), out: who(i.playerOut) };
+    if (i.incidentType === 'varDecision') return { ...base, type: 'var', player: who(i.player), text: i.incidentClass || '' };
+    return { ...base, type: 'period', text: i.text || '', score: i.homeScore != null ? `${i.homeScore}–${i.awayScore}` : '' };
+  });
+}
+const STAT_PT = { 'Ball possession': 'Posse de bola', 'Expected goals': 'Golos esperados (xG)', 'Big chances': 'Grandes oportunidades', 'Total shots': 'Remates', 'Shots on target': 'Remates à baliza', 'Corner kicks': 'Cantos', 'Fouls': 'Faltas', 'Offsides': 'Foras de jogo', 'Yellow cards': 'Amarelos', 'Red cards': 'Vermelhos', 'Goalkeeper saves': 'Defesas do guarda-redes', 'Passes': 'Passes' };
+function simplifyStats(j) {
+  const all = ((j && j.statistics) || []).find(p => p.period === 'ALL');
+  if (!all) return [];
+  const items = new Map();
+  for (const g of all.groups || []) for (const it of g.statisticsItems || []) if (STAT_PT[it.name] && !items.has(it.name)) items.set(it.name, it);
+  return Object.keys(STAT_PT).filter(k => items.has(k)).map(k => {
+    const it = items.get(k);
+    const hv = typeof it.homeValue === 'number' ? it.homeValue : parseFloat(it.home) || 0, av = typeof it.awayValue === 'number' ? it.awayValue : parseFloat(it.away) || 0;
+    return { label: STAT_PT[k], home: String(it.home), away: String(it.away), hv, av };
+  });
 }
 function matchURL(ev) {
   return ev.slug && ev.customId ? `https://www.sofascore.com/football/match/${ev.slug}/${ev.customId}#id:${ev.id}` : `https://www.sofascore.com/event/${ev.id}`;

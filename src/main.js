@@ -2064,6 +2064,7 @@ function setupIPC() {
     if (scores) scores.setTeams(clean);
     return clean;
   });
+  handle('scores:details', () => scores ? scores.details() : []);
   handle('scores:status', () => scores ? scores.status() : null);
   handle('scores:refresh', () => scores ? scores.refreshNow() : null);
   handle('scores:open', id => { const u = scores && scores.url(id); if (u) newTab({ url: u, space: spaceForOpener() }); });

@@ -12,7 +12,7 @@ try { injectBrowserAction(); } catch (e) { /* sem extensões */ }
 const INVOKE = new Set([
   'ready', 'layout', 'mosaic:prepare',
   'tab:new', 'tab:open', 'tab:close', 'tab:later', 'tab:move', 'tab:restore', 'tab:reopen', 'tab:menu',
-  'navigate', 'nav', 'find', 'history:suggest', 'auth:reply', 'home:today', 'home:taskDone', 'home:setupOpen', 'home:accounts', 'home:feedAdd', 'home:feedRemove', 'home:code', 'history:browsers', 'history:import', 'history:count', 'share:info', 'share:do', 'page:snapshot', 'pip:toggle', 'pip:sound', 'space:pick', 'space:home', 'downloads:list', 'downloads:do', 'downloads:thumb', 'scores:get', 'scores:search', 'scores:teams', 'scores:open', 'scores:status', 'scores:refresh',
+  'navigate', 'nav', 'find', 'history:suggest', 'auth:reply', 'home:today', 'home:taskDone', 'home:setupOpen', 'home:accounts', 'home:feedAdd', 'home:feedRemove', 'home:code', 'history:browsers', 'history:import', 'history:count', 'share:info', 'share:do', 'page:snapshot', 'pip:toggle', 'pip:sound', 'space:pick', 'space:home', 'downloads:list', 'downloads:do', 'downloads:thumb', 'scores:get', 'scores:search', 'scores:teams', 'scores:open', 'scores:status', 'scores:details', 'scores:refresh',
   'space:add', 'space:rename', 'space:remove', 'space:reorder',
   'app:open', 'app:close', 'app:mode', 'app:add', 'app:update', 'app:remove', 'app:menu', 'app:reload', 'app:reorder', 'page:insertText',
   'claude:toggle', 'claude:sendPage', 'claude:ask', 'claude:new',
