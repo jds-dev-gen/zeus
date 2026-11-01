@@ -1580,6 +1580,7 @@ async function openSettings() {
       <div class="set-row"><span>Equipas: ${(st.teams || []).length ? esc(st.teams.map(t => t.name).join(', ')) : 'nenhuma ainda'}</span><button class="linkbtn" type="button" id="setTeams">Escolher equipas</button></div>
       <div class="set-row"><span>Jogos grandes das ligas europeias</span>${segHTML('bigGames', String(st.bigGames !== false), [['true', 'Mostrar'], ['false', 'Não']])}</div>
       <div class="set-row"><span>Aviso quando há golo</span>${segHTML('goalAlerts', String(st.goalAlerts !== false), [['true', 'Notificação'], ['false', 'Não']])}</div>
+      <div class="set-row"><span id="scStatus" class="hint" style="margin:0">A ver o estado da ligação ao Sofascore…</span><button class="linkbtn" type="button" id="scRefresh">Atualizar agora</button></div>
       <p class="hint">Jogos grandes: os dois clubes entre os maiores da Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, Liga Portugal, Liga dos Campeões e Liga Europa (ex.: Real Madrid–Barcelona, Arsenal–Chelsea, Benfica–Porto). Aparecem depois das tuas equipas, sem notificações.</p>
       <p class="hint">Quando uma destas equipas joga, aparece uma barra em baixo com o resultado em direto (dados do Sofascore), durante todo o dia do jogo: a hora prevista antes, o resultado em direto, e o resultado final até à meia-noite (ou até o fechares).</p></div>
     <div class="set-sec"><h3>Histórico</h3>
@@ -1606,6 +1607,17 @@ async function openSettings() {
   $('#setCity').addEventListener('click', openCity);
   $('#setHome').addEventListener('click', openHomeSetup);
   $('#setTeams').addEventListener('click', openTeams);
+  const scStat = st => {
+    const el = $('#scStatus'); if (!el || !st) return;
+    const hm = t => new Date(t).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+    const parts = [];
+    parts.push(st.okAt ? `Sofascore: último contacto às ${hm(st.okAt)} (${st.via})` : 'Sofascore: ainda sem resposta');
+    if (st.big) parts.push(st.bigErr ? st.bigErr : st.bigAt ? `${st.bigTotal} jogos hoje; grandes: ${st.bigFound.length ? st.bigFound.join(', ') : 'nenhum'}` : 'jogos de hoje ainda por ler');
+    if (st.err && st.errAt > st.okAt) parts.push('Último erro: ' + st.err);
+    el.textContent = parts.join(' · ');
+  };
+  Z.invoke('scores:status').then(scStat);
+  $('#scRefresh').addEventListener('click', async e => { const b = e.currentTarget; b.textContent = 'A atualizar…'; scStat(await Z.invoke('scores:refresh')); b.textContent = 'Atualizar agora'; });
   renderUpdate();
   $('#updCheck').addEventListener('click', async () => { U = await Z.invoke('update:check'); renderUpdate(); });
   $('#updInstall').addEventListener('click', installUpdate);

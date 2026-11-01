@@ -50,7 +50,10 @@ class Scores {
     this.direct = true;          // passa a false se o Sofascore recusar pedidos diretos
     this.lastSent = '';
     this.big = true; this.bigAt = 0;
+    this.diag = { okAt: 0, err: '', errAt: 0, via: 'direto', bigAt: 0, bigTotal: 0, bigFound: [], bigErr: '' };   // para as Definições
   }
+  status() { return { ...this.diag, via: this.direct ? 'direto' : 'página escondida', teams: this.teams.length, big: this.big }; }
+  async refreshNow() { this.bigAt = 0; await this.refreshSchedule(); return this.status(); }
   setBig(on) {
     this.big = on !== false;
     if (!this.big) for (const [id, ev] of this.events) if (ev.__big && !this.isMine(ev)) this.events.delete(id);
@@ -89,10 +92,11 @@ class Scores {
         const r = await this.ses.fetch(url, { headers, credentials: 'include' });
         if (r.status === 404) return null;
         const type = r.headers.get('content-type') || '';
-        if (r.ok && type.includes('json')) return await r.json();
+        if (r.ok && type.includes('json')) { const j = await r.json(); this.diag.okAt = Date.now(); return j; }
+        this.diag.err = `O Sofascore respondeu ${r.status} (${type.split(';')[0] || 'sem tipo'})`; this.diag.errAt = Date.now();
         if (r.status === 403 || r.status === 429 || !type.includes('json')) { this.direct = false; this.log('sofascore: pedido direto recusado (' + r.status + '), a usar a página escondida'); }
         else return null;
-      } catch (e) { /* tenta pela página */ }
+      } catch (e) { this.diag.err = 'Sem ligação ao Sofascore (' + (e && e.message || e) + ')'; this.diag.errAt = Date.now(); }
     }
     return this.viaPage(url);
   }
@@ -107,7 +111,9 @@ class Scores {
     this.pageIdle = setTimeout(() => { try { this.page.destroy(); } catch (e) { /* ok */ } this.page = null; this.direct = true; }, 30 * 60e3);
     await this.pageReady;
     try {
-      const r = await this.page.webContents.executeJavaScript(`fetch(${JSON.stringify(url)}, { credentials: 'include', headers: { Accept: 'application/json' } }).then(r => r.ok ? r.json() : null).catch(() => null)`);
+      const r = await this.page.webContents.executeJavaScript(`fetch(${JSON.stringify(url)}, { credentials: 'include', headers: { Accept: 'application/json' } }).then(r => r.ok ? r.json() : (r.status === 404 ? null : { __status: r.status })).catch(e => ({ __status: 'rede' }))`);
+      if (r && r.__status) { this.diag.err = 'A página do Sofascore respondeu ' + r.__status; this.diag.errAt = Date.now(); return null; }
+      if (r) this.diag.okAt = Date.now();
       return r;
     } catch (e) { return null; }
   }
@@ -137,9 +143,11 @@ class Scores {
   async loadBig() {
     const d = new Date(), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const j = await this.get(`/sport/football/scheduled-events/${day}`);
-    if (!j || !Array.isArray(j.events)) return;
+    if (!j || !Array.isArray(j.events)) { this.diag.bigErr = 'Não consegui ler a lista de jogos de hoje. ' + (this.diag.err || ''); return; }
     this.bigAt = Date.now();
-    for (const ev of j.events) if (ev && ev.id && isBigEvent(ev) && new Date(ev.startTimestamp * 1000).toDateString() === d.toDateString()) { ev.__big = true; this.store(ev, false); }
+    const found = [];
+    for (const ev of j.events) if (ev && ev.id && isBigEvent(ev) && new Date(ev.startTimestamp * 1000).toDateString() === d.toDateString()) { ev.__big = true; this.store(ev, false); found.push(`${ev.homeTeam.shortName || ev.homeTeam.name}–${ev.awayTeam.shortName || ev.awayTeam.name}`); }
+    this.diag.bigAt = Date.now(); this.diag.bigTotal = j.events.length; this.diag.bigFound = found; this.diag.bigErr = '';
   }
   prune() {
     const now = Date.now();
