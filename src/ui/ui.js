@@ -725,6 +725,94 @@ function openTeams() {
     b.replaceWith(Object.assign(document.createElement('small'), { textContent: 'A seguir' }));
   });
 }
+/* ---------- Transferências ---------- */
+let DL = [], dlFilter = '';
+const fmtBytes = n => { if (!n && n !== 0) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i = 0; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(n < 10 ? 1 : 0) : n) + ' ' + u[i]; };
+const extOf = n => ((/\.([a-z0-9]{1,5})$/i.exec(n || '') || [])[1] || '').toUpperCase();
+function dlWhen(ms) {
+  const d = new Date(ms), now = new Date(), y = new Date(); y.setDate(y.getDate() - 1);
+  const hm = d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return 'hoje, ' + hm;
+  if (d.toDateString() === y.toDateString()) return 'ontem, ' + hm;
+  return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' }).replace('.', '');
+}
+function dlState(d) {
+  if (d.state === 'progressing') return d.paused ? `Em pausa · ${fmtBytes(d.received)}${d.total ? ' de ' + fmtBytes(d.total) : ''}` : `${fmtBytes(d.received)}${d.total ? ' de ' + fmtBytes(d.total) : ''}`;
+  if (d.state === 'cancelled') return 'Cancelada';
+  if (d.state === 'interrupted') return 'Interrompida';
+  if (d.missing) return 'O ficheiro foi apagado ou mudado de sítio';
+  return fmtBytes(d.total || d.received);
+}
+function renderDlButton() {
+  const act = DL.filter(d => d.state === 'progressing');
+  const ring = $('#dlRing');
+  ring.hidden = !act.length;
+  if (act.length) {
+    const tot = act.reduce((a, d) => a + (d.total || 0), 0), rec = act.reduce((a, d) => a + d.received, 0);
+    ring.style.setProperty('--p', tot ? Math.round(rec / tot * 100) : 30);
+    ring.classList.toggle('busy', !tot);
+  }
+  $('#dlBtn').classList.toggle('active', !!act.length);
+}
+function renderDlList() {
+  const box = $('#dlList'); if (!box) return;
+  const q = dlFilter.toLowerCase();
+  const list = DL.filter(d => !q || (d.name + ' ' + hostOf(d.url) + ' ' + hostOf(d.page || '')).toLowerCase().includes(q));
+  $('#dlCount').textContent = DL.length ? `${DL.length} ${DL.length === 1 ? 'ficheiro' : 'ficheiros'}` : '';
+  if (!list.length) { box.innerHTML = `<p class="hint" style="padding:18px 2px">${DL.length ? 'Nenhuma transferência com esse nome.' : 'Ainda não transferiste nada no Zeus. Os ficheiros vão para a pasta Transferências do Mac.'}</p>`; return; }
+  const ICO = { folder: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>' };
+  box.innerHTML = list.map(d => {
+    const live = d.state === 'progressing', ok = d.state === 'completed' && !d.missing;
+    const pct = live && d.total ? Math.round(d.received / d.total * 100) : 0;
+    return `<div class="dl ${d.state} ${d.missing ? 'missing' : ''}" data-dl="${esc(d.id)}">
+      <button class="dl-ico" type="button" data-dla="open" title="${ok ? 'Abrir o ficheiro' : ''}" ${ok ? '' : 'disabled'}><span>${esc(extOf(d.name) || '—')}</span></button>
+      <div class="dl-main">
+        <button class="dl-name" type="button" data-dla="open" title="${esc(d.name)}" ${ok ? '' : 'disabled'}>${esc(d.name)}</button>
+        <small>${esc(dlState(d))} · ${esc(hostOf(d.url) || '')} · ${esc(dlWhen(d.startedAt))}</small>
+        ${live ? `<div class="dl-bar ${d.total ? '' : 'busy'}"><i style="width:${d.total ? pct : 30}%"></i></div>` : ''}
+      </div>
+      <div class="dl-acts">
+        ${live ? `<button class="btn ghost sm" type="button" data-dla="pause">${d.paused ? 'Retomar' : 'Pausa'}</button><button class="btn ghost sm" type="button" data-dla="cancel">Cancelar</button>` : ''}
+        ${d.state === 'interrupted' || d.state === 'cancelled' ? `<button class="btn ghost sm" type="button" data-dla="retry">Tentar de novo</button>` : ''}
+        ${ok ? `<button class="btn sm" type="button" data-dla="show" title="Mostrar o ficheiro no Finder">${ICO.folder}Mostrar no Finder</button>` : ''}
+        <button class="nb" type="button" data-dla="remove" title="Tirar da lista (o ficheiro não é apagado)" aria-label="Tirar da lista">${ICON.x}</button>
+      </div></div>`;
+  }).join('');
+}
+function openDownloads() {
+  dlFilter = '';
+  openModal('downloads', `${modalHead('Transferências')}
+    <div class="dl-top"><input class="inp" id="dlQ" type="search" placeholder="Procurar pelo nome do ficheiro ou do site" autocomplete="off" spellcheck="false"><small id="dlCount"></small></div>
+    <div class="dl-list" id="dlList"></div>
+    <div class="row-btns" style="margin-top:14px"><button class="btn ghost" type="button" id="dlFolder">Abrir a pasta Transferências</button><button class="btn ghost" type="button" id="dlClear">Limpar a lista</button></div>
+    <p class="hint">Limpar a lista não apaga os ficheiros do computador.</p>`, 'wide');
+  Z.invoke('downloads:list').then(l => { DL = l || []; renderDlList(); renderDlButton(); });
+  renderDlList();
+  $('#dlQ').addEventListener('input', e => { dlFilter = e.target.value.trim(); renderDlList(); });
+  $('#dlFolder').addEventListener('click', () => Z.invoke('downloads:do', 'folder'));
+  $('#dlClear').addEventListener('click', e => {
+    const b = e.currentTarget;
+    if (!b.dataset.confirm) { b.dataset.confirm = '1'; b.textContent = 'Confirmar: limpar a lista'; return; }
+    Z.invoke('downloads:do', 'clear'); b.textContent = 'Limpar a lista'; delete b.dataset.confirm;
+  });
+  $('#dlList').addEventListener('click', async e => {
+    const b = e.target.closest('[data-dla]'); if (!b || b.disabled) return;
+    const id = b.closest('[data-dl]').dataset.dl, act = b.dataset.dla;
+    const r = await Z.invoke('downloads:do', act, id);
+    if (r === 'missing') { toast('O ficheiro já não está onde foi guardado.'); const l = await Z.invoke('downloads:list'); DL = l || []; renderDlList(); }
+    else if (act === 'show' || act === 'open') closeModal();
+  });
+}
+Z.on('downloads', m => {
+  DL = m.list || [];
+  renderDlButton();
+  if (modal === 'downloads') renderDlList();
+  if (m.started) toast(`A transferir “${m.started}”`);
+  if (m.done) toast(`Transferido: “${m.done}” — está na pasta Transferências`);
+});
+Z.invoke('downloads:list').then(l => { DL = l || []; renderDlButton(); });
+$('#dlBtn').addEventListener('click', () => (modal === 'downloads' ? closeModal() : openDownloads()));
+
 $('#pipSound').addEventListener('click', async () => { const st = await Z.invoke('pip:sound'); setPipSound({ on: !!st, muted: st === 'muted' }); });
 $('#closeTabBtn').addEventListener('click', () => { const t = curTab(); if (t) Z.invoke('tab:close', t.id); });
 $('#shareBtn').addEventListener('click', () => { shareOpen ? closeShare() : openShare(); });
@@ -911,6 +999,7 @@ Z.on('ui-command', c => {
   if (c.cmd === 'mosaic-close') closeMosaic();
   if (c.cmd === 'new-space-with') { if (!ov.open) openMosaic(false); ov.addingSpace = true; ov.moveAfterAdd = c.id; renderZones(); }
   if (c.cmd === 'share') { shareOpen ? closeShare() : openShare(); }
+  if (c.cmd === 'downloads') modal === 'downloads' ? closeModal() : openDownloads();
   if (c.cmd === 'focus-ask' || c.cmd === 'home') goHomeUI();
 });
 

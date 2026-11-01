@@ -222,6 +222,7 @@ function loadState() {
   if (!S.settings.updateRepo && PKG.zeus && PKG.zeus.updateRepo) S.settings.updateRepo = PKG.zeus.updateRepo;
   S.tabs = (S.tabs || []).filter(t => t && t.url);
   if (!Array.isArray(S.history)) S.history = [];
+  if (!Array.isArray(S.downloads)) S.downloads = [];
   if (!S.appLast || typeof S.appLast !== 'object') S.appLast = {};
   // primeira vez: o histórico começa com os sites mais visitados
   if (!S.history.length) Object.values(S.visits || {}).forEach(v => { if (v.url) S.history.push({ url: v.url, title: v.title || '', n: v.n || 1, t: Date.now() - 86400000 }); });
@@ -256,7 +257,7 @@ function saveNow() {
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
       pendingKey: S.pendingKey || null, apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, driveLinks: true, newestFirst: true, rightWideV: true, settings: S.settings, permissions: S.permissions,
-      siteZoom: S.siteZoom || {}, visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
+      siteZoom: S.siteZoom || {}, downloads: (S.downloads || []).slice(0, DL_MAX).map(d => d.state === 'progressing' ? { ...d, state: 'interrupted', paused: false } : d), visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
     fs.mkdirSync(path.dirname(stateFile()), { recursive: true });
@@ -1581,7 +1582,80 @@ const ASK = {
   midiSysex: 'controlar dispositivos MIDI',
   'screen-wake-lock': 'manter o ecrã ligado'
 };
+/* ------------------------------------------------------------------ */
+/* Transferências: vão sempre para a pasta Transferências do Mac, com histórico */
+/* ------------------------------------------------------------------ */
+const DL_MAX = 300;
+const dlItems = new Map();      // id -> DownloadItem (só as que estão a decorrer)
+let dlSeq = 0, dlPushT = null;
+const wiredDL = new WeakSet();
+function uniquePath(dir, name) {
+  name = (name || 'transferencia').replace(/[\/\\:]/g, '-').replace(/^\.+/, '') || 'transferencia';
+  const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
+  let p = path.join(dir, name), n = 1;
+  const taken = new Set(S.downloads.filter(d => d.state === 'progressing').map(d => d.path));
+  while (fs.existsSync(p) || taken.has(p)) p = path.join(dir, `${base} (${n++})${ext}`);
+  return p;
+}
+function wireDownloads(ses) {
+  if (wiredDL.has(ses)) return; wiredDL.add(ses);
+  ses.on('will-download', (e, item, wc) => {
+    const id = Date.now().toString(36) + '-' + (++dlSeq);
+    const save = uniquePath(app.getPath('downloads'), item.getFilename());
+    item.setSavePath(save);
+    let page = '';
+    try { page = wc && !wc.isDestroyed() ? wc.getURL() : ''; } catch (x) { /* ok */ }
+    const d = { id, url: item.getURL(), page, name: path.basename(save), path: save, mime: item.getMimeType(), total: item.getTotalBytes(), received: 0, state: 'progressing', paused: false, startedAt: Date.now(), endedAt: 0 };
+    S.downloads.unshift(d);
+    if (S.downloads.length > DL_MAX) S.downloads.length = DL_MAX;
+    dlItems.set(id, item);
+    ui && ui.send('downloads', { list: dlList(), started: d.name });
+    item.on('updated', (ev, state) => {
+      d.received = item.getReceivedBytes(); d.total = item.getTotalBytes(); d.paused = item.isPaused();
+      d.state = state === 'interrupted' ? 'interrupted' : 'progressing';
+      dlPush();
+    });
+    item.once('done', (ev, state) => {
+      dlItems.delete(id);
+      d.received = item.getReceivedBytes(); d.total = item.getTotalBytes() || d.received;
+      d.state = state; d.paused = false; d.endedAt = Date.now();
+      if (state === 'completed' && isMac) { try { app.dock.downloadFinished(save); } catch (x) { /* ok */ } }
+      saveState(); dlPush(true);
+      if (state === 'completed') ui && ui.send('downloads', { list: dlList(), done: d.name });
+    });
+    saveState();
+  });
+}
+function dlList() {
+  return S.downloads.map(d => ({ ...d, missing: d.state === 'completed' && !fs.existsSync(d.path) }));
+}
+function dlPush(now) {
+  // barra de progresso no ícone da Dock (todas as transferências em curso)
+  const act = S.downloads.filter(d => d.state === 'progressing');
+  const tot = act.reduce((a, d) => a + (d.total || 0), 0), rec = act.reduce((a, d) => a + d.received, 0);
+  try { if (win && !win.isDestroyed()) win.setProgressBar(act.length ? (tot ? Math.min(1, rec / tot) : 2) : -1); } catch (x) { /* ok */ }
+  if (now) { clearTimeout(dlPushT); dlPushT = null; ui && ui.send('downloads', { list: dlList() }); return; }
+  if (dlPushT) return;
+  dlPushT = setTimeout(() => { dlPushT = null; ui && !ui.isDestroyed() && ui.send('downloads', { list: dlList() }); }, 300);
+}
+function dlAction(act, id) {
+  const d = S.downloads.find(x => x.id === id);
+  const item = dlItems.get(id);
+  if (act === 'folder') { shell.openPath(app.getPath('downloads')); return true; }
+  if (act === 'clear') { S.downloads = S.downloads.filter(x => x.state === 'progressing'); saveState(); dlPush(true); return true; }
+  if (!d) return false;
+  if (act === 'show') { if (fs.existsSync(d.path)) { shell.showItemInFolder(d.path); return true; } return 'missing'; }
+  if (act === 'open') { if (fs.existsSync(d.path)) { shell.openPath(d.path); return true; } return 'missing'; }
+  if (act === 'cancel' && item) { item.cancel(); return true; }
+  if (act === 'pause' && item) { item.isPaused() ? item.resume() : item.pause(); setTimeout(() => dlPush(true), 50); return true; }
+  if (act === 'retry') { if (item && item.canResume()) item.resume(); else { S.downloads = S.downloads.filter(x => x !== d); zeusSession.downloadURL(d.url); } dlPush(true); return true; }
+  if (act === 'remove') { if (item) item.cancel(); S.downloads = S.downloads.filter(x => x !== d); saveState(); dlPush(true); return true; }
+  if (act === 'copy') { clipboard.writeText(d.url); return true; }
+  return false;
+}
+
 function setupPermissions(ses) {
+  wireDownloads(ses);
   ses.setPermissionRequestHandler(async (wc, permission, cb, details) => {
     if (AUTO_ALLOW.has(permission)) return cb(true);
     const origin = originOf(details.requestingUrl || (wc && wc.getURL()) || '');
@@ -1841,6 +1915,8 @@ function setupIPC() {
   handle('pip:toggle', () => pipToggle());
   handle('pip:sound', () => pipSound());
   radarIPC();
+  handle('downloads:list', () => dlList());
+  handle('downloads:do', (act, id) => dlAction(String(act), String(id || '')));
   handle('scores:get', () => scoreList);
   handle('scores:search', q => scores ? scores.search(q) : []);
   handle('scores:teams', list => {
@@ -2054,6 +2130,7 @@ function buildMenu() {
         { label: 'Página inicial', accelerator: 'CmdOrCtrl+Shift+H', click: () => goHome() },
         { type: 'separator' },
         { label: 'Vídeo a flutuar', accelerator: 'CmdOrCtrl+Alt+P', click: () => pipToggle() },
+        { label: 'Transferências', accelerator: 'CmdOrCtrl+Alt+L', click: () => ui && ui.send('ui-command', { cmd: 'downloads' }) },
         { label: 'Partilhar a página…', accelerator: 'CmdOrCtrl+Shift+S', click: () => ui && ui.send('ui-command', { cmd: 'share' }) },
         { type: 'separator' },
         { label: 'Separador seguinte', accelerator: 'Ctrl+Tab', click: () => cycle(1) },

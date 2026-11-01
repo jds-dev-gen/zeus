@@ -12,7 +12,7 @@ try { injectBrowserAction(); } catch (e) { /* sem extensões */ }
 const INVOKE = new Set([
   'ready', 'layout', 'mosaic:prepare',
   'tab:new', 'tab:open', 'tab:close', 'tab:later', 'tab:move', 'tab:restore', 'tab:reopen', 'tab:menu',
-  'navigate', 'nav', 'find', 'history:suggest', 'auth:reply', 'home:today', 'home:taskDone', 'home:setupOpen', 'home:accounts', 'home:feedAdd', 'home:feedRemove', 'home:code', 'history:browsers', 'history:import', 'history:count', 'share:info', 'share:do', 'page:snapshot', 'pip:toggle', 'pip:sound', 'scores:get', 'scores:search', 'scores:teams', 'scores:open',
+  'navigate', 'nav', 'find', 'history:suggest', 'auth:reply', 'home:today', 'home:taskDone', 'home:setupOpen', 'home:accounts', 'home:feedAdd', 'home:feedRemove', 'home:code', 'history:browsers', 'history:import', 'history:count', 'share:info', 'share:do', 'page:snapshot', 'pip:toggle', 'pip:sound', 'downloads:list', 'downloads:do', 'scores:get', 'scores:search', 'scores:teams', 'scores:open',
   'space:add', 'space:rename', 'space:remove', 'space:reorder',
   'app:open', 'app:close', 'app:mode', 'app:add', 'app:update', 'app:remove', 'app:menu', 'app:reload', 'app:reorder', 'page:insertText',
   'claude:toggle', 'claude:sendPage', 'claude:ask', 'claude:new',
@@ -20,7 +20,7 @@ const INVOKE = new Set([
   'ext:list', 'ext:store', 'ext:remove', 'ext:load', 'data:clear', 'ui:focusPage',
   'update:status', 'update:check', 'update:install'
 ]);
-const EVENTS = new Set(['state', 'alt', 'toast', 'ui-command', 'find-result', 'extensions', 'update', 'pip', 'scores']);
+const EVENTS = new Set(['state', 'alt', 'toast', 'ui-command', 'find-result', 'extensions', 'update', 'pip', 'scores', 'downloads']);
 
 contextBridge.exposeInMainWorld('zeus', {
   platform: process.platform,

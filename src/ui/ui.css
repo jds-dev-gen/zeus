@@ -408,3 +408,33 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .sc.flash .sc-score { background: var(--inv-bg); color: var(--inv-fg); animation: scgoal 1s ease-in-out 4; }
 @keyframes scgoal { 50% { transform: scale(1.12); } }
 .tm-logo { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; }
+
+/* ---------- transferências ---------- */
+.dl-btn { position: relative; }
+.dl-btn.active { color: var(--fg); }
+.dl-ring { position: absolute; inset: 1px; border-radius: 50%; pointer-events: none; --p: 0;
+  background: conic-gradient(var(--fg) calc(var(--p) * 1%), transparent 0); -webkit-mask: radial-gradient(circle, transparent 11px, #000 11.5px); mask: radial-gradient(circle, transparent 11px, #000 11.5px); }
+.dl-ring.busy { --p: 25; animation: dlspin 1s linear infinite; }
+@keyframes dlspin { to { transform: rotate(360deg); } }
+.dl-ring[hidden] { display: none; }
+.dl-top { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.dl-top .inp { flex: 1; }
+.dl-top small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.dl-list { display: flex; flex-direction: column; max-height: min(56vh, 520px); overflow-y: auto; margin: 0 -6px; }
+.dl { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-top: 1px solid var(--line); }
+.dl:first-child { border-top: 0; }
+.dl-ico { width: 40px; height: 46px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--line2); background: var(--surface); display: grid; place-items: end center; padding: 0 0 7px; color: var(--soft); }
+.dl-ico span { font-family: var(--mono); font-size: 9.5px; font-weight: 600; letter-spacing: .04em; max-width: 36px; overflow: hidden; }
+.dl-ico:not([disabled]):hover { border-color: var(--muted); color: var(--fg); }
+.dl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dl-name { all: unset; font-size: 13.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.dl-name:not([disabled]):hover { text-decoration: underline; text-underline-offset: 3px; }
+.dl-name[disabled] { cursor: default; }
+.dl small { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl.cancelled .dl-name, .dl.interrupted .dl-name, .dl.missing .dl-name { color: var(--muted); text-decoration: line-through; }
+.dl-bar { height: 4px; border-radius: 2px; background: var(--surface2); overflow: hidden; margin-top: 3px; }
+.dl-bar i { display: block; height: 100%; background: var(--fg); border-radius: 2px; transition: width .3s; }
+.dl-bar.busy i { animation: dlbusy 1.2s ease-in-out infinite; }
+@keyframes dlbusy { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+.dl-acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.btn.sm { height: 30px; padding: 0 11px; font-size: 12.5px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; }
