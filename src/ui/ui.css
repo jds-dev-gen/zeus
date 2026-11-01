@@ -383,8 +383,16 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .zone-add-btn:hover { color: var(--fg); background: var(--veil-fill); }
 
 /* ---------- futebol em direto (barra em baixo) ---------- */
-.scorebar { flex-shrink: 0; height: 36px; display: flex; align-items: stretch; gap: 0; border-top: 1px solid var(--line); background: var(--rail); overflow-x: auto; scrollbar-width: none; }
-.scorebar::-webkit-scrollbar { display: none; }
+.scorebar { flex-shrink: 0; height: 36px; display: flex; align-items: stretch; border-top: 1px solid var(--line); background: var(--rail); }
+.sc-track { flex: 1; min-width: 0; display: flex; align-items: stretch; overflow-x: auto; scrollbar-width: none; }
+.sc-track::-webkit-scrollbar { display: none; }
+.sc-nav { display: none; flex-shrink: 0; width: 30px; border: 0; background: var(--rail); color: var(--fg); place-items: center; padding: 0; }
+.scorebar.overflow .sc-nav { display: grid; }
+#scPrev { border-right: 1px solid var(--line); }
+#scNext { border-left: 1px solid var(--line); }
+.sc-nav:hover:not([disabled]) { background: var(--surface); }
+.sc-nav[disabled] { color: var(--line2); cursor: default; }
+.sc-sep { flex-shrink: 0; display: flex; align-items: center; padding: 0 10px 0 12px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border-right: 1px solid var(--line); white-space: nowrap; }
 .scorebar[hidden] { display: none; }
 .sc { flex-shrink: 0; display: flex; align-items: center; border-right: 1px solid var(--line); }
 .sc-main { height: 100%; display: flex; align-items: center; gap: 9px; padding: 0 6px 0 14px; border: 0; background: transparent; color: var(--fg); font-size: 12.5px; white-space: nowrap; }

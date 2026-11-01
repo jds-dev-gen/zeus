@@ -19,6 +19,23 @@ const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateStrin
 const LIVE_CODES = new Set([6, 7, 41, 42, 50]);   // 1.ª parte, 2.ª parte, prolongamento, penáltis
 const BREAK_CODES = new Set([31, 32, 33, 34]);    // intervalo e pausas antes do prolongamento/penáltis
 
+/* Jogos grandes: os dois clubes são "grandes" e o jogo é numa das principais competições europeias */
+const BIG_TOURNAMENTS = new Set([17, 8, 23, 35, 34, 238, 7, 679]);   // Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, Liga Portugal, Liga dos Campeões, Liga Europa
+const BIG_TOURNAMENT_NAMES = /^(premier league|laliga|la liga|serie a|bundesliga|ligue 1|liga portugal( betclic)?|uefa champions league|uefa europa league)$/i;
+const BIG_CLUBS = [
+  /^arsenal( fc)?$/, /^chelsea( fc)?$/, /^liverpool( fc)?$/, /^manchester city( fc)?$/, /^manchester united( fc)?$/, /^tottenham( hotspur)?( fc)?$/, /^newcastle united( fc)?$/,
+  /^real madrid( cf)?$/, /^(fc )?barcelona$/, /^atletico( de)? madrid$/,
+  /^(fc )?internazionale( milano)?$|^inter$/, /^(ac )?milan$/, /^juventus( fc)?$/, /^(ssc )?napoli$/, /^(as )?roma$/,
+  /^(fc )?bayern( munchen| munich)?$/, /^borussia dortmund$/, /^bayer (04 )?leverkusen$/,
+  /^paris saint-germain( fc)?$|^psg$/, /^(olympique de )?marseille$/,
+  /^(sl )?benfica$/, /^(fc )?porto$/, /^sporting( cp| clube de portugal)?$/, /^(sc )?braga$/
+];
+const fold = t => String(t || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+const isBigClub = t => t && t.gender !== 'F' && BIG_CLUBS.some(re => re.test(fold(t.name)));
+const ut = ev => (ev.tournament && ev.tournament.uniqueTournament) || {};
+const isBigEvent = ev => ev && (BIG_TOURNAMENTS.has(ut(ev).id) || BIG_TOURNAMENT_NAMES.test(ut(ev).name || '')) && isBigClub(ev.homeTeam) && isBigClub(ev.awayTeam);
+const BIG_EVERY = 30 * 60e3;
+
 class Scores {
   constructor({ session, BrowserWindow, onChange, onGoal, base, log }) {
     this.ses = session; this.BW = BrowserWindow;
@@ -32,16 +49,24 @@ class Scores {
     this.page = null; this.pageReady = null; this.pageIdle = null;
     this.direct = true;          // passa a false se o Sofascore recusar pedidos diretos
     this.lastSent = '';
+    this.big = true; this.bigAt = 0;
   }
+  setBig(on) {
+    this.big = on !== false;
+    if (!this.big) for (const [id, ev] of this.events) if (ev.__big && !this.isMine(ev)) this.events.delete(id);
+    this.bigAt = 0; this.refreshSchedule();
+  }
+  isMine(ev) { const ids = new Set(this.teams.map(t => t.id)); return ids.has(ev.homeTeam.id) || ids.has(ev.awayTeam.id); }
 
   setTeams(teams) {
     this.teams = (teams || []).filter(t => t && t.id);
     const ids = new Set(this.teams.map(t => t.id));
-    for (const [id, ev] of this.events) if (!ids.has(ev.homeTeam.id) && !ids.has(ev.awayTeam.id)) this.events.delete(id);
+    for (const [id, ev] of this.events) if (!ids.has(ev.homeTeam.id) && !ids.has(ev.awayTeam.id) && !ev.__big) this.events.delete(id);
     this.refreshSchedule();
   }
-  start(teams) {
+  start(teams, big) {
     this.teams = (teams || []).filter(t => t && t.id);
+    this.big = big !== false;
     clearInterval(this.timers.sched);
     this.timers.sched = setInterval(() => this.refreshSchedule(), SCHEDULE_EVERY);
     setTimeout(() => this.refreshSchedule(), 4000);
@@ -98,7 +123,8 @@ class Scores {
 
   /* ---------- calendário ---------- */
   async refreshSchedule() {
-    if (!this.teams.length) { this.events.clear(); this.stopLive(); this.emit(); return; }
+    if (!this.teams.length && !this.big) { this.events.clear(); this.stopLive(); this.emit(); return; }
+    if (this.big && Date.now() - this.bigAt > BIG_EVERY) await this.loadBig();
     for (const t of this.teams) {
       const [next, last] = await Promise.all([this.get(`/team/${t.id}/events/next/0`), this.get(`/team/${t.id}/events/last/0`)]);
       const n = next && next.events && next.events[0];
@@ -106,6 +132,14 @@ class Scores {
       for (const ev of [n, l]) if (ev && ev.id) this.store(ev, false);
     }
     this.prune(); this.emit(); this.planLive();
+  }
+  // os jogos de hoje das principais ligas europeias entre clubes grandes
+  async loadBig() {
+    const d = new Date(), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const j = await this.get(`/sport/football/scheduled-events/${day}`);
+    if (!j || !Array.isArray(j.events)) return;
+    this.bigAt = Date.now();
+    for (const ev of j.events) if (ev && ev.id && isBigEvent(ev) && new Date(ev.startTimestamp * 1000).toDateString() === d.toDateString()) { ev.__big = true; this.store(ev, false); }
   }
   prune() {
     const now = Date.now();
@@ -118,6 +152,7 @@ class Scores {
   }
   store(ev, live) {
     const old = this.events.get(ev.id);
+    if (old && old.__big) ev.__big = true;
     if (old && live) {
       const oh = score(old.homeScore), oa = score(old.awayScore), nh = score(ev.homeScore), na = score(ev.awayScore);
       if ((nh > oh || na > oa) && (isLive(ev) || ev.status.type === 'finished')) {
@@ -161,7 +196,17 @@ class Scores {
     const ids = [...this.events.values()].filter(ev => ev.status.type === 'inprogress' || BREAK_CODES.has(ev.status.code) ||
       (ev.status.type === 'notstarted' && ev.startTimestamp * 1000 - now < 10 * 60e3 && now - ev.startTimestamp * 1000 < 3 * 3600e3)).map(ev => ev.id);
     if (!ids.length) { this.stopLive(); this.emit(); return; }
-    for (const id of ids) {
+    // vários jogos ao mesmo tempo: um só pedido com todos os jogos a decorrer; os restantes (a começar ou acabados) um a um
+    let rest = ids;
+    if (ids.length > 2) {
+      const live = await this.get('/sport/football/events/live');
+      if (live && Array.isArray(live.events)) {
+        const want = new Set(ids), got = new Set();
+        for (const ev of live.events) if (want.has(ev.id)) { this.store(ev, true); got.add(ev.id); }
+        rest = ids.filter(id => !got.has(id));
+      }
+    }
+    for (const id of rest) {
       const j = await this.get(`/event/${id}`);
       if (j && j.event) this.store(j.event, true);
     }
@@ -188,10 +233,12 @@ class Scores {
       comp: (ev.tournament && ((ev.tournament.uniqueTournament && ev.tournament.uniqueTournament.name) || ev.tournament.name)) || '',
       start: ev.startTimestamp * 1000,
       goalAt: ev.__goalAt || 0, goalSide: ev.__goalSide || '',
+      big: !!ev.__big && !mine.has(ev.homeTeam.id) && !mine.has(ev.awayTeam.id),
       url: matchURL(ev)
     };
   }
-  list() { return this.relevant().map(ev => this.view(ev)); }
+  // primeiro os jogos das equipas seguidas, depois os jogos grandes (cada grupo por hora de início)
+  list() { const v = this.relevant().map(ev => this.view(ev)); return [...v.filter(m => !m.big), ...v.filter(m => m.big)]; }
   emit() {
     const list = this.list();
     const key = JSON.stringify(list);
@@ -221,4 +268,4 @@ function matchURL(ev) {
   return ev.slug && ev.customId ? `https://www.sofascore.com/football/match/${ev.slug}/${ev.customId}#id:${ev.id}` : `https://www.sofascore.com/event/${ev.id}`;
 }
 
-module.exports = { Scores };
+module.exports = { Scores, isBigEvent };

@@ -65,7 +65,11 @@
 
     <section class="viewport" id="viewport" aria-label="Página">
       <div class="slot" id="pageSlot"></div>
-      <div class="scorebar" id="scorebar" hidden aria-label="Futebol em direto"></div>
+      <div class="scorebar" id="scorebar" hidden aria-label="Futebol em direto">
+        <button class="sc-nav" id="scPrev" type="button" aria-label="Jogos anteriores" title="Jogos anteriores"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="sc-track" id="scTrack"></div>
+        <button class="sc-nav" id="scNext" type="button" aria-label="Mais jogos" title="Mais jogos"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
       <div class="mosaic" id="mosaic" hidden role="dialog" aria-label="Separadores">
         <img class="m-bg" id="mosaicBg" alt="">
         <div class="m-veil"></div>

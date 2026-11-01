@@ -59,6 +59,7 @@ const DEFAULT_SETTINGS = {
   autoPip: true,
   teams: [],                  // equipas seguidas no futebol em direto (Sofascore): [{ id, name }]
   goalAlerts: true,           // notificação do Mac quando há golo num desses jogos
+  bigGames: true,             // também os jogos grandes das principais ligas europeias
   homeFeeds: [],              // contas Google ligadas à página principal (agenda e tarefas do dia)              // ao sair de um separador com vídeo a tocar, o vídeo fica a flutuar
   updateRepo: ''              // utilizador/repositório no GitHub com as versões do Zeus
 };
@@ -2053,6 +2054,7 @@ function setupIPC() {
     if (clean.theme && radarWC && !radarWC.isDestroyed()) radarWC.send('radar:theme', isDark() ? 'dark' : 'light');
     if (!isMac && clean.theme) updateOverlayColors();
     if ('updateRepo' in clean && updater) updater.check(true);
+    if ('bigGames' in clean && scores) scores.setBig(clean.bigGames !== false);
     pushState(true); saveState();
   });
   handle('permissions:list', () => Object.entries(S.permissions).map(([k, v]) => { const [o, p] = k.split('|'); return { origin: o, permission: p, allowed: v }; }));
@@ -2101,14 +2103,14 @@ function setupScores() {
     log: m => console.log(m),
     onChange: list => { scoreList = list; if (ui && !ui.isDestroyed()) ui.send('scores', list); },
     onGoal: m => {
-      if (S.settings.goalAlerts === false || !Notification.isSupported()) return;
+      if (S.settings.goalAlerts === false || !Notification.isSupported() || m.big) return;   // só avisa nos jogos das equipas seguidas
       const who = m.goalSide === 'home' ? m.home : m.away;
       const n = new Notification({ title: `⚽ Golo ${who.mine ? 'do ' : ''}${who.full}!`, body: `${m.home.full} ${m.home.score}–${m.away.score} ${m.away.full}${m.label ? ' · ' + m.label : ''}`, silent: false });
       n.on('click', () => { if (win) { win.show(); win.focus(); } newTab({ url: m.url, space: spaceForOpener() }); });
       n.show();
     }
   });
-  scores.start(S.settings.teams || []);
+  scores.start(S.settings.teams || [], S.settings.bigGames !== false);
 }
 
 function updateOverlayColors() {

@@ -671,7 +671,8 @@ function renderScores(list) {
   if (show.length) {
     const fresh = m => m.goalAt && Date.now() - m.goalAt < 60e3;
     const side = (t, sideName, m) => `<span class="sc-team ${t.mine ? 'mine' : ''} ${fresh(m) && m.goalSide === sideName ? 'goal' : ''}"><img src="${esc(t.logo)}" alt="" referrerpolicy="no-referrer" loading="lazy">${esc(t.name)}</span>`;
-    bar.innerHTML = show.map(m => `<div class="sc ${m.state} ${fresh(m) ? 'flash' : ''}">
+    const track = $('#scTrack'), keep = track.scrollLeft;
+    track.innerHTML = show.map((m, i) => `${m.big && (i === 0 || !show[i - 1].big) ? '<span class="sc-sep" title="Jogos grandes das principais ligas europeias">Ligas europeias</span>' : ''}<div class="sc ${m.state} ${m.big ? 'big' : ''} ${fresh(m) ? 'flash' : ''}">
       <button class="sc-main" type="button" data-scopen="${m.id}" title="${esc(m.comp)} — abrir o jogo no Sofascore">
         <span class="sc-st">${m.state === 'live' ? '<i class="sc-dot"></i>' : ''}${esc(m.label)}</span>
         ${side(m.home, 'home', m)}
@@ -681,9 +682,23 @@ function renderScores(list) {
         <small class="sc-comp">${esc(m.comp)}</small>
       </button>
       <button class="sc-x" type="button" data-schide="${m.id}" aria-label="Esconder este jogo" title="Esconder este jogo">${ICON.x}</button></div>`).join('');
-  } else bar.innerHTML = '';
+    track.scrollLeft = keep;
+  } else $('#scTrack').innerHTML = '';
   if (was !== !bar.hidden) sendLayout();
+  requestAnimationFrame(scNav);
 }
+// setas: só aparecem quando os jogos não cabem todos; cada clique anda quase uma barra inteira
+function scNav() {
+  const t = $('#scTrack'), over = t.scrollWidth > t.clientWidth + 2;
+  $('#scorebar').classList.toggle('overflow', over);
+  $('#scPrev').disabled = !over || t.scrollLeft <= 2;
+  $('#scNext').disabled = !over || t.scrollLeft + t.clientWidth >= t.scrollWidth - 2;
+}
+$('#scTrack').addEventListener('scroll', scNav, { passive: true });
+$('#scTrack').addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { e.preventDefault(); $('#scTrack').scrollLeft += e.deltaY; } }, { passive: false });
+$('#scPrev').addEventListener('click', () => { const t = $('#scTrack'); t.scrollBy({ left: -t.clientWidth * 0.85, behavior: 'smooth' }); });
+$('#scNext').addEventListener('click', () => { const t = $('#scTrack'); t.scrollBy({ left: t.clientWidth * 0.85, behavior: 'smooth' }); });
+new ResizeObserver(() => scNav()).observe($('#scTrack'));
 Z.on('scores', renderScores);
 // emblemas que não carregam ficam invisíveis (em vez do ícone de imagem partida)
 document.addEventListener('error', e => { const t = e.target; if (t && t.matches && t.matches('.tm-logo, .sc-team img')) t.style.visibility = 'hidden'; }, true);
@@ -1563,7 +1578,9 @@ async function openSettings() {
       <div class="set-row"><span>Agenda e tarefas de hoje: ${(st.homeFeeds || []).length ? esc((st.homeFeeds || []).map(f => f.label).join(', ')) : 'nenhuma conta ligada'}</span><button class="linkbtn" type="button" id="setHome">${(st.homeFeeds || []).length ? 'Gerir contas' : 'Ligar contas'}</button></div></div>
     <div class="set-sec"><h3>Futebol em direto</h3>
       <div class="set-row"><span>Equipas: ${(st.teams || []).length ? esc(st.teams.map(t => t.name).join(', ')) : 'nenhuma ainda'}</span><button class="linkbtn" type="button" id="setTeams">Escolher equipas</button></div>
+      <div class="set-row"><span>Jogos grandes das ligas europeias</span>${segHTML('bigGames', String(st.bigGames !== false), [['true', 'Mostrar'], ['false', 'Não']])}</div>
       <div class="set-row"><span>Aviso quando há golo</span>${segHTML('goalAlerts', String(st.goalAlerts !== false), [['true', 'Notificação'], ['false', 'Não']])}</div>
+      <p class="hint">Jogos grandes: os dois clubes entre os maiores da Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, Liga Portugal, Liga dos Campeões e Liga Europa (ex.: Real Madrid–Barcelona, Arsenal–Chelsea, Benfica–Porto). Aparecem depois das tuas equipas, sem notificações.</p>
       <p class="hint">Quando uma destas equipas joga, aparece uma barra em baixo com o resultado em direto (dados do Sofascore), durante todo o dia do jogo: a hora prevista antes, o resultado em direto, e o resultado final até à meia-noite (ou até o fechares).</p></div>
     <div class="set-sec"><h3>Histórico</h3>
       <p class="hint" id="histLine">Ao escrever um endereço, o Zeus sugere os sites que já visitaste e os que mais visitas.</p>
