@@ -173,8 +173,8 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .right.compact .rt { width: 40px; height: 36px; padding: 0; justify-content: center; }
 .right.compact .rt .fav { margin: 0; }
 .rt-sp { display: flex; flex-direction: column; align-items: center; gap: 3px; padding-top: 8px; border-top: 1px solid var(--line); width: 100%; }
-.rt-sp-l { font-family: var(--mono); font-size: 9.5px; font-weight: 600; color: var(--sph-fg); background: var(--sph-bg); letter-spacing: .06em; padding: 2px 6px; border-radius: 5px; margin-bottom: 2px; }
-.rt-head { display: block; font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--sph-fg); background: var(--sph-bg); padding: 5px 8px; border-radius: 6px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rt-sp-l { border: 0; cursor: pointer; font-family: var(--mono); font-size: 9.5px; font-weight: 600; color: var(--sph-fg); background: var(--sph-bg); letter-spacing: .06em; padding: 2px 6px; border-radius: 5px; margin-bottom: 2px; }
+.rt-head { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; text-align: left; cursor: pointer; font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--sph-fg); background: var(--sph-bg); padding: 5px 8px; border-radius: 6px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rt-toggle .arr { width: 20px; text-align: center; font-size: 16px; color: var(--muted); }
 .rt { position: relative; display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 6px 0 7px; border-radius: 7px; border: 0; background: transparent; width: 100%; font-size: 12px; color: var(--soft); text-align: left; }
 .rt:hover { background: var(--surface); }
@@ -461,3 +461,8 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .dl-peek { position: absolute; z-index: 5; padding: 6px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line2); box-shadow: 0 16px 40px var(--shadow); pointer-events: none; }
 .dl-peek img { display: block; max-width: 300px; max-height: 300px; width: auto; height: auto; border-radius: 8px; }
 .dl-ico:not(.has-thumb) { width: 44px; margin: 0 10px; }
+
+/* espaço escolhido na barra da direita: a casinha abre lá a página nova */
+.rt-head:hover, .rt-sp-l:hover { filter: brightness(1.18); }
+.rt-head.picked, .rt-sp-l.picked { background: var(--inv-bg); color: var(--inv-fg); }
+.rt-head i { margin-left: auto; font-style: normal; font-family: var(--font); font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none; opacity: .75; white-space: nowrap; }

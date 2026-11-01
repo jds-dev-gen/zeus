@@ -252,7 +252,7 @@ function renderRight() {
   r.hidden = S.settings.tabMode !== 'right';
   if (r.hidden) return;
   const wide = !!S.settings.rightWide;
-  const key = JSON.stringify([S.tabs.map(x => [x.id, x.title, x.favicon, x.space]), S.currentId, S.spaces, wide]);
+  const key = JSON.stringify([S.tabs.map(x => [x.id, x.title, x.favicon, x.space]), S.currentId, S.spaces, wide, S.pickSpace]);
   if (key === rightKey) return; rightKey = key;
   r.classList.toggle('compact', !wide);
   const toggle = `<button class="rt rt-toggle" type="button" data-rtoggle title="${wide ? 'Só ícones (a página fica mais larga)' : 'Mostrar os títulos'}" aria-label="${wide ? 'Mostrar só os ícones' : 'Mostrar os títulos'}">${wide ? '<span class="arr">›</span><span class="t">Só ícones</span>' : '<span class="arr">‹</span>'}</button>`;
@@ -261,14 +261,14 @@ function renderRight() {
     r.innerHTML = toggle + S.spaces.map(s => {
       const list = S.tabs.filter(t => t.space === s.id);
       if (!list.length) return '';
-      return `<div class="rt-sp" title="${esc(s.name)}"><span class="rt-sp-l">${esc(s.name.charAt(0).toUpperCase())}</span>${list.map(t => `<div class="rt ${t.id === S.currentId ? 'on' : ''}" role="button" tabindex="0" data-open="${t.id}" title="${esc(t.url === NEWTAB ? 'Página nova' : t.title)}"><span class="fav">${favHTML(t, 16)}</span></div>`).join('')}</div>`;
+      return `<div class="rt-sp" title="${esc(s.name)}"><button type="button" class="rt-sp-l ${S.pickSpace === s.id ? 'picked' : ''}" data-pick="${esc(s.id)}" title="Escolher o espaço ${esc(s.name)}: a casinha abre aqui uma página nova">${esc(s.name.charAt(0).toUpperCase())}</button>${list.map(t => `<div class="rt ${t.id === S.currentId ? 'on' : ''}" role="button" tabindex="0" data-open="${t.id}" title="${esc(t.url === NEWTAB ? 'Página nova' : t.title)}"><span class="fav">${favHTML(t, 16)}</span></div>`).join('')}</div>`;
     }).join('') + `<button class="rt" type="button" data-newtab title="Separador novo" aria-label="Separador novo">${ICON.plus}</button>`;
     return;
   }
   r.innerHTML = toggle + S.spaces.map(s => {
     const list = S.tabs.filter(t => t.space === s.id);
     if (!list.length) return '';
-    return `<div style="display:flex;flex-direction:column;gap:2px"><span class="rt-head">${esc(s.name)}</span>${list.map(t => `<div class="rt ${t.id === S.currentId ? 'on' : ''}" role="button" tabindex="0" data-open="${t.id}"><span class="fav">${favHTML(t)}</span><span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><button class="nb x" type="button" data-close="${t.id}" aria-label="Fechar">${ICON.x}</button></div>`).join('')}</div>`;
+    return `<div style="display:flex;flex-direction:column;gap:2px"><button type="button" class="rt-head ${S.pickSpace === s.id ? 'picked' : ''}" data-pick="${esc(s.id)}" title="${S.pickSpace === s.id ? 'Espaço escolhido: carrega na casinha para abrir aqui uma página nova' : 'Escolher este espaço: depois a casinha abre aqui uma página nova'}">${esc(s.name)}${S.pickSpace === s.id ? '<i>⌂ página nova aqui</i>' : ''}</button>${list.map(t => `<div class="rt ${t.id === S.currentId ? 'on' : ''}" role="button" tabindex="0" data-open="${t.id}"><span class="fav">${favHTML(t)}</span><span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><button class="nb x" type="button" data-close="${t.id}" aria-label="Fechar">${ICON.x}</button></div>`).join('')}</div>`;
   }).join('') + `<button class="rt" type="button" data-newtab>${ICON.plus}<span class="t">Separador novo</span></button>`;
 }
 
@@ -278,6 +278,8 @@ function onTabListClick(e) {
   const o = e.target.closest('[data-open]');
   if (o) { Z.invoke('tab:open', +o.dataset.open); return; }
   if (e.target.closest('[data-newtab]')) Z.invoke('tab:new', {});
+  const pk = e.target.closest('[data-pick]');
+  if (pk) { Z.invoke('space:pick', pk.dataset.pick); return; }
   if (e.target.closest('[data-rtoggle]')) Z.invoke('settings:set', { rightWide: !S.settings.rightWide });
 }
 $('#topTabs').addEventListener('click', onTabListClick);

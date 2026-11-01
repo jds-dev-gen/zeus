@@ -496,7 +496,7 @@ function pushState(now) {
       mru: S.mru,
       canGoBack: !!(wc && wc.navigationHistory.canGoBack()),
       canGoForward: !!(wc && wc.navigationHistory.canGoForward()),
-      spaces: S.spaces, later: S.later, closed: S.closed,
+      spaces: S.spaces, later: S.later, closed: S.closed, pickSpace,
       apps: S.apps.map(a => Object.assign({}, a, { badge: badges[a.id] || 0, loaded: appViews.has(a.id), error: appErrors[a.id] || null })),
       openPanel, fullApp, fullAppURL: fullApp && wc ? wc.getURL() : '', claudeOpen: S.claudeOpen,
       settings: S.settings,
@@ -795,7 +795,7 @@ function newTab({ url, space, activate = true, title, partition = null, sessionL
     id: nextId++,
     url: url ? toURL(url) : NEWTAB,
     title: title || (url ? hostOf(toURL(url)) : 'Página nova'),
-    space: space || (cur() ? cur().space : S.spaces[0].id),
+    space: space || takePick() || (cur() ? cur().space : S.spaces[0].id),
     partition: partition || null,
     sessionLabel: partition ? sessionLabel : null
   };
@@ -812,6 +812,7 @@ function openTab(id) {
   if (prev !== id) { captureThumb(prev); autoPip(prev); pipExit(id); }
   S.currentId = id;
   fullApp = null;
+  if (pickSpace && tab.space !== pickSpace) pickSpace = null;   // foi para outro espaço: a escolha deixa de valer
   S.mru = [id, ...S.mru.filter(x => x !== id && tabById(x))];
   // o separador onde se entra sobe para o topo do seu espaço: em cima fica sempre o último visto
   if (prev !== id) toTop(tab);
@@ -1027,10 +1028,14 @@ function homeFeedRemove(id) {
 }
 
 // casa: página nova (hora, meteorologia, pesquisa) — reaproveita uma página nova vazia do espaço
+/* Espaço escolhido na barra da direita (clique no título do espaço): a casinha e o separador novo abrem nesse espaço */
+let pickSpace = null;
+function takePick() { const p = pickSpace && S.spaces.some(x => x.id === pickSpace) ? pickSpace : null; if (pickSpace) { pickSpace = null; pushState(); } return p; }
 function goHome() {
   const t = cur();
-  const space = t ? t.space : S.spaces[0].id;
-  if (!(t && t.url === NEWTAB && !fullApp)) {
+  const picked = takePick();
+  const space = picked || (t ? t.space : S.spaces[0].id);
+  if (!(t && t.url === NEWTAB && !fullApp && t.space === space)) {
     const blank = S.tabs.find(x => x.url === NEWTAB && x.space === space);
     if (blank) { toTop(blank); openTab(blank.id); } else newTab({ space });
   }
@@ -2042,6 +2047,7 @@ function setupIPC() {
   handle('share:do', (id, pos) => shareDo(id, pos));
   handle('pip:toggle', () => pipToggle());
   handle('pip:sound', () => pipSound());
+  handle('space:pick', id => { pickSpace = pickSpace === id || !S.spaces.some(x => x.id === id) ? null : id; pushState(true); return pickSpace; });
   radarIPC();
   handle('downloads:list', () => dlList());
   handle('downloads:do', (act, id) => dlAction(String(act), String(id || '')));
