@@ -765,7 +765,7 @@ function renderDlList() {
     const live = d.state === 'progressing', ok = d.state === 'completed' && !d.missing;
     const pct = live && d.total ? Math.round(d.received / d.total * 100) : 0;
     return `<div class="dl ${d.state} ${d.missing ? 'missing' : ''}" data-dl="${esc(d.id)}">
-      <button class="dl-ico" type="button" data-dla="open" title="${ok ? 'Abrir o ficheiro' : ''}" ${ok ? '' : 'disabled'}><span>${esc(extOf(d.name) || '—')}</span></button>
+      <button class="dl-ico ${ok && dlThumbCache.get(d.id) ? 'has-thumb' : ''}" type="button" data-dla="preview" title="${ok ? 'Pré-visualizar' : ''}" ${ok ? '' : 'disabled'}>${ok && dlThumbCache.get(d.id) ? `<img src="${dlThumbCache.get(d.id)}" alt="">` : ''}<span>${esc(extOf(d.name) || '—')}</span></button>
       <div class="dl-main">
         <button class="dl-name" type="button" data-dla="open" title="${esc(d.name)}" ${ok ? '' : 'disabled'}>${esc(d.name)}</button>
         <small>${esc(dlState(d))} · ${esc(hostOf(d.url) || '')} · ${esc(dlWhen(d.startedAt))}</small>
@@ -778,12 +778,40 @@ function renderDlList() {
         <button class="nb" type="button" data-dla="remove" title="Tirar da lista (o ficheiro não é apagado)" aria-label="Tirar da lista">${ICON.x}</button>
       </div></div>`;
   }).join('');
+  // pede as miniaturas que faltam (uma de cada vez, só para os ficheiros visíveis na lista)
+  list.filter(d => d.state === 'completed' && !d.missing && !dlThumbCache.has(d.id)).slice(0, 60).forEach(d => {
+    dlThumbCache.set(d.id, null);
+    Z.invoke('downloads:thumb', d.id).then(u => {
+      if (!u) return;
+      dlThumbCache.set(d.id, u);
+      const b = document.querySelector(`.dl[data-dl="${CSS.escape(d.id)}"] .dl-ico`);
+      if (b && !b.querySelector('img')) { b.classList.add('has-thumb'); b.insertAdjacentHTML('afterbegin', `<img src="${u}" alt="">`); }
+    }).catch(() => {});
+  });
 }
+const dlThumbCache = new Map();
+// pré-visualização grande ao passar o rato pela miniatura
+let dlPeekT = null;
+document.addEventListener('mouseover', e => {
+  const b = e.target.closest && e.target.closest('.dl-ico.has-thumb');
+  const peek = $('#dlPeek');
+  if (!b) { clearTimeout(dlPeekT); if (peek) peek.hidden = true; return; }
+  clearTimeout(dlPeekT);
+  dlPeekT = setTimeout(() => {
+    const img = b.querySelector('img'); if (!img || !$('#dlPeek')) return;
+    const p = $('#dlPeek'), r = b.getBoundingClientRect(), m = $('#modal').getBoundingClientRect();
+    p.innerHTML = `<img src="${img.src}" alt="">`;
+    p.hidden = false;
+    p.style.left = Math.round(r.right - m.left + 10) + 'px';
+    p.style.top = Math.round(Math.max(8, Math.min(r.top - m.top - 60, m.height - p.offsetHeight - 8))) + 'px';
+  }, 250);
+});
 function openDownloads() {
   dlFilter = '';
   openModal('downloads', `${modalHead('Transferências')}
     <div class="dl-top"><input class="inp" id="dlQ" type="search" placeholder="Procurar pelo nome do ficheiro ou do site" autocomplete="off" spellcheck="false"><small id="dlCount"></small></div>
     <div class="dl-list" id="dlList"></div>
+    <div class="dl-peek" id="dlPeek" hidden></div>
     <div class="row-btns" style="margin-top:14px"><button class="btn ghost" type="button" id="dlFolder">Abrir a pasta Transferências</button><button class="btn ghost" type="button" id="dlClear">Limpar a lista</button></div>
     <p class="hint">Limpar a lista não apaga os ficheiros do computador.</p>`, 'wide');
   Z.invoke('downloads:list').then(l => { DL = l || []; renderDlList(); renderDlButton(); });
@@ -801,6 +829,7 @@ function openDownloads() {
     const r = await Z.invoke('downloads:do', act, id);
     if (r === 'missing') { toast('O ficheiro já não está onde foi guardado.'); const l = await Z.invoke('downloads:list'); DL = l || []; renderDlList(); }
     else if (act === 'show' || act === 'open') closeModal();
+    else if (act === 'preview' && r === true) { const p = $('#dlPeek'); if (p) p.hidden = true; }
   });
 }
 Z.on('downloads', m => {

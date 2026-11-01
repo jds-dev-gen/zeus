@@ -7,7 +7,7 @@
  */
 const {
   app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog,
-  clipboard, shell, nativeTheme, Notification, ShareMenu } = require('electron');
+  clipboard, shell, nativeTheme, Notification, ShareMenu, nativeImage } = require('electron');
 const path = require('path');
 const { execFile } = require('child_process');
 const fs = require('fs');
@@ -1654,6 +1654,31 @@ function dlPush(now) {
   if (dlPushT) return;
   dlPushT = setTimeout(() => { dlPushT = null; ui && !ui.isDestroyed() && ui.send('downloads', { list: dlList() }); }, 300);
 }
+// miniatura do ficheiro (no Mac vem do Quick Look: PDF, imagens, vídeo, Word, Excel…); guardada em memória
+const dlThumbs = new Map();   // caminho|data de modificação -> dataURL ou ''
+const IMG_EXT = /\.(jpe?g|png|gif|webp|bmp|heic|tiff?)$/i;
+async function dlThumb(id) {
+  const d = S.downloads.find(x => x.id === id);
+  if (!d || d.state !== 'completed') return null;
+  let st; try { st = fs.statSync(d.path); } catch (e) { return null; }
+  const key = d.path + '|' + st.mtimeMs;
+  if (dlThumbs.has(key)) return dlThumbs.get(key) || null;
+  let url = '';
+  try {
+    let img = null;
+    if (isMac || process.platform === 'win32') img = await nativeImage.createThumbnailFromPath(d.path, { width: 320, height: 320 });
+    else if (IMG_EXT.test(d.path) && st.size < 40e6) img = nativeImage.createFromPath(d.path);
+    if (img && !img.isEmpty()) {
+      const sz = img.getSize();
+      if (sz.width > 320 || sz.height > 320) img = img.resize(sz.width >= sz.height ? { width: 320 } : { height: 320 });
+      url = img.toDataURL();
+    }
+  } catch (e) { url = ''; }
+  if (dlThumbs.size > 400) dlThumbs.clear();
+  dlThumbs.set(key, url);
+  return url || null;
+}
+
 function dlAction(act, id) {
   const d = S.downloads.find(x => x.id === id);
   const item = dlItems.get(id);
@@ -1662,6 +1687,12 @@ function dlAction(act, id) {
   if (!d) return false;
   if (act === 'show') { if (fs.existsSync(d.path)) { shell.showItemInFolder(d.path); return true; } return 'missing'; }
   if (act === 'open') { if (fs.existsSync(d.path)) { shell.openPath(d.path); return true; } return 'missing'; }
+  // pré-visualização rápida (a mesma do Finder com a barra de espaços)
+  if (act === 'preview') {
+    if (!fs.existsSync(d.path)) return 'missing';
+    if (isMac && win) { win.previewFile(d.path, d.name); return true; }
+    shell.openPath(d.path); return true;
+  }
   if (act === 'cancel' && item) { item.cancel(); return true; }
   if (act === 'pause' && item) { item.isPaused() ? item.resume() : item.pause(); setTimeout(() => dlPush(true), 50); return true; }
   if (act === 'retry') { if (item && item.canResume()) item.resume(); else { S.downloads = S.downloads.filter(x => x !== d); zeusSession.downloadURL(d.url); } dlPush(true); return true; }
@@ -1933,6 +1964,7 @@ function setupIPC() {
   radarIPC();
   handle('downloads:list', () => dlList());
   handle('downloads:do', (act, id) => dlAction(String(act), String(id || '')));
+  handle('downloads:thumb', id => dlThumb(String(id || '')));
   handle('scores:get', () => scoreList);
   handle('scores:search', q => scores ? scores.search(q) : []);
   handle('scores:teams', list => {

@@ -423,7 +423,7 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .dl-list { display: flex; flex-direction: column; max-height: min(56vh, 520px); overflow-y: auto; margin: 0 -6px; }
 .dl { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-top: 1px solid var(--line); }
 .dl:first-child { border-top: 0; }
-.dl-ico { width: 40px; height: 46px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--line2); background: var(--surface); display: grid; place-items: end center; padding: 0 0 7px; color: var(--soft); }
+.dl-ico { position: relative; overflow: hidden; width: 52px; height: 52px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--line2); background: var(--surface); display: grid; place-items: end center; padding: 0 0 7px; color: var(--soft); }
 .dl-ico span { font-family: var(--mono); font-size: 9.5px; font-weight: 600; letter-spacing: .04em; max-width: 36px; overflow: hidden; }
 .dl-ico:not([disabled]):hover { border-color: var(--muted); color: var(--fg); }
 .dl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -438,3 +438,11 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 @keyframes dlbusy { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
 .dl-acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .btn.sm { height: 30px; padding: 0 11px; font-size: 12.5px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; }
+
+.dl-ico.has-thumb { padding: 0; place-items: center; background: var(--surface2); }
+.dl-ico img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dl-ico.has-thumb span { position: absolute; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 4px; background: rgba(0, 0, 0, .65); color: #fff; font-size: 8.5px; }
+.dl-ico:not([disabled]) { cursor: zoom-in; }
+.modal { position: relative; }
+.dl-peek { position: absolute; z-index: 5; width: 260px; max-height: 300px; padding: 6px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line2); box-shadow: 0 16px 40px var(--shadow); pointer-events: none; }
+.dl-peek img { display: block; width: 100%; max-height: 286px; object-fit: contain; border-radius: 8px; }
