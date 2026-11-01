@@ -11,6 +11,7 @@
   --zone-line: rgba(255, 255, 255, .22); --zone-fill: rgba(255, 255, 255, .035); --zone-cur: rgba(255, 255, 255, .55);
   --shadow: rgba(0, 0, 0, .45);
   --sph-bg: #3a3a3e; --sph-fg: #f6f6f4;
+  --sc-card: #2a2a2e; --sc-card-hover: #333338; --sc-line: #424247; --sc-pill: #434349;
   --font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   color-scheme: dark;
@@ -24,6 +25,7 @@
   --zone-line: rgba(0, 0, 0, .2); --zone-fill: rgba(255, 255, 255, .5); --zone-cur: rgba(0, 0, 0, .55);
   --shadow: rgba(0, 0, 0, .18);
   --sph-bg: #47474c; --sph-fg: #ffffff;
+  --sc-card: #e2e2e6; --sc-card-hover: #d8d8dd; --sc-line: #c9c9cf; --sc-pill: #ffffff;
   color-scheme: light;
 }
 
@@ -395,10 +397,10 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .sc-sep { flex-shrink: 0; display: flex; align-items: center; padding: 0 4px 0 8px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
 .scorebar[hidden] { display: none; }
 /* cada jogo num cartão arredondado; os que estão a decorrer com contorno vermelho suave */
-.sc { flex-shrink: 0; height: 32px; display: flex; align-items: center; border: 1px solid var(--line2); border-radius: 9px; background: var(--surface); overflow: hidden; }
-.sc.live { border-color: color-mix(in srgb, #e5484d 55%, var(--line2)); }
+.sc { flex-shrink: 0; height: 32px; display: flex; align-items: center; border: 1px solid var(--sc-line); border-radius: 9px; background: var(--sc-card); overflow: hidden; }
+.sc.live { border-color: color-mix(in srgb, #e5484d 65%, var(--sc-line)); }
 .sc-main { height: 100%; display: flex; align-items: center; gap: 9px; padding: 0 4px 0 11px; border: 0; background: transparent; color: var(--fg); font-size: 12.5px; white-space: nowrap; }
-.sc-main:hover { background: var(--surface2); }
+.sc-main:hover { background: var(--sc-card-hover); }
 .sc-st { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--muted); min-width: 34px; font-variant-numeric: tabular-nums; }
 .sc.live .sc-st { color: var(--fg); font-weight: 600; }
 .sc-dot { width: 7px; height: 7px; border-radius: 50%; background: #e5484d; animation: scpulse 1.6s ease-in-out infinite; }
@@ -407,7 +409,7 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .sc-team.mine { color: var(--fg); font-weight: 600; }
 .sc-team img { width: 16px; height: 16px; object-fit: contain; }
 .sc-team.goal { color: var(--fg); }
-.sc-score { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .02em; padding: 2px 8px; border-radius: 6px; background: var(--surface2); }
+.sc-score { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .02em; padding: 2px 8px; border-radius: 6px; background: var(--sc-pill); }
 .sc-score span { opacity: .5; margin: 0 2px; font-weight: 500; }
 .sc.pre .sc-score { font-weight: 500; color: var(--muted); }
 .sc.ft .sc-st, .sc.break .sc-st { color: var(--soft); }
