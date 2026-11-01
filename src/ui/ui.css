@@ -383,8 +383,8 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .zone-add-btn:hover { color: var(--fg); background: var(--veil-fill); }
 
 /* ---------- futebol em direto (barra em baixo) ---------- */
-.scorebar { flex-shrink: 0; height: 36px; display: flex; align-items: stretch; border-top: 1px solid var(--line); background: var(--rail); }
-.sc-track { flex: 1; min-width: 0; display: flex; align-items: stretch; overflow-x: auto; scrollbar-width: none; }
+.scorebar { flex-shrink: 0; height: 42px; display: flex; align-items: stretch; border-top: 1px solid var(--line); background: var(--rail); }
+.sc-track { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px; overflow-x: auto; scrollbar-width: none; }
 .sc-track::-webkit-scrollbar { display: none; }
 .sc-nav { display: none; flex-shrink: 0; width: 30px; border: 0; background: var(--rail); color: var(--fg); place-items: center; padding: 0; }
 .scorebar.overflow .sc-nav { display: grid; }
@@ -392,11 +392,13 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 #scNext { border-left: 1px solid var(--line); }
 .sc-nav:hover:not([disabled]) { background: var(--surface); }
 .sc-nav[disabled] { color: var(--line2); cursor: default; }
-.sc-sep { flex-shrink: 0; display: flex; align-items: center; padding: 0 10px 0 12px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border-right: 1px solid var(--line); white-space: nowrap; }
+.sc-sep { flex-shrink: 0; display: flex; align-items: center; padding: 0 4px 0 8px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
 .scorebar[hidden] { display: none; }
-.sc { flex-shrink: 0; display: flex; align-items: center; border-right: 1px solid var(--line); }
-.sc-main { height: 100%; display: flex; align-items: center; gap: 9px; padding: 0 6px 0 14px; border: 0; background: transparent; color: var(--fg); font-size: 12.5px; white-space: nowrap; }
-.sc-main:hover { background: var(--surface); }
+/* cada jogo num cartão arredondado; os que estão a decorrer com contorno vermelho suave */
+.sc { flex-shrink: 0; height: 32px; display: flex; align-items: center; border: 1px solid var(--line2); border-radius: 9px; background: var(--surface); overflow: hidden; }
+.sc.live { border-color: color-mix(in srgb, #e5484d 55%, var(--line2)); }
+.sc-main { height: 100%; display: flex; align-items: center; gap: 9px; padding: 0 4px 0 11px; border: 0; background: transparent; color: var(--fg); font-size: 12.5px; white-space: nowrap; }
+.sc-main:hover { background: var(--surface2); }
 .sc-st { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--muted); min-width: 34px; font-variant-numeric: tabular-nums; }
 .sc.live .sc-st { color: var(--fg); font-weight: 600; }
 .sc-dot { width: 7px; height: 7px; border-radius: 50%; background: #e5484d; animation: scpulse 1.6s ease-in-out infinite; }
