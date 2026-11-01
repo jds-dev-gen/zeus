@@ -11,7 +11,7 @@
   --zone-line: rgba(255, 255, 255, .22); --zone-fill: rgba(255, 255, 255, .035); --zone-cur: rgba(255, 255, 255, .55);
   --shadow: rgba(0, 0, 0, .45);
   --sph-bg: #3a3a3e; --sph-fg: #f6f6f4;
-  --sc-card: #313136; --sc-card-hover: #3a3a40; --sc-line: #4d4d54; --sc-pill: #505057;
+  --sc-card: #1d2620; --sc-card-hover: #232e27; --sc-line: #2d3a31; --sc-pill: #2b382f;
   --font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   color-scheme: dark;
@@ -25,7 +25,7 @@
   --zone-line: rgba(0, 0, 0, .2); --zone-fill: rgba(255, 255, 255, .5); --zone-cur: rgba(0, 0, 0, .55);
   --shadow: rgba(0, 0, 0, .18);
   --sph-bg: #47474c; --sph-fg: #ffffff;
-  --sc-card: #d9d9de; --sc-card-hover: #cfcfd5; --sc-line: #bdbdc4; --sc-pill: #ffffff;
+  --sc-card: #edf5ef; --sc-card-hover: #e3efe7; --sc-line: #d3e4d8; --sc-pill: #ffffff;
   color-scheme: light;
 }
 
