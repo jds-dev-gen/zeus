@@ -2047,6 +2047,8 @@ function setupIPC() {
   handle('share:do', (id, pos) => shareDo(id, pos));
   handle('pip:toggle', () => pipToggle());
   handle('pip:sound', () => pipSound());
+  // clicar no título de um espaço (barra da direita): abre logo a página principal nesse espaço
+  handle('space:home', id => { if (!S.spaces.some(x => x.id === id)) return; pickSpace = id; goHome(); });
   handle('space:pick', id => { pickSpace = pickSpace === id || !S.spaces.some(x => x.id === id) ? null : id; pushState(true); return pickSpace; });
   radarIPC();
   handle('downloads:list', () => dlList());

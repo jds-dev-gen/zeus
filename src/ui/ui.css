@@ -465,4 +465,5 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 /* espaço escolhido na barra da direita: a casinha abre lá a página nova */
 .rt-head:hover, .rt-sp-l:hover { filter: brightness(1.18); }
 .rt-head.picked, .rt-sp-l.picked { background: var(--inv-bg); color: var(--inv-fg); }
-.rt-head i { margin-left: auto; font-style: normal; font-family: var(--font); font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none; opacity: .75; white-space: nowrap; }
+.rt-head i { margin-left: auto; font-style: normal; font-family: var(--font); font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none; opacity: 0; white-space: nowrap; transition: opacity .12s; }
+.rt-head:hover i { opacity: .8; }
