@@ -304,7 +304,8 @@ function showNote(n) {
   const has = !!n;
   $('#ed').classList.toggle('off', !has);
   $('#empty').hidden = has;
-  $('#empty').innerHTML = has ? '' : `<div><b>${L.notes.length ? 'Escolhe uma nota' : 'As tuas notas ficam aqui'}</b>${L.notes.length ? 'ou cria uma nova.' : 'Cada nota é um ficheiro na pasta do ' + esc(L.where.drive || 'Mac') + '.'}</div>`;
+  $('#empty').innerHTML = has ? '' : `<div><b>${L.notes.length ? 'Escolhe uma nota' : 'As tuas notas ficam aqui'}</b>${L.notes.length ? 'ou começa uma nova.' : 'Cada nota é um ficheiro na pasta do ' + esc(L.where.drive || 'Mac') + '.'}
+    <div class="emptybtns"><button class="btn primary" type="button" data-empty="new">+ Nova nota</button><button class="btn" type="button" data-empty="rec"><span class="rd"></span>Gravar reunião</button></div></div>`;
   if (!has) { doc.innerHTML = ''; titleEl.value = ''; $('#player').hidden = true; renderJob(); return; }
   titleEl.value = n.title; requestAnimationFrame(fitTitle);
   doc.innerHTML = sanitize(n.html) || '<p><br></p>';
@@ -366,6 +367,7 @@ async function newNote(title, html) {
   return id;
 }
 $('#newNote').addEventListener('click', () => newNote());
+$('#empty').addEventListener('click', e => { const b = e.target.closest('[data-empty]'); if (!b) return; if (b.dataset.empty === 'new') newNote(); else $('#recMeeting').click(); });
 async function setFav(id, on) {
   if (cur && cur.id === id) { await flush(); cur.fav = on; renderMeta(); }
   await Z.save(id, { fav: on });
