@@ -134,7 +134,8 @@ function applyBarColor() {
   if (!c) { el.textContent = ''; return; }
   const light = theme === 'light';
   const mix = light ? 'white 65%' : 'white 9%', on = light ? 'white 85%' : 'white 14%';
-  el.textContent = `:root{--chrome:${c};--rail:${c}}
+  // seletor mais forte do que :root[data-zeus="light"] do ui.css (senão, no tema claro, só a barra da direita mudava)
+  el.textContent = `html:root[data-zeus]{--chrome:${c};--rail:${c}}
 .right{background:${c}}
 .app-btn{background:color-mix(in srgb, ${c}, ${mix});border-color:color-mix(in srgb, ${c}, ${light ? 'black 10%' : 'white 16%'})}
 .rt.on{background:color-mix(in srgb, ${c}, ${on})}
