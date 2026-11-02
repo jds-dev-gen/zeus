@@ -9,7 +9,7 @@
 <body>
 <header class="top">
   <div class="brand">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6"/></svg>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7.2"/><path d="M14.1 14.1 19.6 19.6"/></svg>
     <h1>Zoom</h1>
   </div>
   <label class="q">
@@ -22,6 +22,19 @@
   <nav class="side" id="side" aria-label="Coleções"></nav>
   <main class="list" id="list"></main>
   <aside class="detail" id="detail" hidden></aside>
+  <aside class="pv" id="pv" hidden aria-label="Artigo">
+    <div class="pv-head">
+      <div class="pv-nav">
+        <button class="ico" type="button" id="pvPrev" title="Artigo anterior (↑)" aria-label="Artigo anterior"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
+        <button class="ico" type="button" id="pvNext" title="Artigo seguinte (↓)" aria-label="Artigo seguinte"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <div class="pv-meta"><small id="pvSite"></small><b id="pvTitle"></b></div>
+      <button class="btn" type="button" id="pvInfo" title="Coleção, etiquetas, nota e destaques">Detalhes</button>
+      <button class="btn" type="button" id="pvTab" title="Continuar a ler num separador do Zeus">Abrir num separador</button>
+      <button class="ico" type="button" id="pvClose" title="Fechar (Esc)" aria-label="Fechar">✕</button>
+    </div>
+    <div class="pv-slot" id="pvSlot"><p>A abrir o artigo…</p></div>
+  </aside>
 </div>
 <script src="zoom.js"></script>
 </body>

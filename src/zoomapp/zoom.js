@@ -112,7 +112,49 @@ function renderList() {
     </div></button>`).join('');
 }
 $('#list').addEventListener('click', e => { const c = e.target.closest('[data-id]'); if (!c) return; sel = c.dataset.id; renderList(); renderDetail(); });
-$('#list').addEventListener('dblclick', e => { const c = e.target.closest('[data-id]'); if (c) Z.open(c.dataset.id, false); });
+$('#list').addEventListener('dblclick', e => { const c = e.target.closest('[data-id]'); if (c) openPreview(c.dataset.id); });
+
+/* ---------- ler o artigo dentro do Zoom (duplo clique), como no Radar ---------- */
+let PV = null;
+const slotRect = () => { const r = $('#pvSlot').getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; };
+function openPreview(id) {
+  const it = D.items.find(i => i.id === id); if (!it) return;
+  PV = id; sel = id;
+  document.body.classList.add('previewing');
+  $('#pv').hidden = false;
+  $('#pvSite').textContent = (it.site || hostOf(it.url)) + ' · guardado ' + when(it.createdAt);
+  $('#pvTitle').textContent = it.title;
+  $('#pvSlot').classList.add('loading');
+  renderList();
+  requestAnimationFrame(() => {
+    const c = document.querySelector('.card.on'); if (c) c.scrollIntoView({ block: 'nearest' });
+    Z.preview(id, slotRect());
+  });
+}
+function closePreview(fromMain) {
+  if (!PV) return;
+  PV = null;
+  if (!fromMain) Z.previewClose();
+  document.body.classList.remove('previewing');
+  $('#pv').hidden = true;
+  render();
+}
+function stepPreview(dir) {
+  if (!PV) return;
+  const ids = filtered().map(i => i.id), i = ids.indexOf(PV), n = ids[i + dir];
+  if (n) openPreview(n);
+}
+$('#pvClose').addEventListener('click', () => closePreview());
+$('#pvPrev').addEventListener('click', () => stepPreview(-1));
+$('#pvNext').addEventListener('click', () => stepPreview(1));
+$('#pvTab').addEventListener('click', async () => { if (!PV) return; PV = null; await Z.previewToTab(); document.body.classList.remove('previewing'); $('#pv').hidden = true; render(); });
+// "Detalhes": fecha o artigo e mostra o painel com coleção, etiquetas, nota e destaques
+$('#pvInfo').addEventListener('click', () => { const id = PV; closePreview(); sel = id; render(); });
+Z.onPreviewClosed(() => closePreview(true));
+Z.onPreviewState(st => { if (PV) $('#pvSlot').classList.toggle('loading', !!st.loading); });
+new ResizeObserver(() => { if (PV) Z.previewRect(slotRect()); }).observe($('#pvSlot'));
+// um clique noutro cartão, com um artigo aberto, abre esse artigo
+$('#list').addEventListener('click', e => { if (!PV) return; const c = e.target.closest('[data-id]'); if (c && c.dataset.id !== PV) openPreview(c.dataset.id); }, true);
 $('#list').addEventListener('dragstart', e => { const c = e.target.closest('[data-id]'); if (c) { e.dataTransfer.setData('text/zoom-id', c.dataset.id); e.dataTransfer.effectAllowed = 'move'; } });
 
 /* ---------- detalhe ---------- */
@@ -126,7 +168,7 @@ function renderDetail() {
     <div class="d-top"><h2>${esc(it.title)}</h2><button class="ico" type="button" data-close title="Fechar">✕</button></div>
     ${it.image ? `<div class="d-img" style="background-image:url('${esc(it.image).replace(/'/g, '%27')}')"></div>` : ''}
     <div class="d-site">${esc(it.site || hostOf(it.url))} · guardado ${when(it.createdAt)} · <a href="#" data-copyurl>copiar endereço</a></div>
-    <div class="row"><button class="btn primary" type="button" data-open>Abrir o artigo</button><button class="btn" type="button" data-openbg title="Abre num separador por trás">Abrir por trás</button></div>
+    <div class="row"><button class="btn primary" type="button" data-read>Ler aqui</button><button class="btn" type="button" data-open>Abrir num separador</button><button class="btn" type="button" data-openbg title="Abre num separador por trás">Abrir por trás</button></div>
     <label class="field"><span>Coleção</span><select data-col data-keep="col"><option value="">Sem coleção</option>${D.cols.map(c => `<option value="${esc(c.id)}" ${it.col === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
     <label class="field"><span>Etiquetas</span><input data-tags data-keep="tags" placeholder="separadas por vírgulas (ex.: ucrânia, defesa)" value="${esc((it.tags || []).join(', '))}"></label>
     <label class="field"><span>Nota</span><textarea data-note data-keep="note" placeholder="Porque guardaste este artigo, ideias, o que fazer com ele…">${esc(it.note || '')}</textarea></label>
@@ -144,6 +186,7 @@ $('#detail').addEventListener('click', async e => {
   const it = D.items.find(i => i.id === sel); if (!it) return;
   const t = e.target;
   if (t.closest('[data-close]')) { sel = null; renderList(); renderDetail(); return; }
+  if (t.closest('[data-read]')) return openPreview(it.id);
   if (t.closest('[data-open]')) return Z.open(it.id, false);
   if (t.closest('[data-openbg]')) return Z.open(it.id, true);
   if (t.closest('[data-copyurl]')) { e.preventDefault(); Z.copy(it.url); $('#status').textContent = 'Endereço copiado.'; return; }
@@ -179,6 +222,11 @@ let qT = null;
 $('#q').addEventListener('input', e => { clearTimeout(qT); qT = setTimeout(() => { q = e.target.value.trim(); renderList(); }, 120); });
 document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#q').focus(); }
+  if (PV && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+    if (e.key === 'Escape') { closePreview(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); stepPreview(1); return; }
+    if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); stepPreview(-1); return; }
+  }
   if (e.key === 'Escape' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && sel) { sel = null; renderList(); renderDetail(); }
 });
 document.addEventListener('error', e => { if (e.target && e.target.tagName === 'IMG') e.target.style.visibility = 'hidden'; }, true);

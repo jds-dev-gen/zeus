@@ -1396,15 +1396,21 @@ async function radarFetch(url) {
 /* Pré-visualização de notícias dentro do Radar: uma página web verdadeira (sessão do Zeus, com as assinaturas
    iniciadas), por cima do painel que o Radar reserva para ela. */
 let radarPrev = null, radarPrevRect = null;
+// a mesma página de pré-visualização serve o Radar e o Zoom: prevOwner diz a qual pertence agora
+let prevOwner = 'radar';
+const prevWC = () => { const w = prevOwner === 'zoom' ? zoomWC : radarWC; return w && !w.isDestroyed() ? w : null; };
+const prevCh = name => (prevOwner === 'zoom' ? 'zoomapp:' : 'radar:') + name;
 function placeRadarPreview() {
   if (!radarPrev || radarPrev.webContents.isDestroyed()) return;
-  const rv = appViews.get('radar');
-  const vis = rv && rv.getVisible() && radarPrevRect && !L.overlay && !L.cover && (fullApp === 'radar' || openPanel === 'radar');
+  const rv = appViews.get(prevOwner);
+  const vis = rv && rv.getVisible() && radarPrevRect && !L.overlay && !L.cover && (fullApp === prevOwner || openPanel === prevOwner);
   if (!vis) { placeView(radarPrev, null); return; }
   const b = rv.getBounds(), r = radarPrevRect;
   placeView(radarPrev, { x: b.x + Math.round(r.x), y: b.y + Math.round(r.y), width: Math.max(50, Math.round(r.width)), height: Math.max(50, Math.round(r.height)) });
 }
-function radarPreviewOpen(url, rect) {
+function radarPreviewOpen(url, rect, owner = 'radar') {
+  if (prevOwner !== owner && radarPrevRect) { const o = prevWC(); if (o) o.send(prevCh('previewClosed')); }
+  prevOwner = owner;
   if (!radarPrev || radarPrev.webContents.isDestroyed()) {
     radarPrev = new WebContentsView({ webPreferences: WEB_PREFS(zeusSession) });
     radarPrev.setBackgroundColor('#ffffff');
@@ -1416,9 +1422,10 @@ function radarPreviewOpen(url, rect) {
     wc.on('before-input-event', (e, input) => {
       if (input.type === 'keyDown' && input.key === 'Escape' && !wc.isFullScreen?.()) { e.preventDefault(); radarPreviewClose(true); }
     });
-    wc.on('page-title-updated', (e, t) => { if (radarWC && !radarWC.isDestroyed()) radarWC.send('radar:previewState', { title: t, url: wc.getURL(), loading: wc.isLoading() }); });
-    wc.on('did-stop-loading', () => { if (radarWC && !radarWC.isDestroyed()) radarWC.send('radar:previewState', { title: wc.getTitle(), url: wc.getURL(), loading: false }); });
-    wc.on('did-start-loading', () => { if (radarWC && !radarWC.isDestroyed()) radarWC.send('radar:previewState', { loading: true }); });
+    const tell = st => { const o = prevWC(); if (o) o.send(prevCh('previewState'), st); };
+    wc.on('page-title-updated', (e, t) => tell({ title: t, url: wc.getURL(), loading: wc.isLoading() }));
+    wc.on('did-stop-loading', () => tell({ title: wc.getTitle(), url: wc.getURL(), loading: false }));
+    wc.on('did-start-loading', () => tell({ loading: true }));
   } else {
     // traz para cima de tudo (pode ter sido criada antes de outras vistas)
     try { win.contentView.removeChildView(radarPrev); win.contentView.addChildView(radarPrev); } catch (e) { /* ok */ }
@@ -1433,8 +1440,9 @@ function radarPreviewClose(tell) {
     placeView(radarPrev, null);
     radarPrev.webContents.loadURL('about:blank').catch(() => {});   // para o som e os vídeos
   }
-  if (tell && radarWC && !radarWC.isDestroyed()) radarWC.send('radar:previewClosed');
-  if (radarWC && !radarWC.isDestroyed()) radarWC.focus();
+  const o = prevWC();
+  if (tell && o) o.send(prevCh('previewClosed'));
+  if (o) o.focus();
 }
 /* ------------------------------------------------------------------ */
 /* Zoom: artigos guardados, coleções e highlights (ver zoom.js)         */
@@ -1515,6 +1523,18 @@ function zoomIPC() {
   zh('removeHl', (id, hid) => { const it = zoom.byId(String(id)); const r = it ? zoom.removeHighlight(it.url, String(hid)) : false; refreshPages(); return r; });
   zh('open', (id, bg) => { const it = zoom.byId(String(id)); if (it) newTab({ url: it.url, space: spaceForOpener(), activate: !bg }); });
   zh('copy', text => { clipboard.writeText(String(text || '')); return true; });
+  // abrir o artigo dentro do próprio Zoom (a mesma pré-visualização do Radar)
+  const okRect = r => r && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(+r[k])) ? { x: +r.x, y: +r.y, width: +r.width, height: +r.height } : null;
+  zh('preview', (id, rect) => { const it = zoom.byId(String(id)); if (!it || !okRect(rect)) return false; radarPreviewOpen(it.url, okRect(rect), 'zoom'); return true; });
+  zh('previewRect', rect => { if (radarPrevRect && prevOwner === 'zoom') { radarPrevRect = okRect(rect) || radarPrevRect; placeRadarPreview(); } });
+  zh('previewClose', () => { if (prevOwner === 'zoom') radarPreviewClose(false); });
+  zh('previewToTab', () => {
+    if (prevOwner !== 'zoom' || !radarPrev || radarPrev.webContents.isDestroyed()) return false;
+    const u = radarPrev.webContents.getURL();
+    radarPreviewClose(false);
+    if (/^https?:/.test(u)) newTab({ url: u, space: spaceForOpener() });
+    return true;
+  });
 }
 
 function radarIPC() {
@@ -1528,8 +1548,8 @@ function radarIPC() {
     if (!ok(e) || typeof url !== 'string' || !/^https?:\/\//i.test(url) || !okRect(rect)) return false;
     radarPreviewOpen(url, okRect(rect)); return true;
   });
-  ipcMain.handle('radar:previewRect', (e, rect) => { if (ok(e) && radarPrevRect) { radarPrevRect = okRect(rect) || radarPrevRect; placeRadarPreview(); } });
-  ipcMain.handle('radar:previewClose', e => { if (ok(e)) radarPreviewClose(false); });
+  ipcMain.handle('radar:previewRect', (e, rect) => { if (ok(e) && radarPrevRect && prevOwner === 'radar') { radarPrevRect = okRect(rect) || radarPrevRect; placeRadarPreview(); } });
+  ipcMain.handle('radar:previewClose', e => { if (ok(e) && prevOwner === 'radar') radarPreviewClose(false); });
   ipcMain.handle('radar:zoomSave', async e => {
     if (!ok(e) || !radarPrev || radarPrev.webContents.isDestroyed()) return null;
     const it = await zoomSaveWC(radarPrev.webContents);
