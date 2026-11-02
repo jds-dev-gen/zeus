@@ -108,6 +108,38 @@ const mq = window.matchMedia('(prefers-color-scheme: dark)');
 function applyTheme() {
   const t = S ? S.settings.theme : 'dark';
   document.documentElement.setAttribute('data-zeus', t === 'system' ? (mq.matches ? 'dark' : 'light') : t);
+  applyBarColor();
+}
+/* Cor das barras (cima, apps, separadores à direita, resultados). Cada cor tem uma versão para o tema claro e outra para o escuro. */
+const BAR_COLORS = [
+  ['neutro', 'Neutro', null, null],
+  ['cinza', 'Cinzento', '#e8e8eb', '#1c1c1f'],
+  ['ardosia', 'Ardósia', '#e1e6ee', '#1a2029'],
+  ['salva', 'Verde-salva', '#e1ebe3', '#182219'],
+  ['areia', 'Areia', '#eee7dc', '#231f19'],
+  ['noite', 'Azul-noite', '#dfe4f4', '#161a2c'],
+  ['vinho', 'Vinho', '#f0e2e5', '#26161b']
+];
+const curTheme = () => document.documentElement.getAttribute('data-zeus') === 'light' ? 'light' : 'dark';
+function barColorFor(theme) {
+  const st = S ? S.settings : {};
+  if (st.barColor === 'custom') return (st.barCustom || {})[theme] || null;
+  const p = BAR_COLORS.find(x => x[0] === st.barColor);
+  return p ? (theme === 'light' ? p[2] : p[3]) : null;
+}
+function applyBarColor() {
+  let el = document.getElementById('barColorCSS');
+  if (!el) { el = document.createElement('style'); el.id = 'barColorCSS'; document.head.append(el); }
+  const theme = curTheme(), c = barColorFor(theme);
+  if (!c) { el.textContent = ''; return; }
+  const light = theme === 'light';
+  const mix = light ? 'white 65%' : 'white 9%', on = light ? 'white 85%' : 'white 14%';
+  el.textContent = `:root{--chrome:${c};--rail:${c}}
+.right{background:${c}}
+.app-btn{background:color-mix(in srgb, ${c}, ${mix});border-color:color-mix(in srgb, ${c}, ${light ? 'black 10%' : 'white 16%'})}
+.rt.on{background:color-mix(in srgb, ${c}, ${on})}
+.rt:hover{background:color-mix(in srgb, ${c}, ${mix})}
+.top, .rail, .right, .scorebar, .sc-ball{border-color:color-mix(in srgb, ${c}, ${light ? 'black 9%' : 'white 10%'})}`;
 }
 mq.addEventListener('change', applyTheme);
 
@@ -1566,6 +1598,8 @@ async function openSettings() {
     <div class="set-sec" style="border-top:0;padding-top:0"><h3>Aspeto</h3>
       <div class="set-row"><span>Separadores</span>${segHTML('tabMode', st.tabMode, [['mosaic', 'Mosaico'], ['top', 'Em cima'], ['right', 'À direita']])}</div>
       <div class="set-row"><span>Tema</span>${segHTML('theme', st.theme, [['dark', 'Escuro'], ['light', 'Claro'], ['system', 'Sistema']])}</div>
+      <div class="set-row" style="align-items:flex-start"><span>Cor das barras</span><div class="barpick" id="barPick">${BAR_COLORS.map(([id, n, l, d]) => `<button type="button" data-bar="${id}" class="${(st.barColor || 'neutro') === id ? 'on' : ''}" title="${esc(n)}"><span><i style="background:${l || '#ffffff'}"></i><i style="background:${d || '#0b0b0c'}"></i></span>${esc(n)}</button>`).join('')}</div></div>
+      <div class="set-row"><span>Ou uma cor à tua escolha <small class="hint" style="margin:0">(para o tema ${curTheme() === 'light' ? 'claro' : 'escuro'})</small></span><label class="barcustom ${st.barColor === 'custom' ? 'on' : ''}"><span id="barSw" style="background:${esc((st.barCustom || {})[curTheme()] || (curTheme() === 'light' ? '#e8e8eb' : '#1c1c1f'))}"></span><span class="linkbtn">Escolher cor…</span><input type="color" id="barCustom" value="${esc((st.barCustom || {})[curTheme()] || (curTheme() === 'light' ? '#e8e8eb' : '#1c1c1f'))}"></label></div>
       <div class="set-row"><span>Com os títulos à direita</span>${segHTML('rightZoom', String(st.rightZoom !== false), [['true', 'Manter aspeto de computador'], ['false', 'Zoom normal']])}</div>
       <div class="set-row"><span>Vídeo ao mudar de separador</span>${segHTML('autoPip', String(st.autoPip !== false), [['true', 'Fica a flutuar'], ['false', 'Não']])}</div>
       <div class="set-row"><span>Ao abrir o Zeus</span>${segHTML('restoreTabs', String(st.restoreTabs !== false), [['true', 'Retomar separadores'], ['false', 'Página nova']])}</div>
@@ -1612,6 +1646,21 @@ async function openSettings() {
     Z.invoke('settings:set', { [seg.dataset.setting]: v });
   }));
   $('#setCity').addEventListener('click', openCity);
+  $('#barPick').addEventListener('click', e => {
+    const b = e.target.closest('[data-bar]'); if (!b) return;
+    $('#barPick').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    $('.barcustom').classList.remove('on');
+    S.settings.barColor = b.dataset.bar; applyBarColor();
+    Z.invoke('settings:set', { barColor: b.dataset.bar });
+  });
+  $('#barCustom').addEventListener('input', e => {
+    const v = e.target.value, t = curTheme();
+    $('#barSw').style.background = v;
+    $('#barPick').querySelectorAll('button').forEach(x => x.classList.remove('on'));
+    $('.barcustom').classList.add('on');
+    S.settings.barColor = 'custom'; S.settings.barCustom = { ...(S.settings.barCustom || {}), [t]: v }; applyBarColor();
+  });
+  $('#barCustom').addEventListener('change', e => { Z.invoke('settings:set', { barColor: 'custom', barCustom: { [curTheme()]: e.target.value } }); });
   $('#setHome').addEventListener('click', openHomeSetup);
   $('#setTeams').addEventListener('click', openTeams);
   const scStat = st => {

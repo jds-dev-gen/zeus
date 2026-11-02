@@ -51,6 +51,8 @@ const DEFAULT_SETTINGS = {
   rightWide: true,            // separadores à direita: true = com títulos (com zoom ajustado), false = só ícones
   rightZoom: true,            // com os títulos à direita, reduzir o zoom das páginas para manterem o aspeto de computador
   theme: 'dark',              // dark | light | system
+  barColor: 'neutro',         // cor das barras (cima, apps, separadores, resultados): neutro | cinza | ardosia | salva | areia | noite | vinho | custom
+  barCustom: {},              // cor escolhida à mão, por tema: { light: '#rrggbb', dark: '#rrggbb' }
   search: 'google',           // google | duckduckgo | startpage | brave
   city: { name: 'Lisboa', lat: 38.7223, lon: -9.1393 },
   newtabMode: 'web',          // web | claude
@@ -2184,6 +2186,11 @@ function setupIPC() {
     const ALLOWED = Object.keys(DEFAULT_SETTINGS).filter(k => k !== 'homeFeeds' && k !== 'teams');
     const clean = {};
     for (const k of Object.keys(patch)) if (ALLOWED.includes(k)) clean[k] = patch[k];
+    if ('barColor' in clean && !['neutro', 'cinza', 'ardosia', 'salva', 'areia', 'noite', 'vinho', 'custom'].includes(clean.barColor)) delete clean.barColor;
+    if ('barCustom' in clean) {
+      const bc = clean.barCustom || {}, hex = v => (/^#[0-9a-f]{6}$/i.test(v || '') ? v : undefined);
+      clean.barCustom = { light: hex(bc.light) || (S.settings.barCustom || {}).light, dark: hex(bc.dark) || (S.settings.barCustom || {}).dark };
+    }
     ['panelWidth', 'claudeWidth'].forEach(k => { if (k in clean) clean[k] = Math.max(280, Math.min(1400, Math.round(+clean[k] || 420))); });
     if ('updateRepo' in clean) clean.updateRepo = String(clean.updateRepo || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '');
     S.settings = Object.assign({}, S.settings, clean);
