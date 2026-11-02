@@ -13,6 +13,9 @@ const os = require('os');
 // assinatura ad-hoc (sem certificado da Apple): no Mac com o codesign, em Linux com o rcodesign
 function adHocSign(appBundle) {
   if (process.platform === 'darwin') {
+    // o Whisper (programa à parte, dentro de Resources) assina-se primeiro
+    const w = path.join(appBundle, 'Contents', 'Resources', 'whisper', 'whisper-cli');
+    if (fs.existsSync(w)) execFileSync('codesign', ['--force', '--sign', '-', w], { stdio: 'inherit' });
     execFileSync('codesign', ['--force', '--deep', '--sign', '-', appBundle], { stdio: 'inherit' });
     return;
   }
@@ -27,7 +30,12 @@ const arches = which === 'all' ? ['arm64', 'x64'] : [which];
 (async () => {
   require('./build.js');
   for (const arch of arches) {
+    // o Whisper desta arquitetura (compilado no GitHub; ver .github/workflows/release.yml) vai para Contents/Resources/whisper
+    const whisperDir = path.join(__dirname, 'vendor', `whisper-darwin-${arch}`, 'whisper');
+    const extraResource = fs.existsSync(path.join(whisperDir, 'whisper-cli')) ? [whisperDir] : [];
+    if (!extraResource.length) console.warn(`Aviso: sem o Whisper para ${arch}; as Notas gravam mas não transcrevem.`);
     const [appPath] = await packager({
+      extraResource,
       dir: __dirname,
       name: 'Zeus',
       executableName: 'Zeus',
@@ -42,10 +50,10 @@ const arches = which === 'all' ? ['arm64', 'x64'] : [which];
       appCategoryType: 'public.app-category.productivity',
       appCopyright: 'Zeus — browser pessoal do João',
       darwinDarkModeSupport: true,
-      ignore: [/^\/out($|\/)/, /^\/assets\/make-icon\.py$/, /^\/package-mac\.js$/, /^\/\.git($|\/)/, /^\/\.github($|\/)/, /^\/scripts($|\/)/, /^\/README\.md$/],
+      ignore: [/^\/out($|\/)/, /^\/vendor($|\/)/, /^\/assets\/make-icon\.py$/, /^\/package-mac\.js$/, /^\/\.git($|\/)/, /^\/\.github($|\/)/, /^\/scripts($|\/)/, /^\/README\.md$/],
       extendInfo: {
         NSCameraUsageDescription: 'Os sites que abres no Zeus (por exemplo, videochamadas) podem pedir a câmara.',
-        NSMicrophoneUsageDescription: 'Os sites que abres no Zeus (por exemplo, WhatsApp ou videochamadas) podem pedir o microfone.',
+        NSMicrophoneUsageDescription: 'As Notas do Zeus usam o microfone para gravar reuniões; os sites que abres (por exemplo, WhatsApp ou videochamadas) também o podem pedir.',
         NSLocationWhenInUseUsageDescription: 'Os sites que abres no Zeus podem pedir a tua localização.',
         NSBluetoothAlwaysUsageDescription: 'Alguns sites podem pedir acesso a dispositivos Bluetooth.',
         LSApplicationCategoryType: 'public.app-category.productivity',

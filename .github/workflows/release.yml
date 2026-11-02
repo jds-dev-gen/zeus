@@ -78,6 +78,24 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      # Whisper (whisper.cpp): transcreve as reuniões gravadas nas Notas, no próprio Mac.
+      # Compila-se aqui, para Apple Silicon (com Metal, a parte gráfica do M1) e para Intel; vai dentro da app.
+      - name: Whisper (transcrição no Mac)
+        run: |
+          git clone --quiet --depth 1 --branch v1.9.5 https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp
+          for A in arm64 x86_64; do
+            if [ "$A" = arm64 ]; then D=arm64; EXTRA="-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON"; else D=x64; EXTRA="-DGGML_METAL=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON"; fi
+            cmake -S /tmp/whisper.cpp -B /tmp/wb-$A -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=$A -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+              -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF $EXTRA
+            cmake --build /tmp/wb-$A --config Release -j 4 --target whisper-cli
+            mkdir -p vendor/whisper-darwin-$D/whisper
+            cp /tmp/wb-$A/bin/whisper-cli vendor/whisper-darwin-$D/whisper/
+            file vendor/whisper-darwin-$D/whisper/whisper-cli
+            otool -L vendor/whisper-darwin-$D/whisper/whisper-cli
+          done
+          # prova rápida (com o modelo de testes do whisper.cpp, sem a parte gráfica: as máquinas do GitHub não a têm)
+          vendor/whisper-darwin-arm64/whisper/whisper-cli -m /tmp/whisper.cpp/models/for-tests-ggml-tiny.bin -f /tmp/whisper.cpp/samples/jfk.wav -l pt -ng -oj -of /tmp/prova -pp
+          test -s /tmp/prova.json && echo "Whisper OK"
       - name: Empacotar e assinar (ad-hoc)
         run: |
           node package-mac.js arm64

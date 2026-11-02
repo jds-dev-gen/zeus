@@ -7,7 +7,8 @@
  */
 const {
   app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog,
-  clipboard, shell, nativeTheme, Notification, ShareMenu, nativeImage } = require('electron');
+  clipboard, shell, nativeTheme, Notification, ShareMenu, nativeImage, net, safeStorage, systemPreferences } = require('electron');
+const { setupNotas } = require('./notas-main');
 const path = require('path');
 const { execFile } = require('child_process');
 const fs = require('fs');
@@ -33,6 +34,7 @@ const DEFAULT_APPS = [
   { id: 'apolo', name: 'Apolo', url: '', mode: 'full', icon: 'apolo', preload: false, linksInTabs: true },
   { id: 'radar', name: 'Radar', url: 'zeus://radar', mode: 'full', icon: 'radar', preload: false, internal: 'radar' },
   { id: 'zoom', name: 'Zoom', url: 'zeus://zoom', mode: 'full', icon: 'zoom', preload: false, internal: 'zoom' },
+  { id: 'notas', name: 'Notas', url: 'zeus://notas', mode: 'full', icon: 'notas', preload: false, internal: 'notas' },
   // página "Futebol hoje": abre pela bola da barra dos resultados, não aparece na barra das apps
   { id: 'futebol', name: 'Futebol', url: 'zeus://futebol', mode: 'full', icon: '', preload: false, internal: 'futebol', hidden: true },
   { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true, linksInTabs: true },
@@ -210,6 +212,11 @@ function loadState() {
     // apps novas por defeito entram sem apagar as do João
     const ids = new Set(S.apps.map(a => a.id));
     DEFAULT_APPS.forEach(a => { if (!ids.has(a.id) && !(saved.removedApps || []).includes(a.id)) S.apps.push(a); });
+    // 0.14.0: as Notas entram logo a seguir ao Zoom
+    if (!ids.has('notas')) {
+      const i = S.apps.findIndex(a => a.id === 'notas'), j = S.apps.findIndex(a => a.id === 'zoom');
+      if (i > -1 && j > -1 && i !== j + 1) S.apps.splice(j + 1, 0, ...S.apps.splice(i, 1));
+    }
     // 0.13.0: o Zoom (artigos guardados) entra logo a seguir ao Radar
     if (!ids.has('zoom')) {
       const i = S.apps.findIndex(a => a.id === 'zoom'), j = S.apps.findIndex(a => a.id === 'radar');
@@ -383,7 +390,15 @@ function createWindow() {
   win.once('ready-to-show', () => { win.show(); });
   win.on('resize', saveState);
   win.on('move', saveState);
-  win.on('close', saveNow);
+  win.on('close', e => {
+    // a meio de uma gravação nas Notas: pergunta antes de fechar
+    if (!quitOk && notasApp && notasApp.isRecording()) {
+      e.preventDefault();
+      notasApp.quitCheck().then(go => { if (go) { quitOk = true; win.close(); } });
+      return;
+    }
+    saveNow();
+  });
   win.on('closed', () => { win = null; });
   win.on('blur', () => ui && ui.send('alt', 'blur'));
 }
@@ -1338,9 +1353,11 @@ function ensureAppView(a) {
 const INTERNAL = {
   radar: { file: path.join(__dirname, 'radar', 'index.html'), preload: path.join(__dirname, 'radar', 'preload.js') },
   futebol: { file: path.join(__dirname, 'futebol', 'index.html'), preload: path.join(__dirname, 'futebol', 'preload.js') },
-  zoom: { file: path.join(__dirname, 'zoomapp', 'index.html'), preload: path.join(__dirname, 'zoomapp', 'preload.js') }
+  zoom: { file: path.join(__dirname, 'zoomapp', 'index.html'), preload: path.join(__dirname, 'zoomapp', 'preload.js') },
+  notas: { file: path.join(__dirname, 'notasapp', 'index.html'), preload: path.join(__dirname, 'notasapp', 'preload.js') }
 };
-let radarWC = null, futebolWC = null, zoomWC = null;
+let radarWC = null, futebolWC = null, zoomWC = null, notasWC = null;
+let notasApp = null;
 const isDark = () => S.settings.theme === 'dark' || (S.settings.theme === 'system' && nativeTheme.shouldUseDarkColors);
 function ensureInternalView(a) {
   const def = INTERNAL[a.internal];
@@ -1357,10 +1374,17 @@ function ensureInternalView(a) {
   if (a.internal === 'radar') radarWC = wc;
   if (a.internal === 'futebol') futebolWC = wc;
   if (a.internal === 'zoom') zoomWC = wc;
+  if (a.internal === 'notas') {
+    notasWC = wc;
+    // as Notas só podem pedir o microfone (para gravar reuniões); nada mais
+    const ses = wc.session;
+    ses.setPermissionRequestHandler((w, perm, cb, d) => cb(w === notasWC && perm === 'media' && !!d && Array.isArray(d.mediaTypes) && d.mediaTypes.length > 0 && d.mediaTypes.every(t => t === 'audio')));
+    ses.setPermissionCheckHandler((w, perm) => perm === 'media' && w === notasWC);
+  }
   wc.on('will-navigate', (e, url) => { e.preventDefault(); if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); });
   wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); return { action: 'deny' }; });
   wc.on('render-process-gone', (e, d) => { if (d.reason !== 'clean-exit') setTimeout(() => { if (!wc.isDestroyed()) wc.reload(); }, 500); });
-  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; if (zoomWC === wc) zoomWC = null; });
+  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; if (zoomWC === wc) zoomWC = null; if (notasWC === wc) notasWC = null; });
   wc.loadFile(def.file).catch(() => {});
   return view;
 }
@@ -2232,6 +2256,11 @@ function setupIPC() {
   handle('space:pick', id => { pickSpace = pickSpace === id || !S.spaces.some(x => x.id === id) ? null : id; pushState(true); return pickSpace; });
   radarIPC();
   zoomIPC();
+  notasApp = setupNotas({
+    app, ipcMain, dialog, shell, Menu, BrowserWindow, net, safeStorage, Notification, systemPreferences,
+    getWC: () => notasWC, getUi: () => ui, getWin: () => win, getView: () => appViews.get('notas'),
+    getZoom: () => zoom, isDark, openTab: url => newTab({ url, space: spaceForOpener() })
+  });
   handle('downloads:list', () => dlList());
   handle('downloads:do', (act, id) => dlAction(String(act), String(id || '')));
   handle('downloads:thumb', id => dlThumb(String(id || '')));
@@ -2336,6 +2365,7 @@ function setupIPC() {
     if (clean.theme && radarWC && !radarWC.isDestroyed()) radarWC.send('radar:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && futebolWC && !futebolWC.isDestroyed()) futebolWC.send('futebol:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && zoomWC && !zoomWC.isDestroyed()) zoomWC.send('zoomapp:theme', isDark() ? 'dark' : 'light');
+    if (clean.theme && notasWC && !notasWC.isDestroyed()) notasWC.send('notas:theme', isDark() ? 'dark' : 'light');
     if (!isMac && clean.theme) updateOverlayColors();
     if ('updateRepo' in clean && updater) updater.check(true);
     if ('bigGames' in clean && scores) scores.setBig(clean.bigGames !== false);
@@ -2554,4 +2584,12 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => { saveNow(); app.quit(); });
-app.on('before-quit', () => { saveNow(); if (zoom) zoom.flush(); });
+let quitOk = false;
+app.on('before-quit', e => {
+  if (!quitOk && notasApp && notasApp.isRecording()) {
+    e.preventDefault();
+    notasApp.quitCheck().then(go => { if (go) { quitOk = true; app.quit(); } });
+    return;
+  }
+  saveNow(); if (zoom) zoom.flush();
+});
