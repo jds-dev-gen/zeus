@@ -1,7 +1,7 @@
 {
   "name": "zeus",
   "productName": "Zeus",
-  "version": "0.11.3",
+  "version": "0.11.4",
   "description": "Zeus — browser pessoal",
   "main": "src/main.js",
   "private": true,
@@ -18,7 +18,7 @@
     "@electron/fuses": "^2.1.3",
     "@electron/packager": "^20.3.0",
     "esbuild": "^0.24.2",
-    "electron": "44.10.0"
+    "electron": "44.10.1"
   },
   "zeus": {
     "updateRepo": "jds-dev-gen/zeus"
