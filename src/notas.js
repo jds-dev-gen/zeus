@@ -183,21 +183,21 @@ ${END}
   companions(p, audio) {
     const dir = path.dirname(p), base = path.basename(p).replace(/\.html?$/i, '');
     const out = [path.join(dir, base + '.docx')];
-    if (audio) out.push(path.join(dir, audio));
+    if (audio && !path.isAbsolute(audio)) out.push(path.join(dir, audio));
     return out;
   }
   async read(id) {
     const n = this.info(id); if (!n) return null;
     let txt; try { txt = await fsp.readFile(n.path, 'utf8'); } catch (e) { return null; }
     const p = this.parse(txt);
-    return { id: n.id, title: p.title || n.title, html: p.html, fav: n.fav, folder: n.folder, created: n.created, updated: n.updated, audio: n.audio ? path.join(path.dirname(n.path), n.audio) : '' };
+    return { id: n.id, title: p.title || n.title, html: p.html, fav: n.fav, folder: n.folder, created: n.created, updated: n.updated, audio: n.audio ? (path.isAbsolute(n.audio) ? n.audio : path.join(path.dirname(n.path), n.audio)) : '' };
   }
-  async create(folder, title, html = '') {
+  async create(folder, title, html = '', audio = '') {
     this.ensureRoot();
     folder = folder && (this.folderList || []).includes(folder) ? folder : '';
     const dir = path.join(this.root(), folder);
     await fsp.mkdir(dir, { recursive: true });
-    const n = { id: uid(), title: String(title || '').trim() || 'Nota sem título', fav: false, created: new Date().toISOString(), audio: '', html };
+    const n = { id: uid(), title: String(title || '').trim() || 'Nota sem título', fav: false, created: new Date().toISOString(), audio: audio || '', html };
     const p = this.freeName(dir, fileBase(n.title), '.html');
     await this.writeAtomic(p, this.render(n));
     await this.scan();
@@ -223,7 +223,7 @@ ${END}
         const oldBase = path.basename(p).replace(/\.html?$/i, ''), newBase = path.basename(np).replace(/\.html?$/i, '');
         // a cópia em Word e o áudio acompanham a nota
         try { await fsp.rename(path.join(dir, oldBase + '.docx'), path.join(ndir, newBase + '.docx')); } catch (e) { /* sem cópia */ }
-        if (next.audio) {
+        if (next.audio && !path.isAbsolute(next.audio)) {
           const na = next.audio.startsWith(oldBase) ? newBase + next.audio.slice(oldBase.length) : next.audio;
           try { await fsp.rename(path.join(dir, next.audio), path.join(ndir, na)); next.audio = na; } catch (e) { /* ok */ }
         }

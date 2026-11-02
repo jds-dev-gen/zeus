@@ -676,6 +676,7 @@ function setFocusMode(on) {
 /* Menu da nota (vem do processo principal)                             */
 /* ================================================================== */
 Z.onCmd(async ({ cmd, id, arg }) => {
+  if (cmd === 'open') { await load(); view = 'all'; renderSide(); return openNote(id); }
   if (cmd === 'fav') return setFav(id, !!arg);
   if (cmd === 'move') return moveNote(id, arg || '');
   if (cmd === 'removed') { if (cur && cur.id === id) { cur = null; dirty = false; showNote(null); } return load(); }

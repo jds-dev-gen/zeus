@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-PT" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src file: data:; media-src file: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Orfeu</title>
+<link rel="stylesheet" href="orfeu.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5c-2 3-2.4 8 .3 11.5M17 3.5c2 3 2.4 8-.3 11.5"/><path d="M6 4h12"/><path d="M10 5.5v9.5M14 5.5v9.5"/><path d="M7.3 15c1.2 2.2 2.8 3.2 4.7 3.2s3.5-1 4.7-3.2"/><path d="M12 18.2V21M9.5 21h5"/></svg>
+    <h1>Orfeu</h1>
+  </div>
+  <label class="q">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
+    <input id="q" type="search" placeholder="Procurar na biblioteca…" autocomplete="off" spellcheck="false" aria-label="Procurar na biblioteca">
+  </label>
+  <span class="spacer"></span>
+  <span class="hint">Arrasta ficheiros para aqui</span>
+  <button class="btn primary" type="button" id="open" title="Abrir ficheiros de áudio ou vídeo (⌘O)">Abrir…</button>
+</header>
+
+<div class="stage">
+  <aside class="side" id="side"></aside>
+  <section class="list" id="list"></section>
+  <section class="player" id="player">
+    <div class="main">
+      <div class="area" id="area">
+        <div class="meta"><small id="pMeta"></small><h2 id="pTitle"></h2></div>
+        <div class="vbox" id="vbox"><video id="media" preload="metadata" playsinline></video><div class="prep" id="prep" hidden></div></div>
+        <div class="tl" id="tl"><canvas id="wave"></canvas></div>
+        <div class="times"><span id="tNow">00:00</span><span id="tMsg"></span><span id="tLeft">00:00</span></div>
+        <div class="ctrl">
+          <button class="cb" type="button" data-skip="-30" title="Recuar 30 s (⇧←)">−30</button>
+          <button class="cb" type="button" data-skip="-10" title="Recuar 10 s (J)">−10</button>
+          <button class="play" type="button" id="playBtn" title="Tocar / pausar (espaço)"></button>
+          <button class="cb" type="button" data-skip="10" title="Avançar 10 s (L)">+10</button>
+          <button class="cb" type="button" data-skip="30" title="Avançar 30 s (⇧→)">+30</button>
+          <button class="speed" type="button" id="speed" title="Velocidade ([ e ])">1×</button>
+          <span class="spacer"></span>
+          <button class="btn small vonly" type="button" id="subsBtn" title="Juntar legendas (.srt ou .vtt)">Legendas</button>
+          <button class="btn small vonly" type="button" id="pipBtn" title="Vídeo a flutuar por cima das outras janelas">Flutuar ⧉</button>
+          <button class="btn small vonly" type="button" id="fsBtn" title="Ecrã inteiro (F)">⤢</button>
+          <span class="vol"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9a4 4 0 0 1 0 6"/></svg><input type="range" id="vol" min="0" max="1" step="0.02" value="1" aria-label="Volume"></span>
+        </div>
+        <div class="clip" id="clip" hidden>
+          <b>Excerto</b>
+          <span>Início <code id="cIn">—</code> <button class="btn small" type="button" id="setIn" title="Início aqui (I)">Aqui</button></span>
+          <span>Fim <code id="cOut">—</code> <button class="btn small" type="button" id="setOut" title="Fim aqui (O)">Aqui</button></span>
+          <span id="cLen" class="muted"></span>
+          <label class="chk" id="cAudioWrap"><input type="checkbox" id="cAudio"> só o áudio</label>
+          <span class="spacer"></span>
+          <button class="btn small primary" type="button" id="cSave">Guardar o excerto…</button>
+          <button class="icon" type="button" id="cClose" title="Fechar">✕</button>
+        </div>
+      </div>
+      <aside class="marks" id="marks">
+        <h3>Marcas <span>tecla M</span></h3>
+        <div class="mlist" id="mlist"></div>
+        <form class="madd" id="madd"><code id="mAt">00:00</code><input id="mText" placeholder="Marcar este momento…" autocomplete="off"></form>
+        <div class="actions">
+          <button class="btn primary" type="button" id="aTrans">Transcrever para uma nota</button>
+          <button class="btn" type="button" id="aMarks">Enviar marcas para as Notas</button>
+          <button class="btn" type="button" id="aClip">Cortar um excerto</button>
+          <button class="btn vonly" type="button" id="aAudio">Exportar só o áudio</button>
+          <button class="btn" type="button" id="aReveal">Mostrar no Finder</button>
+        </div>
+      </aside>
+    </div>
+    <div class="status" id="status"><span id="sInfo"></span><span class="spacer"></span><span id="sJob"></span></div>
+    <div class="empty" id="empty"></div>
+  </section>
+</div>
+<div class="drop" id="drop" hidden><div>Larga aqui para abrir no Orfeu</div></div>
+<div class="pop" id="pop" hidden></div>
+<script src="orfeu.js"></script>
+</body>
+</html>

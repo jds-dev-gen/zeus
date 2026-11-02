@@ -9,6 +9,7 @@ const {
   app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog,
   clipboard, shell, nativeTheme, Notification, ShareMenu, nativeImage, net, safeStorage, systemPreferences } = require('electron');
 const { setupNotas } = require('./notas-main');
+const { setupOrfeu, isMedia: isOrfeuMedia } = require('./orfeu-main');
 const path = require('path');
 const { execFile } = require('child_process');
 const fs = require('fs');
@@ -35,6 +36,7 @@ const DEFAULT_APPS = [
   { id: 'radar', name: 'Radar', url: 'zeus://radar', mode: 'full', icon: 'radar', preload: false, internal: 'radar' },
   { id: 'zoom', name: 'Zoom', url: 'zeus://zoom', mode: 'full', icon: 'zoom', preload: false, internal: 'zoom' },
   { id: 'notas', name: 'Notas', url: 'zeus://notas', mode: 'full', icon: 'notas', preload: false, internal: 'notas' },
+  { id: 'orfeu', name: 'Orfeu', url: 'zeus://orfeu', mode: 'full', icon: 'orfeu', preload: false, internal: 'orfeu' },
   // página "Futebol hoje": abre pela bola da barra dos resultados, não aparece na barra das apps
   { id: 'futebol', name: 'Futebol', url: 'zeus://futebol', mode: 'full', icon: '', preload: false, internal: 'futebol', hidden: true },
   { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true, linksInTabs: true },
@@ -212,6 +214,11 @@ function loadState() {
     // apps novas por defeito entram sem apagar as do João
     const ids = new Set(S.apps.map(a => a.id));
     DEFAULT_APPS.forEach(a => { if (!ids.has(a.id) && !(saved.removedApps || []).includes(a.id)) S.apps.push(a); });
+    // 0.15.0: o Orfeu (leitor de áudio e vídeo) entra logo a seguir às Notas
+    if (!ids.has('orfeu')) {
+      const i = S.apps.findIndex(a => a.id === 'orfeu'), j = S.apps.findIndex(a => a.id === 'notas');
+      if (i > -1 && j > -1 && i !== j + 1) S.apps.splice(j + 1, 0, ...S.apps.splice(i, 1));
+    }
     // 0.14.0: as Notas entram logo a seguir ao Zoom
     if (!ids.has('notas')) {
       const i = S.apps.findIndex(a => a.id === 'notas'), j = S.apps.findIndex(a => a.id === 'zoom');
@@ -1354,9 +1361,11 @@ const INTERNAL = {
   radar: { file: path.join(__dirname, 'radar', 'index.html'), preload: path.join(__dirname, 'radar', 'preload.js') },
   futebol: { file: path.join(__dirname, 'futebol', 'index.html'), preload: path.join(__dirname, 'futebol', 'preload.js') },
   zoom: { file: path.join(__dirname, 'zoomapp', 'index.html'), preload: path.join(__dirname, 'zoomapp', 'preload.js') },
-  notas: { file: path.join(__dirname, 'notasapp', 'index.html'), preload: path.join(__dirname, 'notasapp', 'preload.js') }
+  notas: { file: path.join(__dirname, 'notasapp', 'index.html'), preload: path.join(__dirname, 'notasapp', 'preload.js') },
+  orfeu: { file: path.join(__dirname, 'orfeuapp', 'index.html'), preload: path.join(__dirname, 'orfeuapp', 'preload.js') }
 };
-let radarWC = null, futebolWC = null, zoomWC = null, notasWC = null;
+let radarWC = null, futebolWC = null, zoomWC = null, notasWC = null, orfeuWC = null;
+let orfeuApp = null;
 let notasApp = null;
 const isDark = () => S.settings.theme === 'dark' || (S.settings.theme === 'system' && nativeTheme.shouldUseDarkColors);
 function ensureInternalView(a) {
@@ -1374,6 +1383,13 @@ function ensureInternalView(a) {
   if (a.internal === 'radar') radarWC = wc;
   if (a.internal === 'futebol') futebolWC = wc;
   if (a.internal === 'zoom') zoomWC = wc;
+  if (a.internal === 'orfeu') {
+    orfeuWC = wc;
+    // o Orfeu não pede nada ao sistema (só ecrã inteiro para os vídeos)
+    wc.session.setPermissionRequestHandler((w, perm, cb) => cb(w === orfeuWC && perm === 'fullscreen'));
+    wc.session.setPermissionCheckHandler((w, perm) => w === orfeuWC && perm === 'fullscreen');
+    wc.once('did-finish-load', () => { const q = pendingMedia.splice(0); if (q.length) orfeuOpenPaths(q); });
+  }
   if (a.internal === 'notas') {
     notasWC = wc;
     // as Notas só podem pedir o microfone (para gravar reuniões); nada mais
@@ -1384,7 +1400,7 @@ function ensureInternalView(a) {
   wc.on('will-navigate', (e, url) => { e.preventDefault(); if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); });
   wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); return { action: 'deny' }; });
   wc.on('render-process-gone', (e, d) => { if (d.reason !== 'clean-exit') setTimeout(() => { if (!wc.isDestroyed()) wc.reload(); }, 500); });
-  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; if (zoomWC === wc) zoomWC = null; if (notasWC === wc) notasWC = null; });
+  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; if (zoomWC === wc) zoomWC = null; if (notasWC === wc) notasWC = null; if (orfeuWC === wc) orfeuWC = null; });
   wc.loadFile(def.file).catch(() => {});
   return view;
 }
@@ -1666,6 +1682,18 @@ function openApp(id) {
   applyLayout();
   if (view && (fullApp === id || openPanel === id)) { view.webContents.focus(); try { const ext = extFor(id); if (ext) ext.selectTab(view.webContents); } catch (e) { /* ok */ } }
   pushState(true);
+}
+// abre uma app da barra (sem a fechar se já estiver aberta)
+function showApp(id) { if (fullApp === id || openPanel === id) { const v = appViews.get(id); if (v) v.webContents.focus(); return; } openApp(id); }
+/* Ficheiros de áudio e vídeo abertos no Finder ("Abrir com › Zeus") ou arrastados para o ícone: vão para o Orfeu */
+const pendingMedia = [];
+async function orfeuOpenPaths(paths) {
+  if (!orfeuApp) { pendingMedia.push(...paths); return; }
+  const ids = await orfeuApp.addPaths(paths, { touch: true });
+  if (!ids.length) return;
+  showApp('orfeu');
+  const go = () => { if (orfeuWC && !orfeuWC.isDestroyed()) orfeuWC.send('orfeu:play', ids); };
+  if (orfeuWC && !orfeuWC.isLoading()) go(); else if (orfeuWC) orfeuWC.once('did-finish-load', () => setTimeout(go, 300));
 }
 function closeAppViews() { openPanel = null; fullApp = null; applyLayout(); pushState(true); }
 function setAppMode(id, mode) {
@@ -2261,6 +2289,12 @@ function setupIPC() {
     getWC: () => notasWC, getUi: () => ui, getWin: () => win, getView: () => appViews.get('notas'),
     getZoom: () => zoom, isDark, openTab: url => newTab({ url, space: spaceForOpener() })
   });
+  orfeuApp = setupOrfeu({
+    app, ipcMain, dialog, shell,
+    getWC: () => orfeuWC, getUi: () => ui, getWin: () => win, getNotas: () => notasApp,
+    openNotes: id => { showApp('notas'); const send = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id }); }; if (notasWC && !notasWC.isLoading()) setTimeout(send, 150); else setTimeout(send, 1500); }
+  });
+  ipcMain.handle('orfeu:theme', e => (orfeuWC && e.sender === orfeuWC ? (isDark() ? 'dark' : 'light') : null));
   handle('downloads:list', () => dlList());
   handle('downloads:do', (act, id) => dlAction(String(act), String(id || '')));
   handle('downloads:thumb', id => dlThumb(String(id || '')));
@@ -2366,6 +2400,7 @@ function setupIPC() {
     if (clean.theme && futebolWC && !futebolWC.isDestroyed()) futebolWC.send('futebol:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && zoomWC && !zoomWC.isDestroyed()) zoomWC.send('zoomapp:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && notasWC && !notasWC.isDestroyed()) notasWC.send('notas:theme', isDark() ? 'dark' : 'light');
+    if (clean.theme && orfeuWC && !orfeuWC.isDestroyed()) orfeuWC.send('orfeu:theme', isDark() ? 'dark' : 'light');
     if (!isMac && clean.theme) updateOverlayColors();
     if ('updateRepo' in clean && updater) updater.check(true);
     if ('bigGames' in clean && scores) scores.setBig(clean.bigGames !== false);
@@ -2554,6 +2589,11 @@ function authReply(id, user, pass) {
   p.callback(String(user), String(pass || ''));
 }
 
+app.on('open-file', (e, p) => {
+  if (!isOrfeuMedia(p)) return;
+  e.preventDefault();
+  if (!app.isReady() || !win) pendingMedia.push(p); else orfeuOpenPaths([p]);
+});
 app.whenReady().then(async () => {
   loadState();
   zoom = new Zoom(app.getPath('userData'), zoomChanged);
@@ -2578,6 +2618,8 @@ app.whenReady().then(async () => {
   goHome();
   setTimeout(() => { S.apps.filter(a => a.preload && a.url).forEach(a => ensureAppView(a)); applyLayout(); pushState(); }, 2500);
   if (S.claudeOpen) ensureClaudeView();
+  // ficheiros abertos no Finder antes de o Zeus estar pronto
+  if (pendingMedia.length) setTimeout(() => { const q = pendingMedia.splice(0); if (q.length) orfeuOpenPaths(q); }, 1200);
   applyLayout();
   pushState(true);
   if (Notification.isSupported()) { /* notificações nativas das páginas ficam ativas */ }

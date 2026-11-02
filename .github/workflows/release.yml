@@ -96,6 +96,22 @@ jobs:
           # prova rápida (com o modelo de testes do whisper.cpp, sem a parte gráfica: as máquinas do GitHub não a têm)
           vendor/whisper-darwin-arm64/whisper/whisper-cli -m /tmp/whisper.cpp/models/for-tests-ggml-tiny.bin -f /tmp/whisper.cpp/samples/jfk.wav -l pt -ng -oj -of /tmp/prova -pp
           test -s /tmp/prova.json && echo "Whisper OK"
+      # ffmpeg (Orfeu): lê e converte todos os formatos de áudio e vídeo, corta excertos, extrai o áudio.
+      # Binários estáticos para Mac (projeto ffmpeg-static), verificados pela soma SHA-256.
+      - name: ffmpeg (Orfeu)
+        run: |
+          for A in arm64 x64; do curl -sSL --fail -o /tmp/ff-$A.gz https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-$A.gz; done
+          echo "8923876afa8db5585022d7860ec7e589af192f441c56793971276d450ed3bbfa  /tmp/ff-arm64.gz" | shasum -a 256 -c
+          echo "929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106  /tmp/ff-x64.gz" | shasum -a 256 -c
+          for A in arm64 x64; do
+            mkdir -p vendor/ffmpeg-darwin-$A/ffmpeg
+            gunzip -c /tmp/ff-$A.gz > vendor/ffmpeg-darwin-$A/ffmpeg/ffmpeg
+            chmod +x vendor/ffmpeg-darwin-$A/ffmpeg/ffmpeg
+            file vendor/ffmpeg-darwin-$A/ffmpeg/ffmpeg
+            otool -L vendor/ffmpeg-darwin-$A/ffmpeg/ffmpeg
+          done
+          vendor/ffmpeg-darwin-arm64/ffmpeg/ffmpeg -hide_banner -version | head -1
+          vendor/ffmpeg-darwin-arm64/ffmpeg/ffmpeg -hide_banner -f lavfi -i sine=d=1 -c:a aac /tmp/prova.m4a && test -s /tmp/prova.m4a && echo "ffmpeg OK"
       - name: Empacotar e assinar (ad-hoc)
         run: |
           node package-mac.js arm64

@@ -390,10 +390,10 @@ function setupNotas(x) {
     }
     return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
   }
-  const SUM_SYS = 'És o assistente de um subdiretor de um jornal português. Resumes reuniões a partir de transcrições automáticas (podem ter erros de reconhecimento). Escreves em português europeu, de forma clara e sóbria. Não inventas nada que não esteja na transcrição. Respondes só com JSON válido, sem mais texto.';
+  const SUM_SYS = 'És o assistente de um subdiretor de um jornal português. Resumes reuniões, entrevistas e outras gravações a partir de transcrições automáticas (podem ter erros de reconhecimento). Escreves em português europeu, de forma clara e sóbria. Não inventas nada que não esteja na transcrição. Respondes só com JSON válido, sem mais texto.';
   async function claudeSummary(text) {
     const t = String(text || '').slice(0, 180000);
-    const out = await claude(SUM_SYS, `Transcrição da reunião (com marcas de tempo):\n\n${t}\n\nDevolve um objeto JSON com estes campos:\n{"titulo": "título curto da reunião (máx. 8 palavras)", "resumo": "3 a 5 frases", "pontos": ["pontos principais"], "decisoes": ["decisões tomadas"], "tarefas": [{"tarefa": "...", "responsavel": "nome ou vazio", "prazo": "prazo ou vazio"}], "proximos": ["próximos passos"]}\nListas vazias se não houver nada. Nomes de pessoas só se forem ditos na reunião.`);
+    const out = await claude(SUM_SYS, `Transcrição da gravação (reunião, entrevista ou outra; com marcas de tempo):\n\n${t}\n\nDevolve um objeto JSON com estes campos:\n{"titulo": "título curto (máx. 8 palavras)", "resumo": "3 a 5 frases", "pontos": ["pontos principais"], "decisoes": ["decisões tomadas"], "tarefas": [{"tarefa": "...", "responsavel": "nome ou vazio", "prazo": "prazo ou vazio"}], "proximos": ["próximos passos"]}\nListas vazias se não houver nada. Nomes de pessoas só se forem ditos na gravação.`);
     const m = /\{[\s\S]*\}/.exec(out);
     if (!m) throw new Error('resposta sem resumo');
     return JSON.parse(m[0]);
@@ -419,7 +419,10 @@ function setupNotas(x) {
     await stopRecording().catch(() => {});
     return true;
   }
-  return { notas, isRecording: () => !!rec, quitCheck };
+  // para o Orfeu: criar uma nota (com o ficheiro de áudio/vídeo original ligado) e transcrever um WAV para ela
+  async function createNote(title, html, audioAbs) { const id = await serial(() => notas.create('', title, html, audioAbs || '')); send('changed'); return id; }
+  function transcribeInto(id, wav, secs) { addJob({ id, wav, secs, stage: 'transcrever', pct: 0, at: Date.now() }); }
+  return { notas, isRecording: () => !!rec, quitCheck, createNote, transcribeInto, modelState };
 }
 
 module.exports = { setupNotas, toText };

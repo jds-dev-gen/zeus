@@ -14,8 +14,9 @@ const os = require('os');
 function adHocSign(appBundle) {
   if (process.platform === 'darwin') {
     // o Whisper (programa à parte, dentro de Resources) assina-se primeiro
-    const w = path.join(appBundle, 'Contents', 'Resources', 'whisper', 'whisper-cli');
-    if (fs.existsSync(w)) execFileSync('codesign', ['--force', '--sign', '-', w], { stdio: 'inherit' });
+    for (const w of [path.join(appBundle, 'Contents', 'Resources', 'whisper', 'whisper-cli'), path.join(appBundle, 'Contents', 'Resources', 'ffmpeg', 'ffmpeg')]) {
+      if (fs.existsSync(w)) execFileSync('codesign', ['--force', '--sign', '-', w], { stdio: 'inherit' });
+    }
     execFileSync('codesign', ['--force', '--deep', '--sign', '-', appBundle], { stdio: 'inherit' });
     return;
   }
@@ -34,6 +35,9 @@ const arches = which === 'all' ? ['arm64', 'x64'] : [which];
     const whisperDir = path.join(__dirname, 'vendor', `whisper-darwin-${arch}`, 'whisper');
     const extraResource = fs.existsSync(path.join(whisperDir, 'whisper-cli')) ? [whisperDir] : [];
     if (!extraResource.length) console.warn(`Aviso: sem o Whisper para ${arch}; as Notas gravam mas não transcrevem.`);
+    // o ffmpeg desta arquitetura (Orfeu) vai para Contents/Resources/ffmpeg
+    const ffDir = path.join(__dirname, 'vendor', `ffmpeg-darwin-${arch}`, 'ffmpeg');
+    if (fs.existsSync(path.join(ffDir, 'ffmpeg'))) extraResource.push(ffDir); else console.warn(`Aviso: sem o ffmpeg para ${arch}; o Orfeu só lê os formatos comuns.`);
     const [appPath] = await packager({
       extraResource,
       dir: __dirname,
@@ -58,7 +62,12 @@ const arches = which === 'all' ? ['arm64', 'x64'] : [which];
         NSBluetoothAlwaysUsageDescription: 'Alguns sites podem pedir acesso a dispositivos Bluetooth.',
         LSApplicationCategoryType: 'public.app-category.productivity',
         CFBundleURLTypes: [],
-        CFBundleDocumentTypes: []
+        // "Abrir com › Zeus" no Finder para áudio e vídeo (abre no Orfeu); o Zeus não passa a ser a app por omissão
+        CFBundleDocumentTypes: [
+          { CFBundleTypeName: 'Áudio', CFBundleTypeRole: 'Viewer', LSHandlerRank: 'Alternate', LSItemContentTypes: ['public.audio', 'public.mp3', 'public.mpeg-4-audio', 'com.microsoft.waveform-audio', 'public.aiff-audio', 'org.xiph.flac', 'com.apple.m4a-audio'] },
+          { CFBundleTypeName: 'Vídeo', CFBundleTypeRole: 'Viewer', LSHandlerRank: 'Alternate', LSItemContentTypes: ['public.movie', 'public.video', 'public.mpeg-4', 'com.apple.quicktime-movie', 'public.avi', 'org.matroska.mkv', 'org.webmproject.webm'] },
+          { CFBundleTypeName: 'Outros ficheiros de áudio e vídeo', CFBundleTypeRole: 'Viewer', LSHandlerRank: 'Alternate', CFBundleTypeExtensions: ['mkv', 'webm', 'avi', 'wmv', 'flv', 'opus', 'ogg', 'oga', 'mka', 'ts', 'mts', 'm2ts', 'wma', 'ac3', 'amr', 'caf', 'm4b'] }
+        ]
       }
     });
     const appBundle = path.join(appPath, 'Zeus.app');
