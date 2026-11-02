@@ -1804,6 +1804,11 @@ function wantsActiveHost(m) {
 const wiredExt = new WeakSet();
 function wireExtensionAccess(ses) {
   if (wiredExt.has(ses)) return; wiredExt.add(ses);
+  // `browser` = `chrome` do Zeus nas páginas e service workers das extensões (ver preload-ext.js)
+  for (const type of ['frame', 'service-worker']) {
+    try { ses.registerPreloadScript({ type, id: 'zeus-ext-' + type, filePath: path.join(__dirname, 'preload-ext.js') }); }
+    catch (e) { console.error('preload das extensões', type, e.message); }
+  }
   const api = ses.extensions && typeof ses.extensions.on === 'function' ? ses.extensions : ses;
   api.on('extension-loaded', async (e, ext) => {
     try {
