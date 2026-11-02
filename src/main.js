@@ -1791,8 +1791,41 @@ function dlAction(act, id) {
   return false;
 }
 
+/* Extensões com "activeTab" (ex.: Raindrop): no Chrome, carregar no ícone da extensão dá-lhe acesso à página aberta
+   (para ler o título, a descrição e a imagem do artigo). O Electron não tem essa autorização temporária, por isso a
+   extensão ficava sem conseguir ler a página. Às extensões que já pedem esse acesso como opcional (o Chrome
+   perguntaria), o Zeus concede-o ao carregá-las: acrescenta o acesso aos sites ao manifest e recarrega-as uma vez. */
+const ALL_HOSTS = ['<all_urls>', '*://*/*', 'http://*/*', 'https://*/*'];
+function wantsActiveHost(m) {
+  if (!m || m.manifest_version !== 3) return false;
+  const perms = m.permissions || [], opt = [...(m.optional_host_permissions || []), ...(m.optional_permissions || [])];
+  return perms.includes('activeTab') && opt.some(x => ALL_HOSTS.includes(x)) && !(m.host_permissions || []).some(x => ALL_HOSTS.includes(x));
+}
+const wiredExt = new WeakSet();
+function wireExtensionAccess(ses) {
+  if (wiredExt.has(ses)) return; wiredExt.add(ses);
+  const api = ses.extensions && typeof ses.extensions.on === 'function' ? ses.extensions : ses;
+  api.on('extension-loaded', async (e, ext) => {
+    try {
+      if (!ext || !wantsActiveHost(ext.manifest)) return;
+      const file = path.join(ext.path, 'manifest.json');
+      const m = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!wantsActiveHost(m)) return;
+      m.host_permissions = [...(m.host_permissions || []), '*://*/*'];
+      m.zeus_granted_hosts = true;   // marca: acesso concedido pelo Zeus (o Chrome perguntaria)
+      fs.writeFileSync(file, JSON.stringify(m, null, 2));
+      const x = ses.extensions || ses;
+      setTimeout(async () => {
+        try { x.removeExtension(ext.id); await x.loadExtension(ext.path, { allowFileAccess: true }); }
+        catch (err) { console.error('Não consegui recarregar a extensão', ext.name, err.message); }
+      }, 300);
+    } catch (err) { console.error('Acesso da extensão', err.message); }
+  });
+}
+
 function setupPermissions(ses) {
   wireDownloads(ses);
+  wireExtensionAccess(ses);
   ses.setPermissionRequestHandler(async (wc, permission, cb, details) => {
     if (AUTO_ALLOW.has(permission)) return cb(true);
     const origin = originOf(details.requestingUrl || (wc && wc.getURL()) || '');
