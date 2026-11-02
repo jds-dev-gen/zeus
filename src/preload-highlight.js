@@ -81,6 +81,8 @@ function wrap(snap, gs, ge, id, color, comment) {
     const m = document.createElement('mark');
     m.className = 'zh-mark' + (comment ? ' zh-has-comment' : '');
     m.dataset.zh = id; m.dataset.zhColor = color;
+    // o site pode dar estilo próprio a <mark> (negrito, itálico…): o destaque só pinta o fundo
+    for (const [k, v] of [['font', 'inherit'], ['font-style', 'inherit'], ['font-weight', 'inherit'], ['font-family', 'inherit'], ['font-size', 'inherit'], ['letter-spacing', 'inherit'], ['text-transform', 'inherit'], ['text-decoration', 'inherit'], ['line-height', 'inherit'], ['margin', '0'], ['box-shadow', 'none']]) m.style.setProperty(k, v, 'important');
     if (comment) m.title = comment;
     mid.parentNode.insertBefore(m, mid); m.appendChild(mid);
     marks.push(m);
@@ -115,7 +117,7 @@ function injectStyle() {
   if (document.getElementById('zeus-zh-style')) return;
   const st = document.createElement('style');
   st.id = 'zeus-zh-style';
-  st.textContent = Object.entries(COLORS).map(([k, v]) => `mark.zh-mark[data-zh-color="${k}"]{background:${v} !important;color:inherit !important;}`).join('\n') +
+  st.textContent = Object.entries(COLORS).map(([k, v]) => `mark.zh-mark[data-zh-color="${k}"]{background:${v} !important;color:inherit !important;font:inherit !important;font-style:inherit !important;font-weight:inherit !important;}`).join('\n') +
     `\nmark.zh-mark{border-radius:2px;padding:0 1px;cursor:pointer;box-decoration-break:clone;-webkit-box-decoration-break:clone;}
 mark.zh-mark.zh-has-comment{border-bottom:2px dotted rgba(0,0,0,.45);}`;
   (document.head || document.documentElement).appendChild(st);

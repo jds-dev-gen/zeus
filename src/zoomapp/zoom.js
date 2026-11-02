@@ -111,8 +111,25 @@ function renderList() {
         ${i.highlights.length ? `<span class="chip dots">${i.highlights.slice(0, 6).map(h => `<i class="dot" style="background:${HL[h.color]}"></i>`).join('')} ${i.highlights.length} destaque${i.highlights.length > 1 ? 's' : ''}</span>` : ''}</div>
     </div></button>`).join('');
 }
-$('#list').addEventListener('click', e => { const c = e.target.closest('[data-id]'); if (!c) return; sel = c.dataset.id; renderList(); renderDetail(); });
-$('#list').addEventListener('dblclick', e => { const c = e.target.closest('[data-id]'); if (c) openPreview(c.dataset.id); });
+// O primeiro clique abre o painel de detalhes, o que encolhe a grelha e mexe os cartões
+// debaixo do rato: o segundo clique cai noutro sítio e o "dblclick" do sistema perde-se.
+// Por isso o duplo clique conta-se à mão, pelo cartão do primeiro clique.
+let lastClick = { id: null, t: 0 };
+$('#list').addEventListener('click', e => {
+  if (PV) return;
+  const c = e.target.closest('[data-id]');
+  const now = Date.now();
+  if (lastClick.id && now - lastClick.t < 550 && (e.detail >= 2 || (c && c.dataset.id === lastClick.id))) {
+    const id = lastClick.id; lastClick = { id: null, t: 0 }; openPreview(id); return;
+  }
+  if (!c) return;
+  lastClick = { id: c.dataset.id, t: now };
+  if (sel === c.dataset.id) return;
+  sel = c.dataset.id;
+  $('#list').querySelectorAll('.card.on').forEach(x => x.classList.remove('on'));
+  c.classList.add('on');
+  renderDetail();
+});
 
 /* ---------- ler o artigo dentro do Zoom (duplo clique), como no Radar ---------- */
 let PV = null;
