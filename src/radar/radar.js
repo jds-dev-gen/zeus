@@ -288,6 +288,7 @@ function openPreview(it, col) {
   $('#pvSrc').textContent = it.srcName || it.src.title;
   $('#pvWhen').textContent = ago(it.date);
   $('#pvTitle').textContent = it.title;
+  closePick();
   setZoomBtn(false); R.zoomHas(it.link).then(h => { if (PV && PV.link === it.link) setZoomBtn(h); });
   $('#pvSlot').classList.add('loading');
   renderCols();
@@ -299,6 +300,7 @@ function openPreview(it, col) {
 }
 function closePreview(fromMain) {
   if (!PV) return;
+  closePick();
   PV = null;
   if (!fromMain) R.previewClose();
   document.body.classList.remove('previewing');
@@ -320,7 +322,48 @@ $('#pvPrev').addEventListener('click', () => stepPreview(-1));
 $('#pvNext').addEventListener('click', () => stepPreview(1));
 // Zoom: guardar a notícia da pré-visualização
 const setZoomBtn = saved => { const b = $('#pvZoom'); b.classList.toggle('saved', !!saved); b.querySelector('span').textContent = saved ? 'Guardado no Zoom' : 'Guardar no Zoom'; };
-$('#pvZoom').addEventListener('click', async () => { if (!PV) return; const r = await R.zoomSave(); if (r) setZoomBtn(true); });
+// Guardar no Zoom: escolhe-se logo a coleção, numa faixa por baixo do cabeçalho
+let pickInfo = null;
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function openPick() {
+  if (!PV) return;
+  const link = PV.link;
+  pickInfo = await R.zoomInfo(link);
+  if (!pickInfo || !PV || PV.link !== link) return;
+  renderPick();
+  $('#pickNew').hidden = true; $('#pickName').value = '';
+  $('#pickRemove').hidden = !pickInfo.item;
+  $('#pvPick').hidden = false;
+  $('#pvZoom').classList.add('open');
+}
+function closePick() { $('#pvPick').hidden = true; $('#pvZoom').classList.remove('open'); pickInfo = null; }
+function renderPick() {
+  const cur = pickInfo.item ? pickInfo.item.col || '' : null;
+  $('#pickCols').innerHTML = [{ id: '', name: 'Sem coleção' }, ...pickInfo.cols].map(c =>
+    `<button class="pick-c ${cur === c.id ? 'on' : ''}" type="button" data-col="${esc(c.id)}">${esc(c.name)}</button>`).join('') +
+    `<button class="pick-c add" type="button" data-new="1">+ Nova coleção</button>`;
+}
+async function saveTo(col) {
+  if (!PV) return;
+  const link = PV.link;
+  const r = await R.zoomSave(col);
+  if (r && PV && PV.link === link) setZoomBtn(true);
+  closePick();
+}
+$('#pvZoom').addEventListener('click', () => { if ($('#pvPick').hidden) openPick(); else closePick(); });
+$('#pickCols').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.new) { $('#pickNew').hidden = false; $('#pickName').focus(); return; }
+  saveTo(b.dataset.col || '');
+});
+$('#pickNew').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = $('#pickName').value.trim(); if (!name) return $('#pickName').focus();
+  const c = await R.zoomAddCol(name); if (c) saveTo(c.id);
+});
+$('#pickName').addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); $('#pickNew').hidden = true; } });
+$('#pickRemove').addEventListener('click', async () => { if (!PV) return; const link = PV.link; if (await R.zoomRemove(link) && PV && PV.link === link) setZoomBtn(false); closePick(); });
+$('#pickClose').addEventListener('click', closePick);
 $('#pvShare').addEventListener('click', e => { if (!PV) return; const r = e.currentTarget.getBoundingClientRect(); R.share({ x: r.left, y: r.bottom + 4 }, PV.it.title); });
 $('#pvTab').addEventListener('click', async () => { if (!PV) return; PV = null; await R.previewToTab(); document.body.classList.remove('previewing'); $('#pv').hidden = true; renderCols(); });
 new ResizeObserver(() => { if (PV) R.previewRect(slotRect()); }).observe($('#pvSlot'));
@@ -459,6 +502,7 @@ $('#q').addEventListener('keydown', e => {
 $('#qClear').addEventListener('click', () => { $('#q').value = ''; setQuery(''); $('#q').focus(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#modal').hidden) closeModal();
+  else if (e.key === 'Escape' && PV && !$('#pvPick').hidden) closePick();
   else if (e.key === 'Escape' && PV) closePreview();
   if (PV && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) {
     if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); stepPreview(1); }

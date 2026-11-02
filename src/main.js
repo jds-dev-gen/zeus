@@ -1550,11 +1550,26 @@ function radarIPC() {
   });
   ipcMain.handle('radar:previewRect', (e, rect) => { if (ok(e) && radarPrevRect && prevOwner === 'radar') { radarPrevRect = okRect(rect) || radarPrevRect; placeRadarPreview(); } });
   ipcMain.handle('radar:previewClose', e => { if (ok(e) && prevOwner === 'radar') radarPreviewClose(false); });
-  ipcMain.handle('radar:zoomSave', async e => {
+  // guardar a notícia da pré-visualização no Zoom, já na coleção escolhida
+  const prevURL = () => (radarPrev && !radarPrev.webContents.isDestroyed() ? radarPrev.webContents.getURL() : '');
+  ipcMain.handle('radar:zoomSave', async (e, col) => {
     if (!ok(e) || !radarPrev || radarPrev.webContents.isDestroyed()) return null;
-    const it = await zoomSaveWC(radarPrev.webContents);
-    if (it) ui && ui.send('toast', 'Guardado no Zoom.');
-    return it ? { id: it.id } : null;
+    const wc = radarPrev.webContents;
+    if (!/^https?:/.test(wc.getURL())) return null;
+    const it = zoom.add(await pageMeta(wc), { col: typeof col === 'string' ? col : '' });
+    if (it && ui) { const c = zoom.data().cols.find(x => x.id === it.col); ui.send('toast', c ? `Guardado no Zoom, em “${c.name}”.` : 'Guardado no Zoom.'); }
+    return it ? { id: it.id, col: it.col } : null;
+  });
+  ipcMain.handle('radar:zoomInfo', (e, url) => {
+    if (!ok(e) || !zoom) return null;
+    const it = zoom.byUrl(String(url || prevURL()));
+    return { cols: zoom.data().cols.map(c => ({ id: c.id, name: c.name })), item: it ? { id: it.id, col: it.col } : null };
+  });
+  ipcMain.handle('radar:zoomAddCol', (e, name) => { if (!ok(e) || !zoom) return null; const c = zoom.addCol(String(name || '')); return c ? { id: c.id, name: c.name } : null; });
+  ipcMain.handle('radar:zoomRemove', (e, url) => {
+    if (!ok(e) || !zoom) return false;
+    const it = zoom.byUrl(String(url || prevURL())); if (!it) return false;
+    zoom.remove(it.id); ui && ui.send('toast', 'Tirado do Zoom.'); return true;
   });
   ipcMain.handle('radar:zoomHas', (e, url) => (ok(e) && zoom ? zoom.has(String(url || '')) : false));
   // partilhar a notícia da pré-visualização: o mesmo menu de partilha do Zeus, num menu do sistema junto ao botão

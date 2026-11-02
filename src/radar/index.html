@@ -43,6 +43,13 @@
       <button class="btn small" type="button" id="pvTab" title="Continuar a ler num separador do Zeus">Abrir num separador</button>
       <button class="icon" type="button" id="pvClose" title="Fechar a pré-visualização (Esc)" aria-label="Fechar a pré-visualização">✕</button>
     </div>
+    <div class="pick" id="pvPick" hidden>
+      <span class="pick-lbl">Guardar no Zoom em</span>
+      <div class="pick-cols" id="pickCols"></div>
+      <form class="pick-new" id="pickNew" hidden><input id="pickName" placeholder="Nome da coleção" maxlength="60" autocomplete="off" spellcheck="false"><button class="btn small primary" type="submit">Criar e guardar</button></form>
+      <button class="pick-x" type="button" id="pickRemove" hidden>Tirar do Zoom</button>
+      <button class="icon" type="button" id="pickClose" title="Fechar (Esc)" aria-label="Fechar">✕</button>
+    </div>
     <div class="pv-slot" id="pvSlot"><p>A abrir a notícia…</p></div>
   </aside>
 </div>

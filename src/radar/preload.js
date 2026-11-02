@@ -14,7 +14,10 @@ contextBridge.exposeInMainWorld('radar', {
   previewClose: () => ipcRenderer.invoke('radar:previewClose'),
   previewToTab: () => ipcRenderer.invoke('radar:previewToTab'),
   share: (at, title) => ipcRenderer.invoke('radar:share', at, title),
-  zoomSave: () => ipcRenderer.invoke('radar:zoomSave'),
+  zoomSave: col => ipcRenderer.invoke('radar:zoomSave', col),
+  zoomInfo: url => ipcRenderer.invoke('radar:zoomInfo', url),
+  zoomAddCol: name => ipcRenderer.invoke('radar:zoomAddCol', name),
+  zoomRemove: url => ipcRenderer.invoke('radar:zoomRemove', url),
   zoomHas: url => ipcRenderer.invoke('radar:zoomHas', url),
   onPreviewState: fn => { ipcRenderer.on('radar:previewState', (e, st) => fn(st)); },
   onPreviewClosed: fn => { ipcRenderer.on('radar:previewClosed', () => fn()); }
