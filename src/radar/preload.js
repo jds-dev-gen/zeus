@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('radar', {
   previewClose: () => ipcRenderer.invoke('radar:previewClose'),
   previewToTab: () => ipcRenderer.invoke('radar:previewToTab'),
   share: (at, title) => ipcRenderer.invoke('radar:share', at, title),
+  zoomSave: () => ipcRenderer.invoke('radar:zoomSave'),
+  zoomHas: url => ipcRenderer.invoke('radar:zoomHas', url),
   onPreviewState: fn => { ipcRenderer.on('radar:previewState', (e, st) => fn(st)); },
   onPreviewClosed: fn => { ipcRenderer.on('radar:previewClosed', () => fn()); }
 });

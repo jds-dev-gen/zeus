@@ -17,6 +17,7 @@ const ICON = {
   pmail: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l9 6 9-6" stroke-linecap="round"/><rect x="3" y="5" width="18" height="14" rx="3"/><rect x="14.5" y="13.5" width="6" height="5" rx="1.2" fill="currentColor" stroke="none"/></svg>',
   notion: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h5"/></svg>',
   radar: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12 18.4 5.6"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>',
+  zoom: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6"/></svg>',
   pluto: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.5" transform="rotate(-20 12 12)"/></svg>',
   work: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18" stroke-linecap="round"/></svg>',
   globe: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z"/></svg>',
@@ -150,7 +151,7 @@ mq.addEventListener('change', applyTheme);
 Z.on('state', st => {
   S = st;
   applyTheme();
-  renderRail(); renderTop(); renderPanels(); renderPage(); renderRight(); renderBallOn();
+  renderRail(); renderTop(); renderPanels(); renderPage(); renderRight(); renderBallOn(); renderZoomBtn();
   if (ov.open) renderZones();
   if (modal === 'settings') refreshSettingsApps();
   requestAnimationFrame(sendLayout);
@@ -780,6 +781,44 @@ function openTeams() {
     b.replaceWith(Object.assign(document.createElement('small'), { textContent: 'A seguir' }));
   });
 }
+/* ---------- Zoom: guardar a página aberta ---------- */
+function renderZoomBtn() {
+  const b = $('#zoomBtn'), full = S.fullApp && appById(S.fullApp);
+  const t = S.tabs.find(x => x.id === S.currentId);
+  const url = full ? (S.fullAppURL || '') : (t && t.url) || '';
+  b.disabled = !/^https?:/.test(url) || !!(full && full.internal);
+  b.classList.toggle('on', !!S.zoomSaved);
+  b.title = S.zoomSaved ? 'Guardado no Zoom — carregar para editar (⌘D)' : 'Guardar no Zoom (⌘D)';
+}
+async function openZoomSave() {
+  const it = (await Z.invoke('zoom:current')) || (await Z.invoke('zoom:saveCurrent'));
+  if (!it) return;
+  const cols = await Z.invoke('zoom:cols');
+  openModal('zoomsave', `${modalHead('Guardado no Zoom')}
+    <div class="zs-head">${it.image ? `<img src="${esc(it.image)}" alt="" referrerpolicy="no-referrer">` : ''}<div><b>${esc(it.title)}</b><small>${esc(it.site)}</small></div></div>
+    <div class="field"><label for="zsCol">Coleção</label><div style="display:flex;gap:8px"><select class="inp" id="zsCol" style="flex:1"><option value="">Sem coleção</option>${cols.map(c => `<option value="${esc(c.id)}" ${it.col === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}<option value="__new">+ Nova coleção…</option></select></div></div>
+    <div class="field" id="zsNewWrap" hidden><label for="zsNew">Nome da coleção nova</label><input class="inp" id="zsNew" placeholder="Ex.: Ucrânia, Podcasts, Ideias"></div>
+    <div class="field"><label for="zsTags">Etiquetas</label><input class="inp" id="zsTags" placeholder="separadas por vírgulas" value="${esc((it.tags || []).join(', '))}"></div>
+    <div class="field"><label for="zsNote">Nota</label><textarea class="inp" id="zsNote" rows="3" style="height:auto;padding:8px 12px" placeholder="Opcional">${esc(it.note || '')}</textarea></div>
+    <p class="hint">Para destacar uma passagem, seleciona o texto na página e escolhe uma cor.${it.highlights && it.highlights.length ? ` Esta página tem ${it.highlights.length} destaque${it.highlights.length > 1 ? 's' : ''}.` : ''}</p>
+    <div class="row-btns"><button class="btn" type="button" id="zsDone">Concluído</button><button class="btn ghost" type="button" id="zsOpen">Abrir o Zoom</button><button class="btn danger" type="button" id="zsRemove">Tirar do Zoom</button></div>`);
+  $('#zsCol').addEventListener('change', e => { $('#zsNewWrap').hidden = e.target.value !== '__new'; if (!$('#zsNewWrap').hidden) $('#zsNew').focus(); });
+  const save = async () => {
+    let col = $('#zsCol').value;
+    if (col === '__new') { const n = $('#zsNew').value.trim(); const c = n ? await Z.invoke('zoom:addCol', n) : null; col = c ? c.id : ''; }
+    await Z.invoke('zoom:update', it.id, { col, tags: $('#zsTags').value.split(',').map(x => x.trim()).filter(Boolean), note: $('#zsNote').value });
+  };
+  $('#zsDone').addEventListener('click', async () => { await save(); closeModal(); toast('Guardado no Zoom'); });
+  $('#zsOpen').addEventListener('click', async () => { await save(); closeModal(); Z.invoke('app:open', 'zoom'); });
+  $('#zsRemove').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    if (!b.dataset.confirm) { b.dataset.confirm = '1'; b.textContent = 'Confirmar: tirar do Zoom'; return; }
+    await Z.invoke('zoom:remove', it.id); closeModal(); toast('Tirado do Zoom');
+  });
+  $('#zsNew').addEventListener('keydown', e => { if (e.key === 'Enter') $('#zsDone').click(); });
+}
+$('#zoomBtn').addEventListener('click', openZoomSave);
+
 /* ---------- Transferências ---------- */
 let DL = [], dlFilter = '';
 const fmtBytes = n => { if (!n && n !== 0) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i = 0; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(n < 10 ? 1 : 0) : n) + ' ' + u[i]; };
@@ -1083,6 +1122,7 @@ Z.on('ui-command', c => {
   if (c.cmd === 'mosaic-close') closeMosaic();
   if (c.cmd === 'new-space-with') { if (!ov.open) openMosaic(false); ov.addingSpace = true; ov.moveAfterAdd = c.id; renderZones(); }
   if (c.cmd === 'share') { shareOpen ? closeShare() : openShare(); }
+  if (c.cmd === 'zoom-save') openZoomSave();
   if (c.cmd === 'downloads') modal === 'downloads' ? closeModal() : openDownloads();
   if (c.cmd === 'focus-ask' || c.cmd === 'home') goHomeUI();
 });
@@ -1484,7 +1524,7 @@ $('#modalWrap').addEventListener('mousedown', e => { if (e.target.id === 'modalW
 const modalHead = t => `<div class="m-head"><h2>${esc(t)}</h2><button class="nb" type="button" data-mclose aria-label="Fechar">${ICON.x}</button></div>`;
 $('#modal').addEventListener('click', e => { if (e.target.closest('[data-mclose]')) closeModal(); });
 
-const ICON_CHOICES = [['', 'Letra'], ['mail', 'Email'], ['pmail', 'Email seguro'], ['wa', 'Conversa'], ['cal', 'Calendário'], ['notion', 'Documento'], ['work', 'Trabalho'], ['globe', 'Web'], ['star', 'Favorito'], ['mic', 'Áudio'], ['play', 'Vídeo'], ['music', 'Música'], ['pluto', 'Planeta'], ['apolo', 'Sol'], ['radar', 'Radar']];
+const ICON_CHOICES = [['', 'Letra'], ['mail', 'Email'], ['pmail', 'Email seguro'], ['wa', 'Conversa'], ['cal', 'Calendário'], ['notion', 'Documento'], ['work', 'Trabalho'], ['globe', 'Web'], ['star', 'Favorito'], ['mic', 'Áudio'], ['play', 'Vídeo'], ['music', 'Música'], ['pluto', 'Planeta'], ['apolo', 'Sol'], ['radar', 'Radar'], ['zoom', 'Zoom']];
 function iconPickerHTML(cur, name) {
   return `<div class="field"><span class="lab">Ícone</span><div class="icon-pick" id="iconPick" role="radiogroup" aria-label="Ícone">${ICON_CHOICES.map(([k, l]) => `<button type="button" role="radio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-icon="${k}" title="${l}" aria-label="${l}">${k === '' ? `<span class="letter">${esc((name || 'A').charAt(0).toUpperCase())}</span>` : k === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>' : ICON[k]}</button>`).join('')}</div></div>`;
 }

@@ -15,6 +15,7 @@ const { ElectronChromeExtensions } = require('electron-chrome-extensions');
 const { installChromeWebStore, uninstallExtension, loadAllExtensions } = require('electron-chrome-web-store');
 const { Updater } = require('./updater');
 const { Scores } = require('./scores');
+const { Zoom } = require('./zoom');
 const PKG = require('../package.json');
 
 const isMac = process.platform === 'darwin';
@@ -31,6 +32,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 const DEFAULT_APPS = [
   { id: 'apolo', name: 'Apolo', url: '', mode: 'full', icon: 'apolo', preload: false, linksInTabs: true },
   { id: 'radar', name: 'Radar', url: 'zeus://radar', mode: 'full', icon: 'radar', preload: false, internal: 'radar' },
+  { id: 'zoom', name: 'Zoom', url: 'zeus://zoom', mode: 'full', icon: 'zoom', preload: false, internal: 'zoom' },
   // página "Futebol hoje": abre pela bola da barra dos resultados, não aparece na barra das apps
   { id: 'futebol', name: 'Futebol', url: 'zeus://futebol', mode: 'full', icon: '', preload: false, internal: 'futebol', hidden: true },
   { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true, linksInTabs: true },
@@ -208,6 +210,11 @@ function loadState() {
     // apps novas por defeito entram sem apagar as do João
     const ids = new Set(S.apps.map(a => a.id));
     DEFAULT_APPS.forEach(a => { if (!ids.has(a.id) && !(saved.removedApps || []).includes(a.id)) S.apps.push(a); });
+    // 0.13.0: o Zoom (artigos guardados) entra logo a seguir ao Radar
+    if (!ids.has('zoom')) {
+      const i = S.apps.findIndex(a => a.id === 'zoom'), j = S.apps.findIndex(a => a.id === 'radar');
+      if (i > -1 && j > -1 && i !== j + 1) S.apps.splice(j + 1, 0, ...S.apps.splice(i, 1));
+    }
     // 0.6.0: o Radar (notícias) entra logo a seguir ao Apolo
     if (!ids.has('radar')) {
       const i = S.apps.findIndex(a => a.id === 'radar'), j = S.apps.findIndex(a => a.id === 'apolo');
@@ -314,6 +321,9 @@ function setupGoogleSignin(ses) {
   });
   try { ses.registerPreloadScript({ type: 'frame', id: 'zeus-pages', filePath: path.join(__dirname, 'preload-pages.js') }); }
   catch (e) { console.error('preload da Google', e); }
+  // highlights do Zoom (só se ativam nos separadores; ver preload-highlight.js)
+  try { ses.registerPreloadScript({ type: 'frame', id: 'zeus-highlight', filePath: path.join(__dirname, 'preload-highlight.js') }); }
+  catch (e) { console.error('preload dos highlights', e); }
 }
 function googleUA(wc, url) {
   try {
@@ -500,6 +510,7 @@ function pushState(now) {
       mru: S.mru,
       canGoBack: !!(wc && wc.navigationHistory.canGoBack()),
       canGoForward: !!(wc && wc.navigationHistory.canGoForward()),
+      zoomSaved: !!(zoom && wc && /^https?:/.test(wc.getURL()) && zoom.has(wc.getURL())),
       spaces: S.spaces, later: S.later, closed: S.closed, pickSpace,
       apps: S.apps.map(a => Object.assign({}, a, { badge: badges[a.id] || 0, loaded: appViews.has(a.id), error: appErrors[a.id] || null })),
       openPanel, fullApp, fullAppURL: fullApp && wc ? wc.getURL() : '', claudeOpen: S.claudeOpen,
@@ -1326,9 +1337,10 @@ function ensureAppView(a) {
    O Radar só pode: ler e guardar o seu ficheiro, ir buscar feeds/páginas públicas (sem cookies) e abrir links em separadores. */
 const INTERNAL = {
   radar: { file: path.join(__dirname, 'radar', 'index.html'), preload: path.join(__dirname, 'radar', 'preload.js') },
-  futebol: { file: path.join(__dirname, 'futebol', 'index.html'), preload: path.join(__dirname, 'futebol', 'preload.js') }
+  futebol: { file: path.join(__dirname, 'futebol', 'index.html'), preload: path.join(__dirname, 'futebol', 'preload.js') },
+  zoom: { file: path.join(__dirname, 'zoomapp', 'index.html'), preload: path.join(__dirname, 'zoomapp', 'preload.js') }
 };
-let radarWC = null, futebolWC = null;
+let radarWC = null, futebolWC = null, zoomWC = null;
 const isDark = () => S.settings.theme === 'dark' || (S.settings.theme === 'system' && nativeTheme.shouldUseDarkColors);
 function ensureInternalView(a) {
   const def = INTERNAL[a.internal];
@@ -1344,10 +1356,11 @@ function ensureInternalView(a) {
   const wc = view.webContents;
   if (a.internal === 'radar') radarWC = wc;
   if (a.internal === 'futebol') futebolWC = wc;
+  if (a.internal === 'zoom') zoomWC = wc;
   wc.on('will-navigate', (e, url) => { e.preventDefault(); if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); });
   wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); return { action: 'deny' }; });
   wc.on('render-process-gone', (e, d) => { if (d.reason !== 'clean-exit') setTimeout(() => { if (!wc.isDestroyed()) wc.reload(); }, 500); });
-  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; });
+  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; if (zoomWC === wc) zoomWC = null; });
   wc.loadFile(def.file).catch(() => {});
   return view;
 }
@@ -1423,6 +1436,87 @@ function radarPreviewClose(tell) {
   if (tell && radarWC && !radarWC.isDestroyed()) radarWC.send('radar:previewClosed');
   if (radarWC && !radarWC.isDestroyed()) radarWC.focus();
 }
+/* ------------------------------------------------------------------ */
+/* Zoom: artigos guardados, coleções e highlights (ver zoom.js)         */
+/* ------------------------------------------------------------------ */
+let zoom = null, zoomNotifyT = null;
+function zoomChanged() {
+  clearTimeout(zoomNotifyT);
+  zoomNotifyT = setTimeout(() => {
+    pushState();
+    if (zoomWC && !zoomWC.isDestroyed()) zoomWC.send('zoomapp:changed');
+  }, 120);
+}
+// páginas web do Zeus onde se pode guardar e sublinhar (separadores, apps da barra, pré-visualização do Radar)
+function isWebPage(wc) {
+  if (!wc || wc.isDestroyed()) return false;
+  for (const v of tabViews.values()) if (v.webContents === wc) return true;
+  for (const v of appViews.values()) if (!v.__internal && v.webContents === wc) return true;
+  return !!(radarPrev && radarPrev.webContents === wc);
+}
+// título, imagem, descrição e nome do site da página aberta
+async function pageMeta(wc) {
+  const url = wc.getURL();
+  let m = {};
+  try {
+    m = await Promise.race([wc.executeJavaScript(`(() => {
+      const q = (...ks) => { for (const k of ks) { const e = document.querySelector('meta[property="' + k + '"], meta[name="' + k + '"]'); if (e && e.content) return e.content; } return ''; };
+      let img = q('og:image', 'og:image:url', 'twitter:image', 'twitter:image:src');
+      try { if (img) img = new URL(img, location.href).href; } catch (e) { img = ''; }
+      return { title: q('og:title', 'twitter:title') || document.title, image: img, excerpt: q('og:description', 'description', 'twitter:description'), site: q('og:site_name') };
+    })()`, false), new Promise(r => setTimeout(() => r({}), 2500))]) || {};
+  } catch (e) { m = {}; }
+  return { url, title: m.title || wc.getTitle(), image: m.image || '', excerpt: m.excerpt || '', site: m.site || '' };
+}
+async function zoomSaveWC(wc) {
+  if (!wc || wc.isDestroyed() || !/^https?:/.test(wc.getURL())) return null;
+  const it = zoom.add(await pageMeta(wc));
+  return it;
+}
+function zoomIPC() {
+  // barra de cima: guardar / editar a página aberta
+  handle('zoom:saveCurrent', async () => { const it = await zoomSaveWC(pageWC()); if (!it) ui.send('toast', 'Esta página não pode ser guardada no Zoom.'); return it; });
+  handle('zoom:current', () => { const wc = pageWC(); return wc && zoom.byUrl(wc.getURL()); });
+  handle('zoom:update', (id, patch) => zoom.update(String(id), patch || {}));
+  handle('zoom:remove', id => zoom.remove(String(id)));
+  handle('zoom:cols', () => zoom.data().cols);
+  handle('zoom:addCol', name => zoom.addCol(name));
+  // highlights: vêm do preload das páginas web (nunca das páginas das extensões nem das páginas internas)
+  // só nos separadores e na pré-visualização do Radar (nas apps da barra, como o WhatsApp, a barra de cores atrapalharia)
+  const isReadPage = wc => !!wc && !wc.isDestroyed() && ([...tabViews.values()].some(v => v.webContents === wc) || !!(radarPrev && radarPrev.webContents === wc));
+  const web = e => isReadPage(e.sender) && e.senderFrame === e.sender.mainFrame;
+  ipcMain.handle('zh:list', e => (web(e) && zoom ? zoom.highlightsFor(e.sender.getURL()) : null));
+  ipcMain.handle('zh:add', async (e, h) => {
+    if (!web(e) || !h) return null;
+    const wc = e.sender, had = zoom.has(wc.getURL());
+    const r = zoom.addHighlight(had ? { url: wc.getURL() } : await pageMeta(wc), h);
+    if (r && !had) ui && ui.send('toast', 'Página guardada no Zoom, com o destaque.');
+    return r && r.hl;
+  });
+  ipcMain.handle('zh:update', (e, hid, patch) => (web(e) ? zoom.updateHighlight(e.sender.getURL(), String(hid), patch || {}) : null));
+  ipcMain.handle('zh:remove', (e, hid) => (web(e) ? zoom.removeHighlight(e.sender.getURL(), String(hid)) : false));
+  // página Zoom (interna)
+  const fromZoom = e => zoomWC && !zoomWC.isDestroyed() && e.sender === zoomWC;
+  const zh = (name, fn) => ipcMain.handle('zoomapp:' + name, (e, ...a) => (fromZoom(e) ? fn(...a) : null));
+  zh('data', () => zoom.data());
+  zh('theme', () => (isDark() ? 'dark' : 'light'));
+  zh('update', (id, patch) => zoom.update(String(id), patch || {}));
+  // mudanças feitas na página Zoom aparecem logo nas páginas abertas
+  const refreshPages = () => {
+    const all = [...tabViews.values(), ...[...appViews.values()].filter(v => !v.__internal), ...(radarPrev ? [radarPrev] : [])];
+    all.forEach(v => { try { if (!v.webContents.isDestroyed()) v.webContents.send('zh:refresh'); } catch (e) { /* ok */ } });
+  };
+  zh('remove', id => { const r = zoom.remove(String(id)); refreshPages(); return r; });
+  zh('addCol', name => zoom.addCol(name));
+  zh('renameCol', (id, name) => zoom.renameCol(String(id), name));
+  zh('removeCol', id => zoom.removeCol(String(id)));
+  zh('moveCol', (id, dir) => zoom.moveCol(String(id), dir > 0 ? 1 : -1));
+  zh('updateHl', (id, hid, patch) => { const it = zoom.byId(String(id)); const r = it ? zoom.updateHighlight(it.url, String(hid), patch || {}) : null; refreshPages(); return r; });
+  zh('removeHl', (id, hid) => { const it = zoom.byId(String(id)); const r = it ? zoom.removeHighlight(it.url, String(hid)) : false; refreshPages(); return r; });
+  zh('open', (id, bg) => { const it = zoom.byId(String(id)); if (it) newTab({ url: it.url, space: spaceForOpener(), activate: !bg }); });
+  zh('copy', text => { clipboard.writeText(String(text || '')); return true; });
+}
+
 function radarIPC() {
   const ok = e => radarWC && !radarWC.isDestroyed() && e.sender === radarWC;
   ipcMain.handle('radar:load', e => ok(e) ? radarLoad() : null);
@@ -1436,6 +1530,13 @@ function radarIPC() {
   });
   ipcMain.handle('radar:previewRect', (e, rect) => { if (ok(e) && radarPrevRect) { radarPrevRect = okRect(rect) || radarPrevRect; placeRadarPreview(); } });
   ipcMain.handle('radar:previewClose', e => { if (ok(e)) radarPreviewClose(false); });
+  ipcMain.handle('radar:zoomSave', async e => {
+    if (!ok(e) || !radarPrev || radarPrev.webContents.isDestroyed()) return null;
+    const it = await zoomSaveWC(radarPrev.webContents);
+    if (it) ui && ui.send('toast', 'Guardado no Zoom.');
+    return it ? { id: it.id } : null;
+  });
+  ipcMain.handle('radar:zoomHas', (e, url) => (ok(e) && zoom ? zoom.has(String(url || '')) : false));
   // partilhar a notícia da pré-visualização: o mesmo menu de partilha do Zeus, num menu do sistema junto ao botão
   ipcMain.handle('radar:share', (e, at, fallbackTitle) => {
     if (!ok(e) || !radarPrev || radarPrev.webContents.isDestroyed()) return false;
@@ -2095,6 +2196,7 @@ function setupIPC() {
   handle('space:home', id => { if (!S.spaces.some(x => x.id === id)) return; pickSpace = id; goHome(); });
   handle('space:pick', id => { pickSpace = pickSpace === id || !S.spaces.some(x => x.id === id) ? null : id; pushState(true); return pickSpace; });
   radarIPC();
+  zoomIPC();
   handle('downloads:list', () => dlList());
   handle('downloads:do', (act, id) => dlAction(String(act), String(id || '')));
   handle('downloads:thumb', id => dlThumb(String(id || '')));
@@ -2198,6 +2300,7 @@ function setupIPC() {
     if (clean.theme) nativeTheme.themeSource = clean.theme === 'system' ? 'system' : clean.theme;
     if (clean.theme && radarWC && !radarWC.isDestroyed()) radarWC.send('radar:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && futebolWC && !futebolWC.isDestroyed()) futebolWC.send('futebol:theme', isDark() ? 'dark' : 'light');
+    if (clean.theme && zoomWC && !zoomWC.isDestroyed()) zoomWC.send('zoomapp:theme', isDark() ? 'dark' : 'light');
     if (!isMac && clean.theme) updateOverlayColors();
     if ('updateRepo' in clean && updater) updater.check(true);
     if ('bigGames' in clean && scores) scores.setBig(clean.bigGames !== false);
@@ -2327,6 +2430,7 @@ function buildMenu() {
         { label: 'Página inicial', accelerator: 'CmdOrCtrl+Shift+H', click: () => goHome() },
         { type: 'separator' },
         { label: 'Vídeo a flutuar', accelerator: 'CmdOrCtrl+Alt+P', click: () => pipToggle() },
+        { label: 'Guardar no Zoom', accelerator: 'CmdOrCtrl+D', click: () => ui && ui.send('ui-command', { cmd: 'zoom-save' }) },
         { label: 'Transferências', accelerator: 'CmdOrCtrl+Alt+L', click: () => ui && ui.send('ui-command', { cmd: 'downloads' }) },
         { label: 'Partilhar a página…', accelerator: 'CmdOrCtrl+Shift+S', click: () => ui && ui.send('ui-command', { cmd: 'share' }) },
         { type: 'separator' },
@@ -2387,6 +2491,7 @@ function authReply(id, user, pass) {
 
 app.whenReady().then(async () => {
   loadState();
+  zoom = new Zoom(app.getPath('userData'), zoomChanged);
   nativeTheme.themeSource = S.settings.theme === 'system' ? 'system' : S.settings.theme;
   app.userAgentFallback = chromeUA();
   zeusSession = session.fromPartition(PARTITION);
@@ -2414,4 +2519,4 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => { saveNow(); app.quit(); });
-app.on('before-quit', saveNow);
+app.on('before-quit', () => { saveNow(); if (zoom) zoom.flush(); });

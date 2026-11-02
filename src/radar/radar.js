@@ -288,6 +288,7 @@ function openPreview(it, col) {
   $('#pvSrc').textContent = it.srcName || it.src.title;
   $('#pvWhen').textContent = ago(it.date);
   $('#pvTitle').textContent = it.title;
+  setZoomBtn(false); R.zoomHas(it.link).then(h => { if (PV && PV.link === it.link) setZoomBtn(h); });
   $('#pvSlot').classList.add('loading');
   renderCols();
   // a coluna ativa fica à esquerda, com a notícia atual à vista
@@ -317,6 +318,9 @@ R.onPreviewState(st => { if (PV) $('#pvSlot').classList.toggle('loading', !!st.l
 $('#pvClose').addEventListener('click', () => closePreview());
 $('#pvPrev').addEventListener('click', () => stepPreview(-1));
 $('#pvNext').addEventListener('click', () => stepPreview(1));
+// Zoom: guardar a notícia da pré-visualização
+const setZoomBtn = saved => { const b = $('#pvZoom'); b.classList.toggle('saved', !!saved); b.querySelector('span').textContent = saved ? 'Guardado no Zoom' : 'Guardar no Zoom'; };
+$('#pvZoom').addEventListener('click', async () => { if (!PV) return; const r = await R.zoomSave(); if (r) setZoomBtn(true); });
 $('#pvShare').addEventListener('click', e => { if (!PV) return; const r = e.currentTarget.getBoundingClientRect(); R.share({ x: r.left, y: r.bottom + 4 }, PV.it.title); });
 $('#pvTab').addEventListener('click', async () => { if (!PV) return; PV = null; await R.previewToTab(); document.body.classList.remove('previewing'); $('#pv').hidden = true; renderCols(); });
 new ResizeObserver(() => { if (PV) R.previewRect(slotRect()); }).observe($('#pvSlot'));

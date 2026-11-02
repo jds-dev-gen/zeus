@@ -487,3 +487,14 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .barcustom > span:first-child { width: 26px; height: 26px; border-radius: 7px; outline: 1px solid var(--line2); }
 .barcustom.on > span:first-child { outline: 2px solid var(--fg); outline-offset: 2px; }
 .barcustom input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+
+/* Zoom: botão da barra de cima e janela "Guardado no Zoom" */
+.zm-btn.on { color: var(--fg); }
+.zm-btn.on svg { fill: currentColor; }
+.zm-btn:disabled { opacity: .35; }
+.zs-head { display: flex; gap: 12px; align-items: center; }
+.zs-head img { width: 84px; height: 56px; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: var(--surface2); }
+.zs-head div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.zs-head b { font-size: 14px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.zs-head small { color: var(--muted); font-size: 12px; }
+#zsRemove { border-color: var(--line2); color: #e5484d; }
