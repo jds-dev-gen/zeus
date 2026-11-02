@@ -102,6 +102,7 @@ function renderList() {
     return;
   }
   $('#list').innerHTML = items.map(i => `<button class="card ${sel === i.id ? 'on' : ''}" type="button" data-id="${esc(i.id)}" draggable="true">
+    <span class="card-x" role="button" data-x="${esc(i.id)}" title="Tirar do Zoom">✕</span>
     ${i.image ? `<div class="img" style="background-image:url('${esc(i.image).replace(/'/g, '%27')}')"></div>` : `<div class="img none">${esc(i.site || hostOf(i.url))}</div>`}
     <div class="body">
       <div class="meta"><img src="${fav(hostOf(i.url))}" alt="" referrerpolicy="no-referrer"><b>${esc(i.site || hostOf(i.url))}</b><span>· ${when(i.createdAt)}</span></div>
@@ -117,6 +118,22 @@ function renderList() {
 let lastClick = { id: null, t: 0 };
 $('#list').addEventListener('click', e => {
   if (PV) return;
+  // ✕ no canto do cartão: tirar do Zoom, com confirmação (o segundo clique é que apaga)
+  const x = e.target.closest('[data-x]');
+  if (x) {
+    e.preventDefault(); e.stopPropagation(); lastClick = { id: null, t: 0 };
+    const id = x.dataset.x, key = 'card:' + id;
+    if (confirmDel !== key) {
+      confirmDel = key;
+      $('#list').querySelectorAll('.card-x.confirm').forEach(o => { o.classList.remove('confirm'); o.textContent = '✕'; o.title = 'Tirar do Zoom'; });
+      x.classList.add('confirm'); x.textContent = 'Apagar do Zoom?'; x.title = 'Carrega outra vez para apagar';
+      setTimeout(() => { if (confirmDel === key) { confirmDel = null; if (x.isConnected) { x.classList.remove('confirm'); x.textContent = '✕'; x.title = 'Tirar do Zoom'; } } }, 4000);
+      return;
+    }
+    confirmDel = null;
+    Z.remove(id).then(() => { if (sel === id) sel = null; load(); });
+    return;
+  }
   const c = e.target.closest('[data-id]');
   const now = Date.now();
   if (lastClick.id && now - lastClick.t < 550 && (e.detail >= 2 || (c && c.dataset.id === lastClick.id))) {
