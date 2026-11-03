@@ -153,7 +153,7 @@ function setSource() {
   $('#prep').hidden = true;
   media.src = cur.url;
   // legendas com o mesmo nome do ficheiro, se houver
-  media.querySelectorAll('track').forEach(t => t.remove());
+  clearSubs();
   if (cur.kind === 'video') O.subs(cur.id).then(s => { if (s) addSubs(s); });
 }
 async function prepare() {
@@ -174,7 +174,7 @@ function showPlayer() {
   $('#pTitle').textContent = cur.name.replace(/\.[^.]+$/, '');
   $('#pMeta').textContent = [cur.folder, fmtOf(cur) + (cur.conv ? ' (convertido para o Zeus)' : ''), cur.duration ? clock(cur.duration) : '', cur.width ? cur.width + '×' + cur.height : ''].filter(Boolean).join(' · ');
   $('#sInfo').textContent = [cur.video ? codec(cur.video) : '', cur.audio ? codec(cur.audio) : '', cur.audio && cur.rate ? String(Math.round(cur.rate / 100) / 10).replace('.', ',') + ' kHz' : '', chans(cur.channels), cur.size ? sizeTxt(cur.size) : ''].filter(Boolean).join(' · ');
-  renderMarks(); updateTimes(); drawWave(); renderPlayBtn();
+  renderMarks(); updateTimes(); drawWave(); renderPlayBtn(); requestAnimationFrame(fitVideo);
   if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: $('#pTitle').textContent, artist: cur.folder || 'Orfeu', album: 'Zeus' });
 }
 media.addEventListener('loadedmetadata', () => {
@@ -229,6 +229,19 @@ document.addEventListener('mousedown', e => { if (!$('#pop').hidden && !e.target
 $('#vol').addEventListener('input', e => { media.volume = +e.target.value; try { localStorage.setItem('orfeu.vol', e.target.value); } catch (er) { /* ok */ } });
 try { const v = localStorage.getItem('orfeu.vol'); if (v) { media.volume = +v; $('#vol').value = v; } } catch (e) { /* ok */ }
 $('#pipBtn').addEventListener('click', () => { if (document.pictureInPictureElement) document.exitPictureInPicture(); else media.requestPictureInPicture().catch(() => {}); });
+// tamanho do vídeo: o maior que cabe no espaço livre, mantendo a proporção do próprio vídeo
+function fitVideo() {
+  const box = $('#vbox'); if (!box || document.fullscreenElement) return;
+  const W = box.clientWidth, H = box.clientHeight;
+  const r = media.videoWidth && media.videoHeight ? media.videoWidth / media.videoHeight : (cur && cur.width && cur.height ? cur.width / cur.height : 16 / 9);
+  let w = W, h = W / r;
+  if (h > H) { h = H; w = H * r; }
+  media.style.width = Math.max(0, Math.floor(w)) + 'px'; media.style.height = Math.max(0, Math.floor(h)) + 'px';
+}
+new ResizeObserver(fitVideo).observe($('#vbox'));
+media.addEventListener('loadedmetadata', fitVideo);
+media.addEventListener('resize', fitVideo);
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) { media.style.width = ''; media.style.height = ''; } fitVideo(); });
 $('#fsBtn').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else $('#vbox').requestFullscreen().catch(() => {}); });
 $('#vbox').addEventListener('click', e => { if (e.target === media) toggle(); });
 $('#vbox').addEventListener('dblclick', () => $('#fsBtn').click());
@@ -242,8 +255,13 @@ if ('mediaSession' in navigator) {
 
 /* ---------- legendas ---------- */
 let subsUrl = null;
-function addSubs(s) {
+// tira as legendas do ficheiro anterior (desligar antes de remover: senão a última frase fica no ecrã)
+function clearSubs() {
+  for (const t of media.textTracks) t.mode = 'disabled';
   media.querySelectorAll('track').forEach(t => t.remove());
+}
+function addSubs(s) {
+  clearSubs();
   if (subsUrl) URL.revokeObjectURL(subsUrl);
   subsUrl = URL.createObjectURL(new Blob([s.vtt], { type: 'text/vtt' }));
   const tr = document.createElement('track');

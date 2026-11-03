@@ -89,8 +89,12 @@ button { cursor: pointer; }
 .meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .meta small { font-size: 12.5px; color: var(--muted); }
 .meta h2 { margin: 0; font-size: 23px; letter-spacing: -.02em; line-height: 1.2; overflow-wrap: anywhere; }
-.vbox { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; border-radius: 12px; overflow: hidden; background: #000; }
-.vbox video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.vbox { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+/* o vídeo fica com a forma dele (16:9, 9:16, 4:3…), centrado no espaço livre, sem barras pretas à volta */
+.vbox video { display: block; width: 0; height: 0; border-radius: 12px; background: #000; object-fit: contain; }
+.vbox:fullscreen { background: #000; }
+.vbox:fullscreen video { width: 100% !important; height: 100% !important; border-radius: 0; }
+.prep { border-radius: 12px; }
 .player.audio .vbox { display: none; }
 .player.audio .vonly, .player.audio #cAudioWrap { display: none !important; }
 .prep { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 30px; color: var(--soft); background: var(--surface); font-size: 14px; line-height: 1.6; }
