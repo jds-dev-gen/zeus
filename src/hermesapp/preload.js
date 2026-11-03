@@ -3,7 +3,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const call = (n, ...a) => ipcRenderer.invoke('hermes:' + n, ...a);
 const NAMES = ['theme', 'places', 'pin', 'unpin', 'seenDownloads', 'list', 'counts', 'sizes', 'folderSize', 'recent', 'tagged', 'setTag', 'search', 'snippet', 'thumb', 'preview',
-  'open', 'openWith', 'reveal', 'copyPath', 'rename', 'mkdir', 'move', 'copy', 'duplicate', 'chooseFolder', 'trash', 'compress', 'unzip', 'batchRename', 'convertOptions', 'convert', 'menu'];
+  'open', 'openWith', 'reveal', 'copyPath', 'rename', 'mkdir', 'move', 'copy', 'duplicate', 'chooseFolder', 'trash', 'compress', 'unzip', 'batchRename', 'convertOptions', 'convert', 'menu', 'copyFiles', 'shareTargets', 'share'];
 const api = {};
 NAMES.forEach(n => { api[n] = (...a) => call(n, ...a); });
 api.drag = paths => ipcRenderer.send('hermes:drag', paths);

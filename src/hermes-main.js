@@ -502,6 +502,13 @@ function setupHermes(x) {
     else if (isMac) { html = path.join(UD, 'conv-' + Date.now() + '.html'); await run('/usr/bin/textutil', ['-convert', 'html', p, '-output', html]); }
     else if (TEXT_EXT.has(extOf(p))) { html = path.join(UD, 'conv-' + Date.now() + '.html'); const t = await fsp.readFile(p, 'utf8'); await fsp.writeFile(html, '<meta charset="utf-8"><pre style="font:13px/1.5 Menlo,monospace;white-space:pre-wrap">' + t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) + '</pre>'); }
     else throw new Error('sem textutil');
+    // o título do PDF é o nome do ficheiro original (e não o do HTML temporário)
+    if (html !== p) {
+      const title = path.basename(p, path.extname(p)).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+      let t = await fsp.readFile(html, 'utf8');
+      t = /<title>[\s\S]*?<\/title>/i.test(t) ? t.replace(/<title>[\s\S]*?<\/title>/i, `<title>${title}</title>`) : /<head[^>]*>/i.test(t) ? t.replace(/<head[^>]*>/i, m => `${m}<title>${title}</title>`) : `<title>${title}</title>` + t;
+      await fsp.writeFile(html, t);
+    }
     const w = new BrowserWindow({ show: false, width: 900, height: 1200, webPreferences: { javascript: false, sandbox: true, contextIsolation: true } });
     try {
       w.webContents.on('will-navigate', e => e.preventDefault());
@@ -520,6 +527,38 @@ function setupHermes(x) {
     try { e.sender.startDrag({ files, file: files[0], icon: dragIcon && !dragIcon.isEmpty() ? dragIcon : nativeImage.createEmpty() }); } catch (er) { /* ok */ }
   });
 
+  /* ---------- partilhar ---------- */
+  // pôr ficheiros na área de transferência do Mac, como no Finder (⌘V cola-os no Gmail, WhatsApp, Finder…)
+  function filesToClipboard(list) {
+    if (isMac) {
+      const plist = '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><array>' +
+        list.map(p => '<string>' + p.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</string>').join('') + '</array></plist>';
+      x.clipboard.writeBuffer('NSFilenamesPboardType', Buffer.from(plist, 'utf8'));
+    } else x.clipboard.writeText(list.join('\n'));
+  }
+  h('copyFiles', paths => { const list = (Array.isArray(paths) ? paths : []).map(abs).filter(p => p && exists(p)); if (list.length) filesToClipboard(list); return list.length; });
+  h('shareTargets', () => ({ sheet: isMac, wa: !!x.hasApp('wa'), mail: !!x.hasApp('mail') }));
+  h('share', async (paths, how, at) => {
+    const list = (Array.isArray(paths) ? paths : []).map(abs).filter(p => p && exists(p)).slice(0, 100);
+    if (!list.length) return false;
+    how = str(how, 10);
+    if (how === 'sheet') {   // menu de partilha do Mac: Mail, Mensagens, AirDrop, Notas, WhatsApp (se estiver instalado)…
+      if (!isMac || !x.ShareMenu) return false;
+      const w = x.getWin(), v = x.getView(); const b = v ? v.getBounds() : { x: 0, y: 0 };
+      try { new x.ShareMenu({ filePaths: list }).popup({ window: w, x: Math.round(b.x + (+at.x || 0)), y: Math.round(b.y + (+at.y || 0)) }); } catch (e) { return false; }
+      return true;
+    }
+    if (how === 'copy') { filesToClipboard(list); toast(list.length === 1 ? 'Ficheiro copiado: cola-o com ⌘V onde quiseres.' : `${list.length} ficheiros copiados: cola-os com ⌘V onde quiseres.`); return true; }
+    if (how === 'wa' || how === 'mail') {
+      // copia os ficheiros e abre o WhatsApp ou uma mensagem nova do Gmail, dentro do Zeus; falta só colar (⌘V)
+      filesToClipboard(list);
+      x.openAppFor(how);
+      toast(how === 'wa' ? 'Escolhe a conversa no WhatsApp e cola com ⌘V (ou arrasta do Hermes).' : 'Mensagem nova aberta no Gmail: cola com ⌘V para anexar (ou arrasta do Hermes).');
+      return true;
+    }
+    return false;
+  });
+
   /* ---------- menu de contexto (menu do sistema) ---------- */
   h('menu', async (paths, at) => {
     const list = (Array.isArray(paths) ? paths : []).map(abs).filter(Boolean);
@@ -528,6 +567,7 @@ function setupHermes(x) {
     const kinds = [...new Set(list.map(q => { try { return kindOf(q, fs.statSync(q).isDirectory()); } catch (e) { return 'file'; } }))];
     const conv = kinds.length === 1 ? CONV[kinds[0]] : null;
     const tpl = list.length ? [
+      { label: 'Ver no Zeus', click: cmd('quickLook') },
       { label: 'Abrir', click: cmd('open') },
       { label: 'Abrir com…', click: cmd('openWith') },
       { type: 'separator' },
@@ -541,6 +581,8 @@ function setupHermes(x) {
       ...(isMac ? [{ label: 'Etiqueta', submenu: TAGS.map(([n]) => ({ label: n, click: cmd('tag', n) })) }] : []),
       { type: 'separator' },
       ...(one && kinds[0] === 'folder' ? [{ label: C.pinned.includes(p) ? 'Tirar das fixadas' : 'Fixar na coluna da esquerda', click: cmd(C.pinned.includes(p) ? 'unpin' : 'pin') }, { label: 'Ver o espaço ocupado', click: cmd('space') }] : []),
+      { label: 'Partilhar…', click: cmd('shareMenu') },
+      { label: one ? 'Copiar o ficheiro' : 'Copiar os ficheiros', click: cmd('copyFiles') },
       { label: 'Mostrar no Finder', click: cmd('reveal') },
       { label: one ? 'Copiar o caminho' : 'Copiar os caminhos', click: cmd('copyPath') },
       { type: 'separator' },

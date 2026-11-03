@@ -248,7 +248,7 @@ function renderBulk() {
   const kinds = new Set(s.map(i => i.dir ? 'folder' : (i.kind === 'html' ? 'html' : i.kind)));
   const canConv = kinds.size === 1 && ['image', 'audio', 'video', 'doc', 'html'].includes([...kinds][0]);
   b.hidden = false;
-  b.innerHTML = `<b>${s.length} selecionados</b><button class="btn" type="button" data-b="moveTo">Mover para…</button><button class="btn" type="button" data-b="copyTo">Copiar para…</button><button class="btn" type="button" data-b="compress">Comprimir</button>${canConv ? `<button class="btn" type="button" data-b="convertMenu">Converter ▾</button>` : ''}${P.tags.length ? `<button class="btn" type="button" data-b="tagMenu">Etiqueta ▾</button>` : ''}<button class="btn" type="button" data-b="batchRename">Mudar nomes…</button><span class="spacer"></span><button class="btn" type="button" data-b="trash">Mover para o Lixo</button>`;
+  b.innerHTML = `<b>${s.length} selecionados</b><button class="btn" type="button" data-b="shareMenu">Partilhar ▾</button><button class="btn" type="button" data-b="moveTo">Mover para…</button><button class="btn" type="button" data-b="copyTo">Copiar para…</button><button class="btn" type="button" data-b="compress">Comprimir</button>${canConv ? `<button class="btn" type="button" data-b="convertMenu">Converter ▾</button>` : ''}${P.tags.length ? `<button class="btn" type="button" data-b="tagMenu">Etiqueta ▾</button>` : ''}<button class="btn" type="button" data-b="batchRename">Mudar nomes…</button><span class="spacer"></span><button class="btn" type="button" data-b="trash">Mover para o Lixo</button>`;
 }
 $('#bulk').addEventListener('click', e => { const b = e.target.closest('[data-b]'); if (b) action(b.dataset.b, selected().map(i => i.path), null, b); });
 function renderStatus() {
@@ -267,7 +267,7 @@ async function renderPreview() {
   const s = selected();
   const el = $('#prev');
   if (s.length > 1) {
-    el.innerHTML = `<div class="pv"><span class="big">${FOLDER.replace(/20/g, '56')}</span></div><h3>${s.length} itens selecionados</h3><div class="kv"><span>Tamanho</span><div>${bytes(selBytes()) || '—'}</div></div><div class="hint">Arrasta-os para uma página do Zeus (Gmail, WhatsApp, Notion…) para os anexar, ou para uma pasta.</div>`;
+    el.innerHTML = `<div class="pv"><span class="big">${FOLDER.replace(/20/g, '56')}</span></div><h3>${s.length} itens selecionados</h3><div class="kv"><span>Tamanho</span><div>${bytes(selBytes()) || '—'}</div></div><div class="acts"><button class="btn small primary" type="button" data-a="shareMenu">Partilhar ▾</button><button class="btn small" type="button" data-a="quickLook">Ver</button></div><div class="hint">Arrasta-os para uma página do Zeus (Gmail, WhatsApp, Notion…) para os anexar, ou para uma pasta.</div>`;
     return;
   }
   if (!s.length) {
@@ -298,11 +298,80 @@ async function renderPreview() {
   if (ck && !convOpts[ck]) convOpts[ck] = await H.convertOptions(ck) || [];
   if (gen !== pvGen) return;
   el.innerHTML = `<div class="pv">${pv}</div><h3>${esc(i.name)}</h3><div class="kv">${kv.map(([k, v]) => `<span>${k}</span><div>${v}</div>`).join('')}</div>
-    <div class="acts"><button class="btn small primary" type="button" data-a="open">Abrir</button>${i.dir ? '' : '<button class="btn small" type="button" data-a="openWith">Abrir com…</button>'}<button class="btn small" type="button" data-a="reveal">Mostrar no Finder</button><button class="btn small" type="button" data-a="copyPath">Copiar caminho</button>${ck && (convOpts[ck] || []).length ? '<button class="btn small" type="button" data-a="convertMenu">Converter ▾</button>' : ''}${i.dir ? '<button class="btn small" type="button" data-a="space">Ver o espaço</button>' : ''}</div>
+    <div class="acts">${i.dir ? '<button class="btn small primary" type="button" data-a="open">Abrir</button>' : '<button class="btn small primary" type="button" data-a="quickLook" title="Ver dentro do Zeus (espaço)">Ver</button><button class="btn small" type="button" data-a="open">Abrir</button><button class="btn small" type="button" data-a="shareMenu">Partilhar ▾</button><button class="btn small" type="button" data-a="openWith">Abrir com…</button>'}<button class="btn small" type="button" data-a="reveal">Mostrar no Finder</button><button class="btn small" type="button" data-a="copyPath">Copiar caminho</button>${ck && (convOpts[ck] || []).length ? '<button class="btn small" type="button" data-a="convertMenu">Converter ▾</button>' : ''}${i.dir ? '<button class="btn small" type="button" data-a="space">Ver o espaço</button>' : ''}</div>
     <div class="hint">Arrasta ${i.dir ? 'esta pasta' : 'este ficheiro'} para o Gmail, WhatsApp ou Notion para ${i.dir ? 'a' : 'o'} anexar${['audio', 'video'].includes(i.kind) ? ' · abre no Orfeu' : ''}.</div>`;
   if (i.dir && sizes[i.path] == null) H.folderSize(i.path).then(sz => { if (sz != null) { sizes[i.path] = sz; const e2 = $('#pvSize'); if (e2) e2.textContent = bytes(sz); } });
 }
-$('#prev').addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b) action(b.dataset.a, selected().map(i => i.path), null, b); });
+$('#prev').addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (b) return action(b.dataset.a, selected().map(i => i.path), null, b);
+  const s = selected(); if (e.target.closest('.pv') && s.length === 1 && !s[0].dir) openQL(s[0].path);
+});
+
+/* ---------- partilhar ---------- */
+let targets = null;
+async function shareMenu(paths, anchorEl) {
+  if (!paths.length) return;
+  targets = targets || await H.shareTargets() || {};
+  const r = anchorEl ? anchorEl.getBoundingClientRect() : { left: 300, bottom: 300 };
+  const n = paths.length === 1 ? 'o ficheiro' : `os ${paths.length} ficheiros`;
+  const entries = [];
+  if (targets.sheet) entries.push(['<b>Partilhar…</b>&nbsp;<span style="color:var(--muted)">Mail, Mensagens, AirDrop, WhatsApp…</span>', () => H.share(paths, 'sheet', { x: r.left, y: r.bottom + 4 })]);
+  if (targets.wa) entries.push(['WhatsApp, aqui no Zeus', () => H.share(paths, 'wa')]);
+  if (targets.mail) entries.push(['Gmail, aqui no Zeus (mensagem nova)', () => H.share(paths, 'mail')]);
+  entries.push([`Copiar ${n} (para colar com ⌘V)`, () => H.share(paths, 'copy')]);
+  entries.push(['Copiar o caminho', () => action('copyPath', paths)]);
+  popMenu(anchorEl, entries);
+}
+
+/* ---------- ver no Zeus (barra de espaço) ---------- */
+let qlI = -1, qlGen = 0;
+const qlList = () => items.filter(i => !i.dir);
+async function openQL(p) {
+  const list = qlList(); const k = list.findIndex(i => i.path === p); if (k < 0) return;
+  qlI = k; $('#ql').hidden = false; renderQL();
+}
+function closeQL() { $('#ql').hidden = true; $('#qlBody').innerHTML = ''; qlI = -1; C.focus(); }
+async function renderQL() {
+  const list = qlList(); const i = list[qlI]; if (!i) return closeQL();
+  const gen = ++qlGen;
+  if (!sel.has(i.path)) { sel = new Set([i.path]); anchor = focusI = items.indexOf(i); render(); }
+  $('#qlName').textContent = i.name;
+  $('#qlMeta').textContent = [typeName(i), bytes(i.size), when(i.mtime), `${qlI + 1} de ${list.length}`].filter(Boolean).join(' · ');
+  $('#qlPrev').disabled = qlI <= 0; $('#qlNext').disabled = qlI >= list.length - 1;
+  const body = $('#qlBody');
+  body.innerHTML = '<div class="none">A abrir…</div>';
+  const d = await H.preview(i.path);
+  if (gen !== qlGen || !d) return;
+  const big = `<span class="ic ${i.kind === 'doc' ? 'doc' : i.kind}">${esc((i.ext || '').toUpperCase().slice(0, 4))}</span>`;
+  if (d.kind === 'image') body.innerHTML = `<img src="${esc(d.ql || d.url)}" alt="">`;
+  else if (d.kind === 'video') body.innerHTML = `<video src="${esc(d.url)}" controls preload="metadata"></video>`;
+  else if (d.kind === 'audio') body.innerHTML = `<div class="aud">${big}<b>${esc(i.name)}</b><audio src="${esc(d.url)}" controls preload="metadata"></audio></div>`;
+  else if (d.kind === 'pdf') body.innerHTML = `<iframe src="${esc(d.url)}" title="${esc(i.name)}"></iframe>`;
+  else if (d.kind === 'html') body.innerHTML = `<iframe src="${esc(d.url)}" sandbox="" title="${esc(i.name)}"></iframe>`;
+  else if (d.text != null) body.innerHTML = `<pre>${esc(d.text)}${d.size > 20000 ? '\n\n…' : ''}</pre>`;
+  else {
+    const u = await H.thumb(i.path, 1600);
+    if (gen !== qlGen) return;
+    body.innerHTML = u ? `<img src="${esc(u)}" alt="">` : `<div class="none">${big}Sem pré-visualização para este tipo de ficheiro.<br><button class="btn small primary" type="button" id="qlOpen2" style="margin-top:12px">Abrir na app habitual</button></div>`;
+    const o2 = $('#qlOpen2'); if (o2) o2.onclick = () => H.open(i.path);
+  }
+}
+const qlStep = d => { const n = qlList().length; const k = Math.max(0, Math.min(n - 1, qlI + d)); if (k !== qlI) { qlI = k; renderQL(); } };
+$('#qlPrev').addEventListener('click', () => qlStep(-1));
+$('#qlNext').addEventListener('click', () => qlStep(1));
+$('#qlClose').addEventListener('click', closeQL);
+$('#qlOpen').addEventListener('click', () => { const i = qlList()[qlI]; if (i) H.open(i.path); });
+$('#qlReveal').addEventListener('click', () => { const i = qlList()[qlI]; if (i) H.reveal(i.path); });
+$('#qlShare').addEventListener('click', e => { const i = qlList()[qlI]; if (i) shareMenu([i.path], e.currentTarget); });
+document.addEventListener('keydown', e => {
+  if ($('#ql').hidden) return;
+  const inMedia = document.activeElement && /^(VIDEO|AUDIO|IFRAME)$/.test(document.activeElement.tagName);
+  if (e.key === 'Escape' || (e.key === ' ' && !inMedia)) { e.preventDefault(); e.stopImmediatePropagation(); closeQL(); }
+  else if ((e.key === 'ArrowLeft' || e.key === 'ArrowUp') && !inMedia) { e.preventDefault(); e.stopImmediatePropagation(); qlStep(-1); }
+  else if ((e.key === 'ArrowRight' || e.key === 'ArrowDown') && !inMedia) { e.preventDefault(); e.stopImmediatePropagation(); qlStep(1); }
+  else if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); $('#qlOpen').click(); }
+  else e.stopImmediatePropagation();
+}, true);
 
 /* ================================================================== */
 /* Seleção, rato e teclado                                              */
@@ -366,10 +435,11 @@ document.addEventListener('keydown', e => {
   else if (k === 'ArrowUp' && cmd) { e.preventDefault(); goUp(); }
   else if (k === 'ArrowDown' || (mode === 'grid' && k === 'ArrowRight')) { e.preventDefault(); selectIndex(Math.min(items.length - 1, (focusI < 0 ? -1 : focusI) + (k === 'ArrowDown' ? cols : 1)), e.shiftKey ? { shiftKey: true } : null); }
   else if (k === 'ArrowUp' || (mode === 'grid' && k === 'ArrowLeft')) { e.preventDefault(); selectIndex(Math.max(0, focusI - (k === 'ArrowUp' ? cols : 1)), e.shiftKey ? { shiftKey: true } : null); }
+  else if (k === ' ') { e.preventDefault(); const s = selected(); if (s.length && !s[0].dir) openQL(s[0].path); }
   else if (k === 'Enter') { const s = selected(); if (s.length === 1 && loc.type === 'dir') { renaming = s[0].path; render(); } else if (s.length === 1) openItem(s[0]); }
   else if (cmd && (k === 'Backspace' || k === 'Delete')) { e.preventDefault(); action('trash', selected().map(i => i.path)); }
   else if (cmd && k.toLowerCase() === 'a') { e.preventDefault(); sel = new Set(items.map(i => i.path)); render(); }
-  else if (cmd && k.toLowerCase() === 'c') { e.preventDefault(); const s = selected().map(i => i.path); if (s.length) { clip = { paths: s, cut: false }; H.copyPath(s); flash(`${s.length} copiado${s.length > 1 ? 's' : ''} — ⌘V cola, ⌥⌘V move`); } }
+  else if (cmd && k.toLowerCase() === 'c') { e.preventDefault(); const s = selected().map(i => i.path); if (s.length) { clip = { paths: s, cut: false }; H.copyFiles(s); flash(`${s.length} copiado${s.length > 1 ? 's' : ''} — ⌘V cola, ⌥⌘V move`); } }
   else if (cmd && k.toLowerCase() === 'v') { e.preventDefault(); paste(e.altKey); }
   else if (cmd && k.toLowerCase() === 'd') { e.preventDefault(); action('duplicate', selected().map(i => i.path)); }
   else if (cmd && e.shiftKey && k.toLowerCase() === 'n') { e.preventDefault(); newFolder(); }
@@ -419,6 +489,9 @@ async function action(a, paths, arg, anchorEl) {
       return popMenu(anchorEl, opts2.map(([f, n]) => [n, () => action('convert', paths, f)]));
     }
     case 'tagMenu': return popMenu(anchorEl, P.tags.map(t => [`<i class="tg" style="background:${t.color}"></i> ${esc(t.name)}`, () => action('tag', paths, t.name)]));
+    case 'shareMenu': return shareMenu(paths, anchorEl);
+    case 'copyFiles': return H.share(paths, 'copy');
+    case 'quickLook': return openQL(one || paths[0]);
     case 'mkdir': return newFolder();
     case 'paste': return paste(false);
   }

@@ -2309,7 +2309,15 @@ function setupIPC() {
     openNotes: id => { showApp('notas'); const send = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id }); }; if (notasWC && !notasWC.isLoading()) setTimeout(send, 150); else setTimeout(send, 1500); }
   });
   setupHermes({
-    app, ipcMain, dialog, shell, Menu, BrowserWindow, nativeImage, clipboard,
+    app, ipcMain, dialog, shell, Menu, BrowserWindow, nativeImage, clipboard, ShareMenu: isMac ? ShareMenu : null,
+    hasApp: id => appById(id),
+    // abre o WhatsApp, ou uma mensagem nova no Gmail, dentro do Zeus
+    openAppFor: how => {
+      const id = how === 'wa' ? 'wa' : 'mail';
+      const a = appById(id); if (!a) return;
+      showApp(id);
+      if (id === 'mail') { const v = appViews.get('mail'); if (v && !v.webContents.isDestroyed()) { const u = v.webContents.getURL(); if (/mail\.google\.com/.test(u)) v.webContents.executeJavaScript("location.hash = (location.hash.split('?')[0] || '#inbox') + '?compose=new'").catch(() => {}); else v.webContents.loadURL('https://mail.google.com/mail/u/0/#inbox?compose=new').catch(() => {}); } }
+    },
     getWC: () => hermesWC, getUi: () => ui, getWin: () => win, getView: () => appViews.get('hermes'),
     openInOrfeu: paths => orfeuOpenPaths(paths),
     openInNotas: async p => {

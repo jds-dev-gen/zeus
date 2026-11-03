@@ -2,7 +2,7 @@
 <html lang="pt-PT" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src file: data:; media-src file:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src file: data:; media-src file:; frame-src file:; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Hermes</title>
 <link rel="stylesheet" href="hermes.css">
 </head>
@@ -38,6 +38,18 @@
   <aside class="prev" id="prev"></aside>
 </div>
 <div class="pop" id="pop" hidden></div>
+<div class="ql" id="ql" hidden>
+  <div class="qlhead">
+    <button class="icon" type="button" id="qlPrev" title="Anterior (←)">‹</button>
+    <button class="icon" type="button" id="qlNext" title="Seguinte (→)">›</button>
+    <div class="qlt"><b id="qlName"></b><small id="qlMeta"></small></div>
+    <button class="btn small" type="button" id="qlShare">Partilhar ▾</button>
+    <button class="btn small" type="button" id="qlReveal">Mostrar no Finder</button>
+    <button class="btn small primary" type="button" id="qlOpen">Abrir</button>
+    <button class="icon" type="button" id="qlClose" title="Fechar (Esc ou espaço)">✕</button>
+  </div>
+  <div class="qlbody" id="qlBody"></div>
+</div>
 <div class="modal" id="modal" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 <script src="hermes.js"></script>
 </body>
