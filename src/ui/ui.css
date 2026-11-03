@@ -521,3 +521,14 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .vd-load i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line2); border-top-color: var(--fg); animation: vdspin .8s linear infinite; }
 @keyframes vdspin { to { transform: rotate(360deg); } }
 .vd-err { padding: 14px; border-radius: 10px; background: var(--surface2); font-size: 13px; line-height: 1.5; }
+
+/* arrastar separadores entre espaços (barra da direita) */
+#right [data-rt] { touch-action: none; }
+#right.rt-dragging [data-rt] { cursor: grabbing; }
+#right .rt.drag { opacity: .35; }
+#right [data-rtzone] { border-radius: 8px; transition: background .12s, box-shadow .12s; }
+#right [data-rtzone].drop { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
+#right .rt.drop-before { box-shadow: inset 0 2px 0 var(--fg); }
+#right .rt.drop-after { box-shadow: inset 0 -2px 0 var(--fg); }
+#right .rt-empty { height: 30px; border: 1.5px dashed var(--line2); border-radius: 7px; display: grid; place-items: center; font-size: 11px; color: var(--muted); width: 100%; }
+#right.compact .rt-empty { width: 30px; height: 26px; }

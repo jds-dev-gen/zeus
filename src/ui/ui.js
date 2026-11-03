@@ -285,32 +285,94 @@ function renderTopTabs() {
 }
 
 let rightKey = '';
+let rtDrag = null, rtDragged = false;   // arrastar separadores entre espaços (barra da direita)
 function renderRight() {
   const r = $('#right');
   r.hidden = S.settings.tabMode !== 'right';
   if (r.hidden) return;
   const wide = !!S.settings.rightWide;
-  const key = JSON.stringify([S.tabs.map(x => [x.id, x.title, x.favicon, x.space]), S.currentId, S.spaces, wide, S.pickSpace]);
+  const dragging = !!(rtDrag && rtDrag.on);
+  const key = JSON.stringify([S.tabs.map(x => [x.id, x.title, x.favicon, x.space]), S.currentId, S.spaces, wide, S.pickSpace, dragging]);
   if (key === rightKey) return; rightKey = key;
   r.classList.toggle('compact', !wide);
+  r.classList.toggle('rt-dragging', dragging);
   const toggle = `<button class="rt rt-toggle" type="button" data-rtoggle title="${wide ? 'Só ícones (a página fica mais larga)' : 'Mostrar os títulos'}" aria-label="${wide ? 'Mostrar só os ícones' : 'Mostrar os títulos'}">${wide ? '<span class="arr">›</span><span class="t">Só ícones</span>' : '<span class="arr">‹</span>'}</button>`;
+  const dragCls = t => (dragging && rtDrag.id === t.id ? ' drag' : '');
   if (!wide) {
     // compacta: só o ícone de cada site; o nome aparece ao passar o rato
     r.innerHTML = toggle + S.spaces.map(s => {
       const list = S.tabs.filter(t => t.space === s.id);
-      if (!list.length) return '';
-      return `<div class="rt-sp" title="${esc(s.name)}"><button type="button" class="rt-sp-l" data-pick="${esc(s.id)}" title="Página nova no espaço ${esc(s.name)}">${esc(s.name.charAt(0).toUpperCase())}</button>${list.map(t => `<div class="rt ${t.id === S.currentId ? 'on' : ''}" role="button" tabindex="0" data-open="${t.id}" title="${esc(t.url === NEWTAB ? 'Página nova' : t.title)}"><span class="fav">${favHTML(t, 16)}</span></div>`).join('')}</div>`;
+      if (!list.length && !dragging) return '';
+      return `<div class="rt-sp" data-rtzone="${esc(s.id)}" title="${esc(s.name)}"><button type="button" class="rt-sp-l" data-pick="${esc(s.id)}" title="Página nova no espaço ${esc(s.name)}">${esc(s.name.charAt(0).toUpperCase())}</button>${list.map(t => `<div class="rt${t.id === S.currentId ? ' on' : ''}${dragCls(t)}" role="button" tabindex="0" data-open="${t.id}" data-rt="${t.id}" title="${esc(t.url === NEWTAB ? 'Página nova' : t.title)}"><span class="fav">${favHTML(t, 16)}</span></div>`).join('')}${!list.length ? '<div class="rt-empty"></div>' : ''}</div>`;
     }).join('') + `<button class="rt" type="button" data-newtab title="Separador novo" aria-label="Separador novo">${ICON.plus}</button>`;
     return;
   }
   r.innerHTML = toggle + S.spaces.map(s => {
     const list = S.tabs.filter(t => t.space === s.id);
-    if (!list.length) return '';
-    return `<div style="display:flex;flex-direction:column;gap:2px"><button type="button" class="rt-head" data-pick="${esc(s.id)}" title="Abrir uma página nova neste espaço">${esc(s.name)}<i>+ página nova</i></button>${list.map(t => `<div class="rt ${t.id === S.currentId ? 'on' : ''}" role="button" tabindex="0" data-open="${t.id}"><span class="fav">${favHTML(t)}</span><span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><button class="nb x" type="button" data-close="${t.id}" aria-label="Fechar">${ICON.x}</button></div>`).join('')}</div>`;
+    if (!list.length && !dragging) return '';
+    return `<div class="rt-zone" data-rtzone="${esc(s.id)}" style="display:flex;flex-direction:column;gap:2px"><button type="button" class="rt-head" data-pick="${esc(s.id)}" title="Abrir uma página nova neste espaço">${esc(s.name)}<i>+ página nova</i></button>${list.map(t => `<div class="rt${t.id === S.currentId ? ' on' : ''}${dragCls(t)}" role="button" tabindex="0" data-open="${t.id}" data-rt="${t.id}"><span class="fav">${favHTML(t)}</span><span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><button class="nb x" type="button" data-close="${t.id}" aria-label="Fechar">${ICON.x}</button></div>`).join('')}${!list.length ? '<div class="rt-empty">Largar aqui</div>' : ''}</div>`;
   }).join('') + `<button class="rt" type="button" data-newtab>${ICON.plus}<span class="t">Separador novo</span></button>`;
 }
+// onde largar: o espaço por baixo do ponteiro e a posição dentro dele
+function rtTarget(x, y, dragId) {
+  const el = document.elementFromPoint(x, y);
+  const z = el && el.closest('[data-rtzone]'); if (!z) return null;
+  const rows = [...z.querySelectorAll('[data-rt]')].filter(c => +c.dataset.rt !== dragId);
+  let before = null, mark = null, after = false;
+  for (const c of rows) { const r = c.getBoundingClientRect(); if (y < r.top + r.height / 2) { before = +c.dataset.rt; mark = c; break; } }
+  if (!mark && rows.length) { mark = rows[rows.length - 1]; after = true; }
+  return { space: z.dataset.rtzone, z, before, mark, after };
+}
+const clearRtDrop = () => document.querySelectorAll('#right .drop, #right .drop-before, #right .drop-after').forEach(x => x.classList.remove('drop', 'drop-before', 'drop-after'));
+$('#right').addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('[data-close]')) return;
+  const c = e.target.closest('[data-rt]'); if (!c) return;
+  rtDrag = { id: +c.dataset.rt, x: e.clientX, y: e.clientY, on: false };
+});
+window.addEventListener('pointermove', e => {
+  if (!rtDrag) return;
+  if (!rtDrag.on) {
+    if (Math.hypot(e.clientX - rtDrag.x, e.clientY - rtDrag.y) < 6) return;
+    rtDrag.on = true; document.body.classList.add('dragging-card'); { const st = $('#right').scrollTop; rightKey = ''; renderRight(); $('#right').scrollTop = st; }
+  }
+  rtDrag.cx = e.clientX; rtDrag.cy = e.clientY;
+  rtMark();
+  // perto do fundo ou do topo da barra, a lista anda sozinha (espaços que não cabem no ecrã)
+  if (!rtDrag.scroll) {
+    const step = () => {
+      if (!rtDrag || !rtDrag.on) return;
+      const r = $('#right'), b = r.getBoundingClientRect(), edge = 48;
+      const v = rtDrag.cy > b.bottom - edge ? Math.min(18, (rtDrag.cy - (b.bottom - edge)) / 2.5) : rtDrag.cy < b.top + edge ? -Math.min(18, ((b.top + edge) - rtDrag.cy) / 2.5) : 0;
+      if (v) { r.scrollTop += v; rtMark(); }
+      rtDrag.scroll = requestAnimationFrame(step);
+    };
+    rtDrag.scroll = requestAnimationFrame(step);
+  }
+});
+function rtMark() {
+  clearRtDrop();
+  const t = rtTarget(rtDrag.cx, rtDrag.cy, rtDrag.id); if (!t) return;
+  t.z.classList.add('drop');
+  if (t.mark) t.mark.classList.add(t.after ? 'drop-after' : 'drop-before');
+}
+window.addEventListener('pointerup', e => {
+  if (!rtDrag) return;
+  const d = rtDrag; rtDrag = null;
+  if (d.scroll) cancelAnimationFrame(d.scroll);
+  if (!d.on) return;
+  rtDragged = true; setTimeout(() => { rtDragged = false; }, 50);
+  document.body.classList.remove('dragging-card');
+  const t = rtTarget(e.clientX, e.clientY, d.id);
+  clearRtDrop(); { const st = $('#right').scrollTop; rightKey = ''; renderRight(); $('#right').scrollTop = st; }
+  if (!t) return;
+  const from = (tabById(d.id) || {}).space;
+  Z.invoke('tab:move', d.id, t.space, t.before);
+  if (from !== t.space) { const sp = S.spaces.find(s => s.id === t.space); if (sp) toast('Movido para ' + sp.name); }
+});
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && rtDrag) { rtDrag = null; document.body.classList.remove('dragging-card'); clearRtDrop(); rightKey = ''; renderRight(); } });
 
 function onTabListClick(e) {
+  if (rtDragged) return;   // acabou de arrastar: não abre o separador
   const x = e.target.closest('[data-close]');
   if (x) { e.stopPropagation(); Z.invoke('tab:close', +x.dataset.close); return; }
   const o = e.target.closest('[data-open]');
