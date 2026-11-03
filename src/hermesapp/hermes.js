@@ -223,7 +223,11 @@ function paintThumb(el, t) {
   if (!t || !el.isConnected) return;
   if (t.url) {
     const old = el.querySelector('.ic'); if (old) old.remove();
-    if (!el.querySelector('img')) el.insertAdjacentHTML('afterbegin', (el.closest('.grid') && /k-(video|image)/.test(el.className) ? `<img class="bg" src="${esc(t.url)}" alt="" draggable="false">` : '') + `<img class="fg" src="${esc(t.url)}" alt="" draggable="false">`);
+    if (!el.querySelector('img')) {
+      // a miniatura fica com o formato do próprio ficheiro (vertical, horizontal, quadrado), sem barras à volta
+      el.insertAdjacentHTML('afterbegin', `<span class="fr"><img class="fg" src="${esc(t.url)}" alt="" draggable="false"></span>`);
+      const b = el.querySelector('.badge'); if (b) el.querySelector('.fr').appendChild(b);
+    }
     el.classList.add('has');
   }
   if (t.src) el.dataset.src = t.src;
@@ -257,7 +261,7 @@ document.addEventListener('mouseover', e => {
     const len = +el.dataset.len || 0;
     v.addEventListener('loadedmetadata', () => { try { v.currentTime = len > 20 ? len * 0.15 : 0; } catch (x) { /* ok */ } v.play().catch(() => {}); }, { once: true });
     v.addEventListener('playing', () => el.classList.add('playing'), { once: true });
-    el.appendChild(v);
+    (el.querySelector('.fr') || el).appendChild(v);
   }, 450);
 });
 document.addEventListener('mouseleave', stopHover);
@@ -340,7 +344,8 @@ async function renderPreview() {
   const ck = i.dir ? '' : i.kind === 'doc' && ['pages', 'md'].includes(i.ext) ? '' : i.kind;
   if (ck && !convOpts[ck]) convOpts[ck] = await H.convertOptions(ck) || [];
   if (gen !== pvGen) return;
-  el.innerHTML = `<div class="pv">${pv}</div><h3>${esc(i.name)}</h3><div class="kv">${kv.map(([k, v]) => `<span>${k}</span><div>${v}</div>`).join('')}</div>
+  const fit = d.kind === 'image' || d.kind === 'video' || (d.text == null && !!d.ql && d.kind !== 'audio');
+  el.innerHTML = `<div class="pv ${fit ? 'fit' : ''}">${pv}</div><h3>${esc(i.name)}</h3><div class="kv">${kv.map(([k, v]) => `<span>${k}</span><div>${v}</div>`).join('')}</div>
     <div class="acts">${i.dir ? '<button class="btn small primary" type="button" data-a="open">Abrir</button>' : '<button class="btn small primary" type="button" data-a="quickLook" title="Ver dentro do Zeus (espaço)">Ver</button><button class="btn small" type="button" data-a="open">Abrir</button><button class="btn small" type="button" data-a="shareMenu">Partilhar ▾</button><button class="btn small" type="button" data-a="openWith">Abrir com…</button>'}<button class="btn small" type="button" data-a="reveal">Mostrar no Finder</button><button class="btn small" type="button" data-a="copyPath">Copiar caminho</button>${ck && (convOpts[ck] || []).length ? '<button class="btn small" type="button" data-a="convertMenu">Converter ▾</button>' : ''}${i.dir ? '<button class="btn small" type="button" data-a="space">Ver o espaço</button>' : ''}</div>
     <div class="hint">Arrasta ${i.dir ? 'esta pasta' : 'este ficheiro'} para o Gmail, WhatsApp ou Notion para ${i.dir ? 'a' : 'o'} anexar${['audio', 'video'].includes(i.kind) ? ' · abre no Orfeu' : ''}.</div>`;
   if (i.dir && sizes[i.path] == null) H.folderSize(i.path).then(sz => { if (sz != null) { sizes[i.path] = sz; const e2 = $('#pvSize'); if (e2) e2.textContent = bytes(sz); } });
@@ -352,18 +357,78 @@ $('#prev').addEventListener('click', e => {
 
 /* ---------- partilhar ---------- */
 let targets = null;
+const SH_IC = {
+  wa: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="M20 11.5a8 8 0 0 1-11.6 7.1L4 20l1.4-4.2A8 8 0 1 1 20 11.5z"/><path d="M9 9.5c.2 2.4 2.3 4.6 4.7 4.9l1.1-1.2 1.6.8"/></svg>',
+  mail: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.5 7 8.5 6.5L20.5 7"/></svg>',
+  sheet: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>',
+  copy: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
+  path: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+  back: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>'
+};
+const initials = n => String(n || '?').replace(/[^\p{L}\p{N} ]/gu, '').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '#';
+const hue = n => { let h = 0; for (const ch of String(n)) h = (h * 31 + ch.codePointAt(0)) % 360; return h; };
+function placePop(pop, anchorEl) {
+  const r = anchorEl ? anchorEl.getBoundingClientRect() : { left: 200, bottom: 200, top: 200, right: 200 };
+  const h = pop.offsetHeight, w = pop.offsetWidth;
+  pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px';
+  pop.style.top = Math.max(8, (r.bottom + h + 8 > innerHeight ? r.top - h - 6 : r.bottom + 6)) + 'px';
+}
 async function shareMenu(paths, anchorEl) {
   if (!paths.length) return;
   targets = targets || await H.shareTargets() || {};
-  const r = anchorEl ? anchorEl.getBoundingClientRect() : { left: 300, bottom: 300 };
-  const n = paths.length === 1 ? 'o ficheiro' : `os ${paths.length} ficheiros`;
-  const entries = [];
-  if (targets.sheet) entries.push(['<b>Partilhar…</b>&nbsp;<span style="color:var(--muted)">Mail, Mensagens, AirDrop, WhatsApp…</span>', () => H.share(paths, 'sheet', { x: r.left, y: r.bottom + 4 })]);
-  if (targets.wa) entries.push(['WhatsApp, aqui no Zeus', () => H.share(paths, 'wa')]);
-  if (targets.mail) entries.push(['Gmail, aqui no Zeus (mensagem nova)', () => H.share(paths, 'mail')]);
-  entries.push([`Copiar ${n} (para colar com ⌘V)`, () => H.share(paths, 'copy')]);
-  entries.push(['Copiar o caminho', () => action('copyPath', paths)]);
-  popMenu(anchorEl, entries);
+  const pop = $('#pop');
+  const one = paths.length === 1, nm = one ? base(paths[0]) : `${paths.length} ficheiros`;
+  const tiles = [];
+  if (targets.wa) tiles.push(['wa', 'WhatsApp', 'Escolher a conversa']);
+  if (targets.mail) tiles.push(['mail', 'Gmail', 'Mensagem nova']);
+  if (targets.sheet) tiles.push(['sheet', 'Mais…', 'Mail, AirDrop, Mensagens']);
+  tiles.push(['copy', one ? 'Copiar o ficheiro' : 'Copiar os ficheiros', 'Para colar com ⌘V'], ['path', 'Copiar o caminho', 'Onde está no Mac']);
+  const home = () => {
+    pop.className = 'pop share';
+    pop.innerHTML = `<div class="sh-head"><b>Partilhar</b><span title="${esc(nm)}">${esc(nm)}</span></div>
+      <div class="sh-grid">${tiles.map(([k, l, sub]) => `<button type="button" class="sh-t sh-${k}" data-sh="${k}"><i>${SH_IC[k]}</i><b>${esc(l)}</b><small>${esc(sub)}</small></button>`).join('')}</div>`;
+    pop.hidden = false; placePop(pop, anchorEl);
+  };
+  // WhatsApp: escolher a conversa aqui (lista e pesquisa do WhatsApp do Zeus)
+  let q = '', qT = null, gen = 0;
+  const waList = async () => {
+    const my = ++gen;
+    $('#waList').innerHTML = '<div class="sh-wait">A ler as conversas do WhatsApp…</div>';
+    const r = await H.waChats(q) || {};
+    if (my !== gen || pop.hidden) return;
+    if (r.error || !r.chats) {
+      $('#waList').innerHTML = `<div class="sh-wait">${r.error === 'login' ? 'O WhatsApp do Zeus ainda não tem sessão iniciada.' : 'Não consegui ler as conversas do WhatsApp.'}</div><button type="button" class="btn small" data-sh="waPick">Escolher a conversa no próprio WhatsApp</button>`;
+      return;
+    }
+    $('#waList').innerHTML = r.chats.length ? r.chats.map(c => `<button type="button" class="wa-c" data-chat="${esc(c.name)}"><i style="--h:${hue(c.name)}">${esc(initials(c.name))}</i><span><b>${esc(c.name)}</b>${c.last ? `<small>${esc(c.last)}</small>` : ''}</span></button>`).join('')
+      : `<div class="sh-wait">Nenhuma conversa com “${esc(q)}”.</div>`;
+  };
+  const wa = () => {
+    pop.className = 'pop share wa';
+    pop.innerHTML = `<div class="sh-head"><button type="button" class="sh-back" data-sh="home" aria-label="Voltar">${SH_IC.back}</button><b>Enviar para…</b><span title="${esc(nm)}">${esc(nm)}</span></div>
+      <label class="wa-q"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg><input id="waQ" placeholder="Procurar contacto ou grupo" autocomplete="off" spellcheck="false"></label>
+      <div class="wa-list" id="waList"></div>`;
+    placePop(pop, anchorEl);
+    $('#waQ').focus();
+    $('#waQ').addEventListener('input', e => { q = e.target.value.trim(); clearTimeout(qT); qT = setTimeout(waList, 350); });
+    $('#waQ').addEventListener('keydown', e => { if (e.key === 'Enter') { const f = $('#waList [data-chat]'); if (f) f.click(); } if (e.key === 'Escape') home(); e.stopPropagation(); });
+    waList();
+  };
+  pop.onclick = e => {
+    const c = e.target.closest('[data-chat]');
+    if (c) { pop.hidden = true; flash(`A abrir a conversa com ${c.dataset.chat}…`); H.share(paths, 'wa', { chat: c.dataset.chat }); return; }
+    const b = e.target.closest('[data-sh]'); if (!b) return;
+    const k = b.dataset.sh;
+    if (k === 'home') return home();
+    if (k === 'wa') return wa();
+    pop.hidden = true;
+    if (k === 'waPick') return H.share(paths, 'wa');
+    if (k === 'sheet') { const r = anchorEl ? anchorEl.getBoundingClientRect() : { left: 300, bottom: 300 }; return H.share(paths, 'sheet', { x: r.left, y: r.bottom + 4 }); }
+    if (k === 'mail') return H.share(paths, 'mail');
+    if (k === 'copy') return H.share(paths, 'copy');
+    if (k === 'path') return action('copyPath', paths);
+  };
+  home();
 }
 
 /* ---------- ver no Zeus (barra de espaço) ---------- */
@@ -548,7 +613,7 @@ async function newFolder() {
 }
 $('#newFolder').addEventListener('click', newFolder);
 function popMenu(anchorEl, entries) {
-  const pop = $('#pop');
+  const pop = $('#pop'); pop.className = 'pop';
   pop.innerHTML = entries.map(([n], k) => `<button type="button" data-k="${k}">${n}</button>`).join('');
   pop.hidden = false;
   const r = anchorEl ? anchorEl.getBoundingClientRect() : { left: 200, bottom: 200, top: 200 };

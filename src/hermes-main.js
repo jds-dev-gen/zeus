@@ -578,6 +578,7 @@ function setupHermes(x) {
   }
   h('copyFiles', paths => { const list = (Array.isArray(paths) ? paths : []).map(abs).filter(p => p && exists(p)); if (list.length) filesToClipboard(list); return list.length; });
   h('shareTargets', () => ({ sheet: isMac, wa: !!x.hasApp('wa'), mail: !!x.hasApp('mail') }));
+  h('waChats', q => x.waChats(str(q, 80)));
   h('share', async (paths, how, at) => {
     const list = (Array.isArray(paths) ? paths : []).map(abs).filter(p => p && exists(p)).slice(0, 100);
     if (!list.length) return false;
@@ -591,8 +592,10 @@ function setupHermes(x) {
     if (how === 'copy') { filesToClipboard(list); toast(list.length === 1 ? 'Ficheiro copiado: cola-o com ⌘V onde quiseres.' : `${list.length} ficheiros copiados: cola-os com ⌘V onde quiseres.`); return true; }
     if (how === 'wa' || how === 'mail') {
       // abre o WhatsApp ou uma mensagem nova do Gmail, dentro do Zeus, e anexa os ficheiros (como se fossem arrastados)
-      if (how === 'wa') toast('Abre a conversa no WhatsApp e confirma em baixo para quem vai.');
-      const ok = await x.attachFiles(how, list);
+      const chat = how === 'wa' && at && at.chat ? str(at.chat, 200) : '';
+      if (how === 'wa' && !chat) toast('Escolhe a conversa no WhatsApp e confirma em baixo para quem vai.');
+      const ok = await x.attachFiles(how, list, { chat });
+      if (ok && chat) toast(list.length === 1 ? `Ficheiro pronto a enviar para ${chat}: confirma no WhatsApp.` : `${list.length} ficheiros prontos a enviar para ${chat}: confirma no WhatsApp.`);
       if (!ok) { filesToClipboard(list); toast('Não consegui anexar sozinho: os ficheiros ficaram copiados — cola com ⌘V ou arrasta do Hermes.'); }
       else if (how === 'mail') toast(list.length === 1 ? 'Ficheiro anexado a uma mensagem nova no Gmail.' : `${list.length} ficheiros anexados a uma mensagem nova no Gmail.`);
       return ok;

@@ -1783,8 +1783,77 @@ async function attachToGmail(files) {
 
 // WhatsApp: a pessoa escolhe a conversa; um botão na própria página confirma para quem vai
 const waPending = { files: null, timer: null };
-async function attachToWhatsApp(files) {
+// conversas do WhatsApp (as que estão na lista da esquerda, ou as que a pesquisa do WhatsApp encontra)
+const WA_LIST_JS = q => `(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const q = ${JSON.stringify(q || '')};
+  const box = document.querySelector('#side div[contenteditable="true"], #side input[type="text"], div[contenteditable="true"][data-tab="3"]');
+  if (box) {
+    const cur = (box.value != null ? box.value : box.textContent) || '';
+    if (cur !== q) {
+      box.focus();
+      if (box.tagName === 'INPUT') { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(box, q); box.dispatchEvent(new Event('input', { bubbles: true })); }
+      else { document.execCommand('selectAll', false); if (q) document.execCommand('insertText', false, q); else document.execCommand('delete', false); }
+      await sleep(q ? 900 : 500);
+    }
+  }
+  const pane = document.querySelector('#pane-side'); if (!pane) return { error: document.querySelector('canvas, [data-ref]') ? 'login' : 'loading' };
+  const rows = [...pane.querySelectorAll('[role="listitem"], [role="row"]')];
+  const seen = new Set(), out = [];
+  for (const r of rows) {
+    const t = [...r.querySelectorAll('span[title]')];
+    const name = t[0] && t[0].getAttribute('title'); if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push({ name, last: (t[1] && t[1].getAttribute('title')) || '', group: !!r.querySelector('[data-icon*="group"], [data-icon="default-group"]') });
+    if (out.length >= 40) break;
+  }
+  return { chats: out };
+})()`;
+async function waChats(q) {
+  const a = appById('wa'); if (!a) return { error: 'noapp' };
+  const view = ensureAppView(a); if (!view) return { error: 'noapp' };
+  const wc = view.webContents;
+  for (let i = 0; i < 40 && wc.isLoading(); i++) await sleep(250);
+  const r = await wc.executeJavaScript(WA_LIST_JS(String(q || '').slice(0, 80)), true).catch(() => null);
+  return r || { error: 'loading' };
+}
+// abre a conversa escolhida (clica nela na lista do WhatsApp) e confirma pelo cabeçalho
+async function waOpenChat(wc, name) {
+  const js = `(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const name = ${JSON.stringify(name)};
+    const pane = document.querySelector('#pane-side'); if (!pane) return false;
+    const hit = [...pane.querySelectorAll('span[title]')].find(s => s.getAttribute('title') === name);
+    if (!hit) return false;
+    const row = hit.closest('[role="listitem"], [role="row"]') || hit;
+    const tgt = row.querySelector('[role="gridcell"], div[tabindex]') || row;
+    for (const type of ['mousedown', 'mouseup', 'click']) tgt.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, button: 0 }));
+    for (let i = 0; i < 30; i++) {
+      await sleep(150);
+      const h = document.querySelector('#main header');
+      if (h && [...h.querySelectorAll('span')].some(s => (s.getAttribute('title') || s.textContent || '').trim() === name)) {
+        window.__zeusPicked = true;
+        const m = document.querySelector('#main').getBoundingClientRect();
+        return { x: Math.round(m.left + m.width / 2), y: Math.round(m.top + m.height / 2) };
+      }
+    }
+    return false;
+  })()`;
+  return wc.executeJavaScript(js, true).catch(() => false);
+}
+async function attachToWhatsApp(files, chat) {
   showApp('wa');
+  if (chat) {
+    let wc = appWC('wa'); for (let i = 0; i < 20 && !wc; i++) { await sleep(300); wc = appWC('wa'); }
+    if (wc) {
+      for (let i = 0; i < 40 && wc.isLoading(); i++) await sleep(250);
+      await sleep(400);
+      let r = await waOpenChat(wc, chat);
+      if (!r) { await wc.executeJavaScript(WA_LIST_JS(chat), true).catch(() => null); r = await waOpenChat(wc, chat); }
+      if (r) { await sleep(500); await dropFilesAt(wc, files, r.x, r.y); return true; }
+    }
+    // não deu para abrir sozinho: a barra pede para escolher a conversa
+  }
   let wc = appWC('wa'); for (let i = 0; i < 20 && !wc; i++) { await sleep(300); wc = appWC('wa'); }
   if (!wc) return false;
   waPending.files = files;
@@ -1805,7 +1874,9 @@ async function attachToWhatsApp(files) {
       x.onclick = () => { window.__zeusAnexar = 'cancel'; };
       b.append(go, x); document.body.appendChild(b);
     }
-    const head = document.querySelector('#main header');
+    // só conta a conversa que a pessoa escolher agora (não a que já estava aberta)
+    if (!window.__zeusPickWired) { window.__zeusPickWired = true; window.__zeusPicked = false; document.addEventListener('mousedown', ev => { if (ev.target.closest && ev.target.closest('#pane-side, [role="listitem"], [role="row"]')) window.__zeusPicked = true; }, true); }
+    const head = window.__zeusPicked ? document.querySelector('#main header') : null;
     const who = head && (head.querySelector('span[title]') || head.querySelector('span[dir="auto"]'));
     const name = who ? (who.getAttribute('title') || who.textContent || '').trim() : '';
     document.getElementById('zeus-anexar-t').textContent = name ? 'Enviar ' + L + ' para' : 'Abre a conversa para onde queres enviar ' + L;
@@ -1834,9 +1905,9 @@ async function attachToWhatsApp(files) {
   }, 500);
   return true;
 }
-async function attachFilesToApp(how, files) {
+async function attachFilesToApp(how, files, opts) {
   try {
-    const ok = how === 'wa' ? await attachToWhatsApp(files) : await attachToGmail(files);
+    const ok = how === 'wa' ? await attachToWhatsApp(files, opts && opts.chat) : await attachToGmail(files);
     if (ok) return true;
   } catch (e) { console.error('anexar', e.message); }
   return false;
@@ -2464,7 +2535,8 @@ function setupIPC() {
     hasApp: id => appById(id),
     // abre o WhatsApp, ou uma mensagem nova no Gmail, dentro do Zeus
     // anexa os ficheiros no Gmail (mensagem nova) ou no WhatsApp (depois de escolher a conversa), dentro do Zeus
-    attachFiles: (how, files) => attachFilesToApp(how === 'wa' ? 'wa' : 'mail', files),
+    attachFiles: (how, files, opts) => attachFilesToApp(how === 'wa' ? 'wa' : 'mail', files, opts),
+    waChats: q => waChats(q),
     getWC: () => hermesWC, getUi: () => ui, getWin: () => win, getView: () => appViews.get('hermes'),
     openInOrfeu: paths => orfeuOpenPaths(paths),
     openInNotas: async p => {
