@@ -311,7 +311,8 @@ function setupHermes(x) {
         await run('/usr/bin/qlmanage', ['-t', '-s', String(size), '-o', tmp, p], { timeout: 20000 });
         const f = (await fsp.readdir(tmp)).find(n => n.endsWith('.png'));
         if (f) { await fsp.rename(path.join(tmp, f), out); return out; }
-      } else if (['image', 'video'].includes(kindOf(p)) && exists(ffBin())) {
+      }
+      if (['image', 'video'].includes(kindOf(p)) && exists(ffBin())) {
         await run(ffBin(), ['-y', '-v', 'error', ...(kindOf(p) === 'video' ? ['-ss', '1'] : []), '-i', p, '-frames:v', '1', '-vf', `scale=${size}:-2`, out], { timeout: 20000 });
         if (exists(out)) return out;
       }
@@ -319,6 +320,30 @@ function setupHermes(x) {
     return null;
   }
   h('thumb', async (p, size) => { p = abs(p); if (!p) return null; const t = await quickLook(p, Math.max(64, Math.min(1200, +size || 256))).catch(() => null); return t ? pathToFileURL(t).href : null; });
+  // miniatura + duração (vídeos e áudio), para a vista Miniaturas
+  const durs = new Map();
+  async function durationOf(p) {
+    const st = await fsp.stat(p); const key = p + '|' + st.mtimeMs;
+    if (durs.has(key)) return durs.get(key);
+    let d = 0;
+    try {
+      if (isMac) { const raw = await run('/usr/bin/mdls', ['-raw', '-name', 'kMDItemDurationSeconds', p], { timeout: 5000 }); d = parseFloat(raw) || 0; }
+      if (!d && exists(ffBin())) {
+        const err = await new Promise(res => execFile(ffBin(), ['-hide_banner', '-i', p], { timeout: 8000 }, (e, o, er) => res(String(er || ''))));
+        const m = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(err); if (m) d = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+      }
+    } catch (e) { /* sem duração */ }
+    if (durs.size > 3000) durs.clear();
+    durs.set(key, d); return d;
+  }
+  h('thumbInfo', async (p, size, wantDur) => {
+    p = abs(p); if (!p) return null;
+    const [t, dur] = await Promise.all([
+      size ? quickLook(p, Math.max(64, Math.min(1200, +size || 256))).catch(() => null) : null,
+      wantDur ? durationOf(p).catch(() => 0) : 0
+    ]);
+    return { url: t ? pathToFileURL(t).href : null, dur, src: kindOf(p) === 'video' ? pathToFileURL(p).href : '' };
+  });
   h('preview', async p => {
     p = abs(p); if (!p) return null;
     let st; try { st = await fsp.stat(p); } catch (e) { return { error: 'O ficheiro já não existe.' }; }

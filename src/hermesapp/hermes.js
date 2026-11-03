@@ -13,12 +13,14 @@ let back = [], fwd = [];
 let items = [], info = {};  // items da vista; info: { free, writable, error }
 let sel = new Set(), anchor = -1, focusI = -1;
 let mode = 'list';          // list | grid | space
+let zsize = 1;              // miniaturas: 0 pequenas, 1 médias, 2 grandes
 let sort = { key: 'name', dir: 1 };
 let sizes = {}, counts = {};
 let renaming = null;
 let clip = null;            // { paths, cut }
 let dragging = null;
 const TAGC = { Vermelho: '#ff453a', Laranja: '#ff9f0a', Amarelo: '#ffd60a', Verde: '#30d158', Azul: '#0a84ff', Roxo: '#bf5af2', Cinzento: '#8e8e93' };
+try { zsize = Math.max(0, Math.min(2, +(localStorage.getItem('hermes.zsize') ?? 1))); } catch (e) { /* ok */ }
 try { mode = localStorage.getItem('hermes.mode') || 'list'; const s = JSON.parse(localStorage.getItem('hermes.sort') || 'null'); if (s) sort = s; } catch (e) { /* ok */ }
 
 /* ---------- formatos ---------- */
@@ -169,6 +171,7 @@ function goUp() { if (loc.type !== 'dir') return; const up = dirOf(loc.path); if
 /* Mostrar: lista, ícones, espaço                                       */
 /* ================================================================== */
 function render() {
+  renderZsize(); stopHover();
   document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', (b.id === 'vList' && mode === 'list') || (b.id === 'vGrid' && mode === 'grid') || (b.id === 'vSpace' && mode === 'space')));
   const c = $('#content');
   if (info.error) { c.innerHTML = `<div class="none err">${esc(info.error)}</div>`; renderBulk(); renderStatus(); renderPreview(); return; }
@@ -192,32 +195,72 @@ function renderList() {
     items.slice(0, 3000).map((i, k) => {
       const nm = renaming === i.path ? `<input data-ren="${esc(i.path)}" value="${esc(i.name)}">` : `<span class="t">${esc(i.name)}</span>`;
       const row = `<div class="row ${w ? 'wide' : ''} ${w ? '' : sel.has(i.path) ? 'sel' : ''} ${clip && clip.cut && clip.paths.includes(i.path) ? 'cut' : ''}" data-i="${k}" ${i.dir ? `data-drop="${esc(i.path)}"` : ''} draggable="true">
-        <span class="n">${icon(i)}${nm}${tagDots(i)}</span>${w ? `<span class="sub" title="${esc(dirOf(i.path))}">${esc(pretty(dirOf(i.path)))}</span>` : ''}<span>${when(i.mtime)}</span><span class="num">${sizeCell(i)}</span>${w ? '' : `<span class="sub">${esc(typeName(i))}</span>`}</div>`;
+        <span class="n">${canThumb(i) ? `<span class="lt" data-thumb="${esc(i.path)}" data-ts="64">${icon(i)}</span>` : icon(i)}${nm}${tagDots(i)}</span>${w ? `<span class="sub" title="${esc(dirOf(i.path))}">${esc(pretty(dirOf(i.path)))}</span>` : ''}<span>${when(i.mtime)}</span><span class="num">${sizeCell(i)}</span>${w ? '' : `<span class="sub">${esc(typeName(i))}</span>`}</div>`;
       return w ? `<div class="rowwrap ${sel.has(i.path) ? 'sel' : ''}" data-wrap="${k}">${row}${i.snip ? `<div class="snip">${hl(i.snip, loc.q)}</div>` : ''}</div>` : row;
     }).join('');
+  observeThumbs();
   const inp = $('[data-ren]'); if (inp) { inp.focus(); const dot = inp.value.lastIndexOf('.'); inp.setSelectionRange(0, dot > 0 && !items.find(i => i.path === inp.dataset.ren).dir ? dot : inp.value.length); }
 }
 const hl = (t, q) => { let s = esc(t); for (const w of String(q || '').split(/\s+/).filter(x => x.length > 1)) s = s.replace(new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${m}</mark>`); return s; };
+const canThumb = i => !i.dir && (['image', 'video', 'pdf'].includes(i.kind) || ['docx', 'doc', 'pages', 'xlsx', 'pptx', 'key', 'numbers', 'rtf', 'txt', 'md'].includes(i.ext));
+const ZS = [{ w: 150, h: 96, q: 256 }, { w: 220, h: 138, q: 400 }, { w: 310, h: 196, q: 640 }];
+const fmtDur = s => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+const PLAY = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>';
 function renderGrid() {
-  $('#content').innerHTML = `<div class="grid">${items.slice(0, 2000).map((i, k) => `<div class="cell ${sel.has(i.path) ? 'sel' : ''}" data-i="${k}" ${i.dir ? `data-drop="${esc(i.path)}"` : ''} draggable="true">
-    <div class="im" data-thumb="${['image', 'video', 'pdf'].includes(i.kind) || ['docx', 'doc', 'pages', 'xlsx', 'pptx', 'key', 'numbers'].includes(i.ext) ? esc(i.path) : ''}">${icon(i, true)}</div>
-    <div class="nm">${renaming === i.path ? `<input data-ren="${esc(i.path)}" value="${esc(i.name)}">` : esc(i.name)}</div>${tagDots(i)}<small>${i.dir ? sizeCell(i) : bytes(i.size)}</small></div>`).join('')}</div>`;
+  const z = ZS[zsize];
+  $('#content').innerHTML = `<div class="grid" style="--cw:${z.w}px;--ih:${z.h}px">${items.slice(0, 2000).map((i, k) => {
+    const media = i.kind === 'video' || i.kind === 'audio';
+    return `<div class="cell ${sel.has(i.path) ? 'sel' : ''} ${clip && clip.cut && clip.paths.includes(i.path) ? 'cut' : ''}" data-i="${k}" ${i.dir ? `data-drop="${esc(i.path)}"` : ''} draggable="true" title="${esc(i.name)}">
+    <div class="im ${canThumb(i) ? 'th' : ''} k-${esc(i.kind || '')}" ${canThumb(i) || media ? `data-thumb="${esc(i.path)}" data-ts="${canThumb(i) ? z.q : 0}" ${media ? 'data-dur="1"' : ''}` : ''}>${icon(i, true)}${i.kind === 'video' ? `<i class="badge">${PLAY}<b></b></i>` : i.kind === 'audio' ? '<i class="badge"><b></b></i>' : ''}</div>
+    <div class="nm">${renaming === i.path ? `<input data-ren="${esc(i.path)}" value="${esc(i.name)}">` : esc(i.name)}</div>${tagDots(i)}<small>${i.dir ? sizeCell(i) : bytes(i.size)}${!i.dir && zsize > 0 ? ' · ' + when(i.mtime) : ''}</small></div>`;
+  }).join('')}</div>`;
   const inp = $('[data-ren]'); if (inp) { inp.focus(); inp.select(); }
   observeThumbs();
 }
-const thumbs = new Map();
+const thumbs = new Map();   // caminho|tamanho -> { url, dur, src }
 let io = null;
+function paintThumb(el, t) {
+  if (!t || !el.isConnected) return;
+  if (t.url) {
+    const old = el.querySelector('.ic'); if (old) old.remove();
+    if (!el.querySelector('img')) el.insertAdjacentHTML('afterbegin', (el.closest('.grid') && /k-(video|image)/.test(el.className) ? `<img class="bg" src="${esc(t.url)}" alt="" draggable="false">` : '') + `<img class="fg" src="${esc(t.url)}" alt="" draggable="false">`);
+    el.classList.add('has');
+  }
+  if (t.src) el.dataset.src = t.src;
+  if (t.dur) { const b = el.querySelector('.badge b'); if (b) b.textContent = fmtDur(t.dur); el.dataset.len = t.dur; }
+}
 function observeThumbs() {
   if (io) io.disconnect();
   io = new IntersectionObserver(ents => ents.forEach(async en => {
     if (!en.isIntersecting) return;
-    const el = en.target, p = el.dataset.thumb; io.unobserve(el);
-    let u = thumbs.get(p);
-    if (u === undefined) { u = await H.thumb(p, 256); thumbs.set(p, u); }
-    if (u && el.isConnected) el.innerHTML = `<img src="${esc(u)}" alt="" draggable="false">`;
-  }), { root: $('#content'), rootMargin: '200px' });
+    const el = en.target, p = el.dataset.thumb, sz = +el.dataset.ts || 0, wantDur = !!el.dataset.dur; io.unobserve(el);
+    const key = p + '|' + sz + '|' + (wantDur ? 1 : 0);
+    let t = thumbs.get(key);
+    if (t === undefined) { t = await H.thumbInfo(p, sz, wantDur).catch(() => null); thumbs.set(key, t); }
+    paintThumb(el, t);
+  }), { root: $('#content'), rootMargin: '300px' });
   document.querySelectorAll('[data-thumb]').forEach(el => { if (el.dataset.thumb) io.observe(el); });
 }
+// passar o rato por um vídeo (Miniaturas): mostra-o a andar, sem som
+let hoverT = null, hoverEl = null;
+function stopHover() { clearTimeout(hoverT); if (hoverEl) { const v = hoverEl.querySelector('video'); if (v) v.remove(); hoverEl.classList.remove('playing'); } hoverEl = null; }
+document.addEventListener('mouseover', e => {
+  const el = e.target.closest && e.target.closest('.grid .im.k-video');
+  if (el === hoverEl) return;
+  stopHover();
+  if (!el || !el.dataset.src) return;
+  hoverEl = el;
+  hoverT = setTimeout(() => {
+    if (hoverEl !== el) return;
+    const v = document.createElement('video');
+    v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'auto'; v.src = el.dataset.src;
+    const len = +el.dataset.len || 0;
+    v.addEventListener('loadedmetadata', () => { try { v.currentTime = len > 20 ? len * 0.15 : 0; } catch (x) { /* ok */ } v.play().catch(() => {}); }, { once: true });
+    v.addEventListener('playing', () => el.classList.add('playing'), { once: true });
+    el.appendChild(v);
+  }, 450);
+});
+document.addEventListener('mouseleave', stopHover);
 // espaço: o que ocupa mais nesta pasta
 function renderSpace() {
   const list = items.map(i => ({ i, s: i.dir ? sizes[i.path] : i.size })).sort((a, b) => (b.s == null ? -1 : b.s) - (a.s == null ? -1 : a.s));
@@ -430,7 +473,7 @@ document.addEventListener('keydown', e => {
   if (cmd && k.toLowerCase() === 'k') { e.preventDefault(); $('#q').focus(); $('#q').select(); return; }
   if (typing) return;
   if (!$('#modal').hidden) { if (k === 'Escape') closeModal(); return; }
-  const cols = mode === 'grid' ? Math.max(1, Math.floor(($('.grid') || C).clientWidth / 130)) : 1;
+  const cols = mode === 'grid' ? Math.max(1, Math.round(($('.grid') || C).clientWidth / ((($('.grid .cell') || {}).offsetWidth || 130) + 8))) : 1;
   if (k === 'ArrowDown' && cmd) { e.preventDefault(); const s = selected(); if (s.length === 1) openItem(s[0]); }
   else if (k === 'ArrowUp' && cmd) { e.preventDefault(); goUp(); }
   else if (k === 'ArrowDown' || (mode === 'grid' && k === 'ArrowRight')) { e.preventDefault(); selectIndex(Math.min(items.length - 1, (focusI < 0 ? -1 : focusI) + (k === 'ArrowDown' ? cols : 1)), e.shiftKey ? { shiftKey: true } : null); }
@@ -604,6 +647,8 @@ async function loadSnippets() {
 }
 
 /* ---------- vistas e mensagens ---------- */
+function renderZsize() { const z = $('#zsize'); z.hidden = mode !== 'grid'; $('#zsizeR').value = zsize; }
+$('#zsizeR').addEventListener('input', e => { zsize = +e.target.value; try { localStorage.setItem('hermes.zsize', zsize); } catch (x) { /* ok */ } render(); });
 function setMode(m) {
   if (m === 'space' && loc.type !== 'dir') return flash('O espaço ocupado vê-se numa pasta.');
   mode = m; try { localStorage.setItem('hermes.mode', m === 'space' ? 'list' : m); } catch (e) { /* ok */ }
