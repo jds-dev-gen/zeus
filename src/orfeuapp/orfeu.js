@@ -365,6 +365,7 @@ $('#cClose').addEventListener('click', () => { $('#clip').hidden = true; clipIn 
 $('#cSave').addEventListener('click', async () => { if (!cur) return; media.pause(); const r = await O.exportClip(cur.id, clipIn, clipOut, $('#cAudio').checked); if (r && r.error) msg(r.error); });
 $('#aAudio').addEventListener('click', async () => { if (!cur) return; const r = await O.exportAudio(cur.id); if (r && r.error) msg(r.error); });
 $('#aReveal').addEventListener('click', () => { if (cur) O.reveal(cur.id); });
+$('#aEco').addEventListener('click', () => { if (cur) { if (!media.paused) media.pause(); O.editInEco(cur.id); } });
 $('#aMarks').addEventListener('click', async () => {
   if (!cur) return;
   const r = await O.marksToNote(cur.id);

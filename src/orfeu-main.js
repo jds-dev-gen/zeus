@@ -120,6 +120,7 @@ function setupOrfeu(x) {
     save(); return it.marks;
   });
   h('reveal', id => { const it = D.items[str(id, 40)]; if (it) shell.showItemInFolder(it.path); });
+  h('editInEco', id => { const it = D.items[str(id, 40)]; if (it && x.editInEco) x.editInEco(it.path); return !!it; });
 
   /* ---------- pastas do Mac ---------- */
   async function listMedia(dir, depth) {

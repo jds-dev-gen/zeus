@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-PT" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src data:; media-src file:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Eco</title>
+<link rel="stylesheet" href="eco.css">
+</head>
+<body>
+<header class="head">
+  <div class="brand"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 9v6M7.5 6.5v11M11 9.5v5"/><path d="M14.5 8.2a5 5 0 0 1 0 7.6M17.3 5.6a8.6 8.6 0 0 1 0 12.8"/></svg><h1>Eco</h1></div>
+  <div class="proj"><input id="pName" spellcheck="false" aria-label="Nome do projeto" placeholder="Projeto sem nome"><small id="pInfo"></small></div>
+  <span class="spacer"></span>
+  <span class="busy" id="busy" hidden></span>
+  <button class="ib" type="button" id="undoBtn" title="Desfazer (⌘Z)" aria-label="Desfazer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+  <button class="ib" type="button" id="redoBtn" title="Refazer (⇧⌘Z)" aria-label="Refazer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
+  <button class="btn" type="button" id="orfeuBtn" title="Ouvir o último ficheiro exportado no Orfeu" disabled>Abrir no Orfeu</button>
+  <button class="btn primary" type="button" id="exportBtn">Exportar…</button>
+</header>
+<div class="stage">
+  <aside class="side">
+    <div class="lbl">Neste projeto</div>
+    <div id="srcs"></div>
+    <button class="add" type="button" id="addSrc">Juntar áudio… <small>ou arrasta do Hermes ou do Finder</small></button>
+    <div class="lbl" style="margin-top:14px">Projetos</div>
+    <div id="projs"></div>
+    <button class="pj newp" type="button" id="newProj">+ Projeto novo</button>
+  </aside>
+  <section class="center">
+    <div class="tools" id="tools">
+      <button class="t" type="button" data-op="cut" title="Cortar a seleção (⌘X) — o resto junta-se"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></svg>Cortar</button>
+      <button class="t" type="button" data-op="copy" title="Copiar a seleção (⌘C)">Copiar</button>
+      <button class="t" type="button" data-op="paste" title="Colar na agulha (⌘V)">Colar</button>
+      <button class="t" type="button" data-op="del" title="Apagar a seleção (⌫) — o resto junta-se">Apagar</button>
+      <button class="t" type="button" data-op="silence" title="Pôr a seleção em silêncio, sem mexer no resto">Silêncio</button>
+      <span class="vsep"></span>
+      <button class="t" type="button" data-op="fadein" title="O som entra aos poucos na seleção"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 20 21 4"/></svg>Fade in</button>
+      <button class="t" type="button" data-op="fadeout" title="O som sai aos poucos na seleção"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 4l18 16"/></svg>Fade out</button>
+      <button class="t" type="button" data-op="volume" title="Mudar o volume da seleção">Volume ▾</button>
+      <span class="vsep"></span>
+      <button class="t magic" type="button" data-op="pauses" title="Encurta as pausas longas da voz"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg>Tirar pausas</button>
+      <button class="t magic" type="button" data-op="denoise" title="Reduz o ruído de fundo da voz (na exportação)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg>Limpar ruído</button>
+    </div>
+    <div class="tl" id="tl">
+      <div class="ruler-row"><div class="th-sp"></div><canvas class="ruler" id="ruler"></canvas></div>
+      <div class="lanes" id="lanes"></div>
+      <div class="ov-row"><div class="th-sp"></div><div class="overview" id="overview"><canvas id="ovc"></canvas><div class="ovw" id="ovw"></div></div></div>
+      <div class="playhead" id="ph"><i></i></div>
+      <div class="drop" id="drop" hidden>Larga para juntar ao projeto</div>
+    </div>
+    <div class="transport">
+      <button class="cb" type="button" id="back10" title="Recuar 10 s (⇧←)">−10</button>
+      <button class="play" type="button" id="playBtn" title="Tocar / pausar (espaço)"></button>
+      <button class="cb" type="button" id="fwd10" title="Avançar 10 s (⇧→)">+10</button>
+      <div class="tc"><span id="tNow">0:00,0</span><small id="tTot">/ 0:00</small></div>
+      <span class="selinfo" id="selInfo" hidden></span>
+      <span class="spacer"></span>
+      <label class="zoom">Zoom <input type="range" id="zoomR" min="0" max="1000" value="300" aria-label="Zoom"></label>
+    </div>
+  </section>
+  <aside class="right">
+    <div class="card">
+      <h3>Limpeza da voz</h3>
+      <label class="opt">Reduzir ruído de fundo <input type="checkbox" class="sw" id="sDenoise"></label>
+      <div class="sl"><span>Suave</span><input type="range" id="sDenoiseAmt" min="0" max="100" value="50" aria-label="Força da limpeza"><span>Forte</span></div>
+      <button class="btn small" type="button" id="hearBtn" title="Ouve 10 segundos a partir da agulha, com a limpeza e o volume final">Ouvir 10 s com os efeitos</button>
+      <div class="opt">Tirar pausas maiores que <select id="sPauses"><option value="0.8">0,8 s</option><option value="1">1 s</option><option value="1.5">1,5 s</option><option value="2">2 s</option><option value="3">3 s</option></select></div>
+      <div class="opt">Igualar o volume <select id="sLoud"><option value="podcast">Podcast</option><option value="radio">Rádio</option><option value="off">Não mexer</option></select></div>
+      <div class="note" id="loudNote"></div>
+    </div>
+    <div class="card">
+      <h3>Pistas</h3>
+      <div class="sl"><span class="tn">Voz</span><input type="range" data-tg="voz" min="0" max="150" aria-label="Volume da voz"><b data-tgv="voz"></b></div>
+      <div class="sl"><span class="tn">Música</span><input type="range" data-tg="musica" min="0" max="150" aria-label="Volume da música"><b data-tgv="musica"></b></div>
+      <label class="opt">Música baixa quando há voz <input type="checkbox" class="sw" id="sDuck"></label>
+      <div class="sl"><span class="tn">Efeitos</span><input type="range" data-tg="efeitos" min="0" max="150" aria-label="Volume dos efeitos"><b data-tgv="efeitos"></b></div>
+    </div>
+    <div class="card hist-card">
+      <h3>Histórico</h3>
+      <div class="hist" id="hist"></div>
+      <div class="note">Clicar num passo volta a esse ponto. Nada mexe nos ficheiros originais.</div>
+    </div>
+  </aside>
+</div>
+<div class="empty" id="empty" hidden>
+  <div class="ebox">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M4 9v6M7.5 6.5v11M11 9.5v5"/><path d="M14.5 8.2a5 5 0 0 1 0 7.6M17.3 5.6a8.6 8.6 0 0 1 0 12.8"/></svg>
+    <h2>Editar áudio</h2>
+    <p>Arrasta uma entrevista, um episódio ou uma gravação para aqui — ou escolhe um ficheiro. O original nunca é alterado.</p>
+    <button class="btn primary" type="button" id="emptyOpen">Escolher um ficheiro…</button>
+  </div>
+</div>
+<div class="pop" id="pop" hidden></div>
+<div class="modal" id="modal" hidden><div class="mbox" id="mbox"></div></div>
+<audio id="hear" hidden></audio>
+<script src="eco.js"></script>
+</body>
+</html>
