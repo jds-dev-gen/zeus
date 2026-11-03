@@ -236,7 +236,7 @@ function observeThumbs() {
     const el = en.target, p = el.dataset.thumb, sz = +el.dataset.ts || 0, wantDur = !!el.dataset.dur; io.unobserve(el);
     const key = p + '|' + sz + '|' + (wantDur ? 1 : 0);
     let t = thumbs.get(key);
-    if (t === undefined) { t = await H.thumbInfo(p, sz, wantDur).catch(() => null); thumbs.set(key, t); }
+    if (t === undefined) { t = await H.thumbInfo(p, sz, wantDur).catch(() => null); if (t && (t.url || !sz)) thumbs.set(key, t); }   // falhas não ficam guardadas: tenta de novo da próxima vez
     paintThumb(el, t);
   }), { root: $('#content'), rootMargin: '300px' });
   document.querySelectorAll('[data-thumb]').forEach(el => { if (el.dataset.thumb) io.observe(el); });

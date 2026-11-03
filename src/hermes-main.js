@@ -307,6 +307,21 @@ function setupHermes(x) {
     const tmp = path.join(UD, 'mini', 'ql-' + process.pid + '-' + Date.now());
     await fsp.mkdir(tmp, { recursive: true });
     try {
+      // imagens: lidas diretamente (o QuickLook às vezes não devolve miniatura de PNG); se falhar, sips no Mac
+      if (kindOf(p) === 'image') {
+        try {
+          let img = nativeImage.createFromPath(p);
+          if (img && !img.isEmpty()) {
+            const sz = img.getSize();
+            if (Math.max(sz.width, sz.height) > size) img = img.resize(sz.width >= sz.height ? { width: size, quality: 'good' } : { height: size, quality: 'good' });
+            await fsp.writeFile(out, img.toPNG());
+            if (exists(out)) return out;
+          }
+        } catch (e) { /* segue para o QuickLook */ }
+        if (isMac) {
+          try { await run('/usr/bin/sips', ['-Z', String(size), '-s', 'format', 'png', p, '--out', out], { timeout: 20000 }); if (exists(out)) return out; } catch (e) { /* segue */ }
+        }
+      }
       if (isMac) {
         await run('/usr/bin/qlmanage', ['-t', '-s', String(size), '-o', tmp, p], { timeout: 20000 });
         const f = (await fsp.readdir(tmp)).find(n => n.endsWith('.png'));
