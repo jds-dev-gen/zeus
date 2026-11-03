@@ -590,11 +590,12 @@ function setupHermes(x) {
     }
     if (how === 'copy') { filesToClipboard(list); toast(list.length === 1 ? 'Ficheiro copiado: cola-o com ⌘V onde quiseres.' : `${list.length} ficheiros copiados: cola-os com ⌘V onde quiseres.`); return true; }
     if (how === 'wa' || how === 'mail') {
-      // copia os ficheiros e abre o WhatsApp ou uma mensagem nova do Gmail, dentro do Zeus; falta só colar (⌘V)
-      filesToClipboard(list);
-      x.openAppFor(how);
-      toast(how === 'wa' ? 'Escolhe a conversa no WhatsApp e cola com ⌘V (ou arrasta do Hermes).' : 'Mensagem nova aberta no Gmail: cola com ⌘V para anexar (ou arrasta do Hermes).');
-      return true;
+      // abre o WhatsApp ou uma mensagem nova do Gmail, dentro do Zeus, e anexa os ficheiros (como se fossem arrastados)
+      if (how === 'wa') toast('Abre a conversa no WhatsApp e confirma em baixo para quem vai.');
+      const ok = await x.attachFiles(how, list);
+      if (!ok) { filesToClipboard(list); toast('Não consegui anexar sozinho: os ficheiros ficaram copiados — cola com ⌘V ou arrasta do Hermes.'); }
+      else if (how === 'mail') toast(list.length === 1 ? 'Ficheiro anexado a uma mensagem nova no Gmail.' : `${list.length} ficheiros anexados a uma mensagem nova no Gmail.`);
+      return ok;
     }
     return false;
   });

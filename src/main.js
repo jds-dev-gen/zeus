@@ -1707,6 +1707,126 @@ function openApp(id) {
   pushState(true);
 }
 // abre uma app da barra (sem a fechar se já estiver aberta)
+/* ------------------------------------------------------------------ */
+/* Anexar ficheiros do Hermes ao Gmail ou ao WhatsApp dentro do Zeus    */
+/* Larga os ficheiros na página como se fossem arrastados do Finder     */
+/* (Input.dispatchDragEvent do Chromium: ficheiros verdadeiros).        */
+/* ------------------------------------------------------------------ */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function cdp(wc, fn) {
+  const d = wc.debugger; let mine = false;
+  if (!d.isAttached()) { d.attach('1.3'); mine = true; }
+  try { return await fn((m, p) => d.sendCommand(m, p || {})); } finally { if (mine) { try { d.detach(); } catch (e) { /* ok */ } } }
+}
+async function dropFilesAt(wc, files, x, y) {
+  const data = { items: [], files, dragOperationsMask: 1 };
+  await cdp(wc, async send => {
+    await send('Input.dispatchDragEvent', { type: 'dragEnter', x, y, data });
+    await sleep(120);
+    await send('Input.dispatchDragEvent', { type: 'dragOver', x, y, data });
+    await sleep(250);
+    await send('Input.dispatchDragEvent', { type: 'dragOver', x: x + 1, y: y + 1, data });
+    await sleep(250);
+    await send('Input.dispatchDragEvent', { type: 'drop', x: x + 1, y: y + 1, data });
+  });
+}
+// espera que a página tenha o elemento (devolve o centro dele)
+async function waitRect(wc, js, ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (wc.isDestroyed()) return null;
+    if (!wc.isLoading()) { const r = await wc.executeJavaScript(js, true).catch(() => null); if (r) return r; }
+    await sleep(400);
+  }
+  return null;
+}
+const appWC = id => { const v = appViews.get(id); return v && !v.webContents.isDestroyed() ? v.webContents : null; };
+const nameList = files => files.length === 1 ? path.basename(files[0]) : `${files.length} ficheiros`;
+
+// Gmail: abre uma mensagem nova e anexa
+async function attachToGmail(files) {
+  showApp('mail');
+  let wc = appWC('mail'); for (let i = 0; i < 20 && !wc; i++) { await sleep(300); wc = appWC('mail'); }
+  if (!wc) return false;
+  const u = wc.getURL();
+  const GM = process.env.ZEUS_TEST_GMAIL || 'https://mail.google.com/mail/u/0/#inbox?compose=new';
+  if (/mail\.google\.com/.test(u) || (process.env.ZEUS_TEST_GMAIL && u.startsWith(GM.split('#')[0]))) await wc.executeJavaScript("location.hash = (location.hash.split('?')[0] || '#inbox') + '?compose=new'").catch(() => {});
+  else await wc.loadURL(GM).catch(() => {});
+  // o corpo da mensagem nova (a última janela de escrita aberta)
+  const r = await waitRect(wc, `(() => {
+    const els = [...document.querySelectorAll('div[contenteditable="true"][role="textbox"], div.Am.editable')].filter(e => e.offsetParent);
+    const el = els[els.length - 1]; if (!el) return null;
+    const b = (el.closest('[role="dialog"]') || el).getBoundingClientRect();
+    if (b.width < 50) return null;
+    return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) };
+  })()`, 25000);
+  if (!r) return false;
+  await sleep(600);
+  await dropFilesAt(wc, files, r.x, r.y);
+  return true;
+}
+
+// WhatsApp: a pessoa escolhe a conversa; um botão na própria página confirma para quem vai
+const waPending = { files: null, timer: null };
+async function attachToWhatsApp(files) {
+  showApp('wa');
+  let wc = appWC('wa'); for (let i = 0; i < 20 && !wc; i++) { await sleep(300); wc = appWC('wa'); }
+  if (!wc) return false;
+  waPending.files = files;
+  clearInterval(waPending.timer);
+  const label = nameList(files);
+  const bar = `(() => {
+    const L = ${JSON.stringify(label)};
+    let b = document.getElementById('zeus-anexar');
+    if (!b) {
+      b = document.createElement('div'); b.id = 'zeus-anexar';
+      Object.assign(b.style, { position: 'fixed', left: '50%', bottom: '22px', transform: 'translateX(-50%)', zIndex: 2147483647, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px 10px 16px', borderRadius: '14px', background: '#111b21', color: '#fff', font: '500 14px -apple-system, system-ui, sans-serif', boxShadow: '0 10px 30px rgba(0,0,0,.35)' });
+      const t = document.createElement('span'); t.id = 'zeus-anexar-t'; b.appendChild(t);
+      const go = document.createElement('button'); go.id = 'zeus-anexar-go';
+      Object.assign(go.style, { border: '0', borderRadius: '10px', padding: '8px 14px', background: '#25d366', color: '#0b141a', font: '600 14px -apple-system, system-ui, sans-serif', cursor: 'pointer' });
+      go.onclick = () => { window.__zeusAnexar = 'go'; };
+      const x = document.createElement('button'); x.textContent = '✕'; x.title = 'Cancelar';
+      Object.assign(x.style, { border: '0', background: 'transparent', color: '#aebac1', font: '16px system-ui', cursor: 'pointer', padding: '4px 6px' });
+      x.onclick = () => { window.__zeusAnexar = 'cancel'; };
+      b.append(go, x); document.body.appendChild(b);
+    }
+    const head = document.querySelector('#main header');
+    const who = head && (head.querySelector('span[title]') || head.querySelector('span[dir="auto"]'));
+    const name = who ? (who.getAttribute('title') || who.textContent || '').trim() : '';
+    document.getElementById('zeus-anexar-t').textContent = name ? 'Enviar ' + L + ' para' : 'Abre a conversa para onde queres enviar ' + L;
+    const go = document.getElementById('zeus-anexar-go');
+    go.textContent = name ? name.slice(0, 40) + ' →' : 'Escolhe a conversa';
+    go.disabled = !name; go.style.opacity = name ? '1' : '.45'; go.style.cursor = name ? 'pointer' : 'default';
+    const s = window.__zeusAnexar || ''; window.__zeusAnexar = '';
+    if (s === 'go' && name) { const m = document.querySelector('#main').getBoundingClientRect(); return { go: true, x: Math.round(m.left + m.width / 2), y: Math.round(m.top + m.height / 2) }; }
+    return { cancel: s === 'cancel' };
+  })()`;
+  const remove = () => { clearInterval(waPending.timer); waPending.timer = null; waPending.files = null; if (!wc.isDestroyed()) wc.executeJavaScript("(() => { const b = document.getElementById('zeus-anexar'); if (b) b.remove(); })()").catch(() => {}); };
+  let busy = false; const started = Date.now();
+  waPending.timer = setInterval(async () => {
+    if (busy) return;
+    if (wc.isDestroyed() || Date.now() - started > 10 * 60000) return remove();
+    if (wc.isLoading()) return;
+    busy = true;
+    try {
+      const r = await wc.executeJavaScript(bar, true).catch(() => null);
+      if (r && r.cancel) remove();
+      else if (r && r.go && waPending.files) {
+        const f = waPending.files; remove();
+        await dropFilesAt(wc, f, r.x, r.y);
+      }
+    } finally { busy = false; }
+  }, 500);
+  return true;
+}
+async function attachFilesToApp(how, files) {
+  try {
+    const ok = how === 'wa' ? await attachToWhatsApp(files) : await attachToGmail(files);
+    if (ok) return true;
+  } catch (e) { console.error('anexar', e.message); }
+  return false;
+}
+
 function showApp(id) { if (fullApp === id || openPanel === id) { const v = appViews.get(id); if (v) v.webContents.focus(); return; } openApp(id); }
 /* Ficheiros de áudio e vídeo abertos no Finder ("Abrir com › Zeus") ou arrastados para o ícone: vão para o Orfeu */
 const pendingMedia = [];
@@ -2327,12 +2447,8 @@ function setupIPC() {
     app, ipcMain, dialog, shell, Menu, BrowserWindow, nativeImage, clipboard, ShareMenu: isMac ? ShareMenu : null,
     hasApp: id => appById(id),
     // abre o WhatsApp, ou uma mensagem nova no Gmail, dentro do Zeus
-    openAppFor: how => {
-      const id = how === 'wa' ? 'wa' : 'mail';
-      const a = appById(id); if (!a) return;
-      showApp(id);
-      if (id === 'mail') { const v = appViews.get('mail'); if (v && !v.webContents.isDestroyed()) { const u = v.webContents.getURL(); if (/mail\.google\.com/.test(u)) v.webContents.executeJavaScript("location.hash = (location.hash.split('?')[0] || '#inbox') + '?compose=new'").catch(() => {}); else v.webContents.loadURL('https://mail.google.com/mail/u/0/#inbox?compose=new').catch(() => {}); } }
-    },
+    // anexa os ficheiros no Gmail (mensagem nova) ou no WhatsApp (depois de escolher a conversa), dentro do Zeus
+    attachFiles: (how, files) => attachFilesToApp(how === 'wa' ? 'wa' : 'mail', files),
     getWC: () => hermesWC, getUi: () => ui, getWin: () => win, getView: () => appViews.get('hermes'),
     openInOrfeu: paths => orfeuOpenPaths(paths),
     openInNotas: async p => {
