@@ -435,7 +435,8 @@ document.addEventListener('keydown', e => {
   else if (k === 'j' || k === 'J') skip(-10);
   else if (k === 'l' || k === 'L') skip(10);
   else if (k === 'k' || k === 'K') toggle();
-  else if (k === 'm' || k === 'M') { if (cur) { e.preventDefault(); $('#mText').focus(); } }
+  else if (k === 'M' && e.shiftKey) { e.preventDefault(); setMarks(!marksOpen); }
+  else if (k === 'm' || k === 'M') { if (cur) { e.preventDefault(); if (!marksOpen) setMarks(true); setTimeout(() => $('#mText').focus(), marksOpen ? 0 : 230); } }
   else if (k === 'i' || k === 'I') { if (cur) { openClip(); $('#setIn').click(); } }
   else if (k === 'o' || k === 'O') { if (cur) { openClip(); $('#setOut').click(); } }
   else if (k === '[' || k === ']') { const i = SPEEDS.indexOf(speed); setSpeed(SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, (i < 0 ? 2 : i) + (k === ']' ? 1 : -1)))]); msg('Velocidade ' + String(speed).replace('.', ',') + '×'); }
@@ -456,3 +457,22 @@ $('#emptyFolder').addEventListener('click', () => $('#addFolder').click());
   showPlayer();
   renderPlayBtn();
 })();
+
+/* ---------- mostrar / esconder as marcas (a onda fica mais larga) ---------- */
+let marksOpen = true;
+try { marksOpen = localStorage.getItem('orfeu.marks') !== '0'; } catch (e) { /* ok */ }
+function setMarks(open) {
+  marksOpen = !!open;
+  $('#player .main').classList.toggle('nomarks', !marksOpen);
+  $('#marksBtn').classList.toggle('on', marksOpen);
+  $('#marksBtn').setAttribute('aria-pressed', marksOpen);
+  try { localStorage.setItem('orfeu.marks', marksOpen ? '1' : '0'); } catch (e) { /* ok */ }
+  // a onda e o vídeo acompanham a mudança de largura
+  const t0 = performance.now();
+  const tick = () => { drawWave(); fitVideo(); if (performance.now() - t0 < 280) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+}
+$('#marksBtn').addEventListener('click', () => setMarks(!marksOpen));
+$('#marksHide').addEventListener('click', () => setMarks(false));
+setMarks(marksOpen);
+$('#actrow').addEventListener('click', e => { const b = e.target.closest('[data-proxy]'); if (b) $('#' + b.dataset.proxy).click(); });

@@ -42,7 +42,15 @@
           <button class="btn small vonly" type="button" id="subsBtn" title="Juntar legendas (.srt ou .vtt)">Legendas</button>
           <button class="btn small vonly" type="button" id="pipBtn" title="Vídeo a flutuar por cima das outras janelas">Flutuar ⧉</button>
           <button class="btn small vonly" type="button" id="fsBtn" title="Ecrã inteiro (F)">⤢</button>
+          <button class="btn small" type="button" id="marksBtn" title="Mostrar ou esconder as marcas (⇧M)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/></svg><span id="marksBtnT">Marcas</span></button>
           <span class="vol"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9a4 4 0 0 1 0 6"/></svg><input type="range" id="vol" min="0" max="1" step="0.02" value="1" aria-label="Volume"></span>
+        </div>
+        <div class="actrow" id="actrow">
+          <button class="btn small" type="button" data-proxy="aTrans">Transcrever para uma nota</button>
+          <button class="btn small" type="button" data-proxy="aMarks">Marcas para as Notas</button>
+          <button class="btn small" type="button" data-proxy="aClip">Cortar um excerto</button>
+          <button class="btn small vonly" type="button" data-proxy="aAudio">Só o áudio</button>
+          <button class="btn small" type="button" data-proxy="aReveal">Mostrar no Finder</button>
         </div>
         <div class="clip" id="clip" hidden>
           <b>Excerto</b>
@@ -56,7 +64,7 @@
         </div>
       </div>
       <aside class="marks" id="marks">
-        <h3>Marcas <span>tecla M</span></h3>
+        <h3>Marcas <span>tecla M</span><button class="icon mhide" type="button" id="marksHide" title="Esconder as marcas (⇧M) — a onda fica mais larga">›</button></h3>
         <div class="mlist" id="mlist"></div>
         <form class="madd" id="madd"><code id="mAt">00:00</code><input id="mText" placeholder="Marcar este momento…" autocomplete="off"></form>
         <div class="actions">
