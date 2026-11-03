@@ -134,13 +134,14 @@ $('#q').addEventListener('keydown', e => { if (e.key === 'Escape') { e.target.va
 /* ================================================================== */
 /* Tocar                                                                */
 /* ================================================================== */
-let saveT = null, lastSaved = 0, wantPlay = true;
+let saveT = null, lastSaved = 0, wantPlay = false;
 async function play(id, opts = {}) {
   savePos();
   const it = await O.item(id); if (!it) return;
   if (!it.exists) { cur = it; showPlayer(); $('#prep').hidden = false; $('#prep').innerHTML = `<div><b>O ficheiro já não está aqui</b>${esc(it.path)}<br>Foi mudado de sítio ou apagado.</div>`; return; }
   cur = it; peaks = null; clipIn = clipOut = null; $('#clip').hidden = true; editingMark = -1;
-  wantPlay = opts.autoplay !== false;
+  // só começa a tocar quando se carrega em play (a fila, depois de começada, continua sozinha)
+  wantPlay = opts.autoplay === true;
   O.touch(id);
   showPlayer();
   renderList();
@@ -194,7 +195,7 @@ media.addEventListener('ended', async () => {
   renderPlayBtn();
   await load();
   const next = LIB.queue[0];
-  if (next) { await O.setQueue(LIB.queue.slice(1)); await load(); play(next); }
+  if (next) { await O.setQueue(LIB.queue.slice(1)); await load(); play(next, { autoplay: true }); }
 });
 function savePos() { if (!cur || !media.src || !isFinite(media.currentTime) || media.currentTime < 1) return; lastSaved = Date.now(); cur.pos = media.currentTime; O.setPos(cur.id, media.currentTime, media.ended ? true : (media.currentTime > (media.duration || 1e9) - 5 ? true : false)); }
 window.addEventListener('beforeunload', savePos);
@@ -250,7 +251,7 @@ if ('mediaSession' in navigator) {
   navigator.mediaSession.setActionHandler('pause', () => media.pause());
   navigator.mediaSession.setActionHandler('seekbackward', () => skip(-10));
   navigator.mediaSession.setActionHandler('seekforward', () => skip(10));
-  navigator.mediaSession.setActionHandler('nexttrack', () => { const n = LIB.queue[0]; if (n) { O.setQueue(LIB.queue.slice(1)).then(load); play(n); } });
+  navigator.mediaSession.setActionHandler('nexttrack', () => { const n = LIB.queue[0]; if (n) { O.setQueue(LIB.queue.slice(1)).then(load); play(n, { autoplay: true }); } });
 }
 
 /* ---------- legendas ---------- */
@@ -330,7 +331,7 @@ async function saveMarks() { if (!cur) return; cur.marks = await O.setMarks(cur.
 $('#mlist').addEventListener('click', e => {
   const del = e.target.closest('[data-mdel]'); if (del) { cur.marks.splice(+del.dataset.mdel, 1); return saveMarks(); }
   const ren = e.target.closest('[data-mren]'); if (ren) { editingMark = +ren.dataset.mren; return renderMarks(); }
-  const m = e.target.closest('[data-mi]'); if (m && media.src) { media.currentTime = cur.marks[+m.dataset.mi].t; if (media.paused) media.play().catch(() => {}); }
+  const m = e.target.closest('[data-mi]'); if (m && media.src) { media.currentTime = cur.marks[+m.dataset.mi].t; }
 });
 $('#mlist').addEventListener('keydown', e => {
   const i = e.target.dataset.medit; if (i == null) return;
