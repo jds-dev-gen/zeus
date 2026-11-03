@@ -325,13 +325,16 @@ C.addEventListener('mousedown', e => {
   const hd = e.target.closest('[data-sort]');
   if (hd) { const k = hd.dataset.sort; sort = { key: k, dir: sort.key === k ? -sort.dir : (k === 'mtime' || k === 'size' ? -1 : 1), user: true }; saveSort(); applySort(); render(); return; }
   const k = idxOf(e.target);
+  // duplo clique contado à mão: o primeiro clique redesenha a lista e o "dblclick" do sistema perdia-se
+  if (e.button === 0 && e.detail >= 2 && k >= 0 && lastDown.k === k && Date.now() - lastDown.t < 700 && !e.metaKey && !e.shiftKey) { lastDown = { k: -1, t: 0 }; openItem(items[k]); return; }
+  if (e.button === 0) lastDown = { k, t: Date.now() };
   if (k < 0) { if (e.button === 0) { sel.clear(); anchor = -1; render(); } return; }
   if (e.button === 2 && sel.has(items[k].path)) return;   // clique direito numa seleção: mantém-na
   if (e.button === 0 && sel.has(items[k].path) && !e.metaKey && !e.shiftKey && sel.size > 1) return;   // pode ser o início de arrastar vários
   selectIndex(k, e);
 });
 C.addEventListener('click', e => { const k = idxOf(e.target); if (k >= 0 && sel.size > 1 && !e.metaKey && !e.shiftKey && sel.has(items[k].path) && !dragging) selectIndex(k); });
-C.addEventListener('dblclick', e => { const k = idxOf(e.target); if (k >= 0 && !e.target.closest('[data-ren]')) openItem(items[k]); });
+let lastDown = { k: -1, t: 0 };
 C.addEventListener('contextmenu', e => { e.preventDefault(); const k = idxOf(e.target); H.menu(k >= 0 ? selected().map(i => i.path) : [], { x: e.clientX, y: e.clientY }); });
 function openItem(i) {
   if (i.dir) { go({ type: 'dir', path: i.path }); return; }
