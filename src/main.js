@@ -11,6 +11,7 @@ const {
 const { setupNotas } = require('./notas-main');
 const { setupOrfeu, isMedia: isOrfeuMedia } = require('./orfeu-main');
 const { setupHermes } = require('./hermes-main');
+const { setupVideoDL } = require('./video-dl');
 const path = require('path');
 const { execFile } = require('child_process');
 const fs = require('fs');
@@ -264,7 +265,7 @@ function loadState() {
     S.closed = [...S.tabs.filter(t => t.url !== NEWTAB).map(t => ({ url: t.url, title: t.title, space: t.space, favicon: t.favicon })), ...(S.closed || [])].slice(0, 15);
     S.tabs = [];
   }
-  S.tabs.forEach(t => { t.id = nextId++; delete t.loading; delete t.error; delete t.audible; delete t.media; });
+  S.tabs.forEach(t => { t.id = nextId++; delete t.loading; delete t.error; delete t.audible; delete t.media; delete t.hasVideo; });
   const curIdx = typeof S.currentIndex === 'number' ? S.currentIndex : 0;
   if (!S.tabs.length) S.tabs.push({ id: nextId++, url: NEWTAB, title: 'Página nova', space: S.spaces[0].id });
   S.currentId = (S.tabs[curIdx] || S.tabs[0]).id;
@@ -304,6 +305,7 @@ function saveNow() {
 let win = null;
 let ui = null;
 let zeusSession = null;
+let videoDL = null;
 let extensions = null;
 const tabViews = new Map();   // id do separador -> WebContentsView
 const appViews = new Map();   // id da app -> WebContentsView
@@ -540,6 +542,7 @@ function pushState(now) {
       canGoBack: !!(wc && wc.navigationHistory.canGoBack()),
       canGoForward: !!(wc && wc.navigationHistory.canGoForward()),
       zoomSaved: !!(zoom && wc && /^https?:/.test(wc.getURL()) && zoom.has(wc.getURL())),
+      videoHere: !!(videoDL && !fullApp && wc && /^https?:/.test(wc.getURL()) && (videoDL.isVideoSite(wc.getURL()) || (cur() && (cur().hasVideo || cur().media)))),
       spaces: S.spaces, later: S.later, closed: S.closed, pickSpace,
       apps: S.apps.map(a => Object.assign({}, a, { badge: badges[a.id] || 0, loaded: appViews.has(a.id), error: appErrors[a.id] || null })),
       openPanel, fullApp, fullAppURL: fullApp && wc ? wc.getURL() : '', claudeOpen: S.claudeOpen,
@@ -762,6 +765,7 @@ function ensureTabView(tab) {
   wc.on('page-favicon-updated', (e, fav) => { const t = T(); if (t) { t.favicon = fav[0] || ''; pushState(); } });
   const onNav = (e, url) => {
     const t = T(); if (!t) return;
+    if (t.url !== url) t.hasVideo = false;
     t.url = url; pushState(); saveState();
     remember(url, wc.getTitle() !== url ? wc.getTitle() : '');
     const o = originOf(url);
@@ -773,7 +777,12 @@ function ensureTabView(tab) {
   wc.on('did-navigate', onNav);
   wc.on('did-navigate-in-page', (e, url, isMain) => { if (isMain) onNav(e, url); });
   wc.on('did-start-loading', () => { const t = T(); if (t) { t.loading = true; pushState(); } });
-  wc.on('did-stop-loading', () => { const t = T(); if (t) { t.loading = false; pushState(); } });
+  wc.on('did-stop-loading', () => {
+    const t = T(); if (!t) return;
+    t.loading = false; pushState();
+    // há algum vídeo na página? (para mostrar o botão de descarregar vídeos)
+    if (/^https?:/.test(wc.getURL())) wc.executeJavaScript("!!document.querySelector('video')", true).then(v => { const t2 = T(); if (t2 && !!v !== !!t2.hasVideo) { t2.hasVideo = !!v; pushState(); } }).catch(() => {});
+  });
   wc.on('did-start-navigation', d => {
     if (!d.isMainFrame || d.isSameDocument) return;
     const t = T(); if (t && t.error) { t.error = null; applyLayout(); pushState(); }
@@ -790,7 +799,7 @@ function ensureTabView(tab) {
     applyLayout(); pushState();
   });
   wc.on('audio-state-changed', e => { const t = T(); if (t) { t.audible = e.audible; pushState(); } });
-  wc.on('media-started-playing', () => { const t = T(); if (t) { t.media = true; pushState(); } });
+  wc.on('media-started-playing', () => { const t = T(); if (t) { t.media = true; t.hasVideo = true; pushState(); } });
   wc.on('media-paused', () => { const t = T(); if (t) { t.media = false; pushState(); } });
   wc.on('enter-html-full-screen', () => {
     fullscreenView = view;
@@ -1987,6 +1996,12 @@ function dlAction(act, id) {
     if (isMac && win) { win.previewFile(d.path, d.name); return true; }
     shell.openPath(d.path); return true;
   }
+  if (d.video && videoDL) {
+    if (act === 'cancel') return videoDL.cancel(id);
+    if (act === 'pause') return false;
+    if (act === 'retry') { videoDL.retry(id, d); return true; }
+    if (act === 'remove') { videoDL.cancel(id); S.downloads = S.downloads.filter(x => x !== d); saveState(); dlPush(true); return true; }
+  }
   if (act === 'cancel' && item) { item.cancel(); return true; }
   if (act === 'pause' && item) { item.isPaused() ? item.resume() : item.pause(); setTimeout(() => dlPush(true), 50); return true; }
   if (act === 'retry') { if (item && item.canResume()) item.resume(); else { S.downloads = S.downloads.filter(x => x !== d); zeusSession.downloadURL(d.url); } dlPush(true); return true; }
@@ -2328,6 +2343,39 @@ function setupIPC() {
   });
   ipcMain.handle('hermes:theme', e => (hermesWC && e.sender === hermesWC ? (isDark() ? 'dark' : 'light') : null));
   ipcMain.handle('orfeu:theme', e => (orfeuWC && e.sender === orfeuWC ? (isDark() ? 'dark' : 'light') : null));
+  videoDL = setupVideoDL({
+    app, getSession: () => zeusSession, toast: m => ui && !ui.isDestroyed() && ui.send('toast', m),
+    ffBin: () => process.env.ZEUS_FFMPEG || (app.isPackaged ? path.join(process.resourcesPath, 'ffmpeg', 'ffmpeg') : path.join(__dirname, '..', 'vendor', `ffmpeg-${process.platform}-${process.arch}`, 'ffmpeg', 'ffmpeg')),
+    downloadsDir: () => app.getPath('downloads'),
+    downloads: {
+      get: id => S.downloads.find(x => x.id === id),
+      add: d => {
+        S.downloads = S.downloads.filter(x => x.id !== d.id);
+        Object.assign(d, { state: 'progressing', paused: false, startedAt: Date.now(), endedAt: 0 });
+        S.downloads.unshift(d); if (S.downloads.length > DL_MAX) S.downloads.length = DL_MAX;
+        saveState(); ui && ui.send('downloads', { list: dlList(), started: d.name });
+        return d;
+      },
+      update: () => dlPush(),
+      done: (d, state) => {
+        d.state = state; d.paused = false; d.endedAt = Date.now();
+        if (state === 'completed' && isMac) { try { app.dock.downloadFinished(d.path); } catch (x) { /* ok */ } }
+        saveState(); dlPush(true);
+        if (state === 'completed') ui && ui.send('downloads', { list: dlList(), done: d.name });
+      }
+    }
+  });
+  // botão de vídeo na barra: ver o vídeo da página (pergunta sempre a qualidade) e descarregar
+  handle('video:probe', async () => {
+    const wc = pageWC(); const url = wc && wc.getURL();
+    if (!url || !/^https?:/.test(url)) return { error: 'Esta página não tem vídeos.' };
+    try { return Object.assign(await videoDL.probe(url), { url }); } catch (e) { return { error: e.message, url }; }
+  });
+  handle('video:download', (url, choice) => {
+    url = String(url || ''); if (!/^https?:/.test(url)) return { error: 'Endereço inválido.' };
+    const c = choice || {};
+    return videoDL.download(url, { kind: ['mp4', 'mp3', 'm4a'].includes(c.kind) ? c.kind : 'mp4', height: Math.floor(+c.height) || 0, subs: !!c.subs, title: String(c.title || '').slice(0, 160) });
+  });
   handle('downloads:list', () => dlList());
   handle('downloads:do', (act, id) => dlAction(String(act), String(id || '')));
   handle('downloads:thumb', id => dlThumb(String(id || '')));

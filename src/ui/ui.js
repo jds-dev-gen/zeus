@@ -154,7 +154,7 @@ mq.addEventListener('change', applyTheme);
 Z.on('state', st => {
   S = st;
   applyTheme();
-  renderRail(); renderTop(); renderPanels(); renderPage(); renderRight(); renderBallOn(); renderZoomBtn();
+  renderRail(); renderTop(); renderPanels(); renderPage(); renderRight(); renderBallOn(); renderZoomBtn(); renderVidBtn();
   if (ov.open) renderZones();
   if (modal === 'settings') refreshSettingsApps();
   requestAnimationFrame(sendLayout);
@@ -822,6 +822,46 @@ async function openZoomSave() {
 }
 $('#zoomBtn').addEventListener('click', openZoomSave);
 
+/* ---------- Descarregar o vídeo da página (pergunta sempre a qualidade) ---------- */
+function renderVidBtn() {
+  const b = $('#vidBtn'); if (!b) return;
+  b.hidden = !S.videoHere;
+}
+const fmtDur = s => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+let vdSeq = 0;
+async function openVideoDL() {
+  const my = ++vdSeq;
+  openModal('video', `${modalHead('Descarregar vídeo')}<div class="vd-load"><i></i>A ver que vídeo é e que qualidades há…</div>`);
+  const info = await Z.invoke('video:probe').catch(e => ({ error: e.message }));
+  if (modal !== 'video' || my !== vdSeq) return;
+  if (!info || info.error) { $('#modal').innerHTML = `${modalHead('Descarregar vídeo')}<div class="vd-err">${esc((info && info.error) || 'Não foi possível ler o vídeo.')}</div><div class="row-btns"><button class="btn" type="button" data-mclose>Fechar</button></div>`; return; }
+  const sz = n => n ? '≈ ' + fmtBytes(n) : '';
+  const opts = [];
+  if (!info.audioOnly) {
+    const top = info.top || 0;
+    const lbl = h => h >= 2160 ? '4K' : h >= 1440 ? '1440p' : h + 'p';
+    opts.push({ kind: 'mp4', height: 0, t: 'Melhor qualidade', s: `MP4${top ? ' · ' + lbl(top) : ''}`, size: info.sizes[top] });
+    (top ? [1080, 720, 480].filter(h => h < top) : []).forEach(h => opts.push({ kind: 'mp4', height: h, t: lbl(h), s: h === 720 ? 'MP4 · mais leve, bom para partilhar' : h === 480 ? 'MP4 · o mais leve' : 'MP4 · Full HD', size: info.sizes[h] }));
+  }
+  const aud = [{ kind: 'mp3', t: 'Só o áudio — MP3', s: 'Abre em todo o lado', size: info.audioSize }, { kind: 'm4a', t: 'Só o áudio — M4A', s: 'Melhor qualidade, mais pequeno', size: info.audioSize }];
+  const row = (o, i, on) => `<label class="vd-opt ${on ? 'on' : ''}"><input type="radio" name="vdq" value="${i}" ${on ? 'checked' : ''}><span><b>${esc(o.t)}</b><small>${esc(o.s)}</small></span><em>${esc(sz(o.size))}</em></label>`;
+  const all = [...opts, ...aud];
+  $('#modal').innerHTML = `${modalHead('Descarregar vídeo')}
+    <div class="vd-head"><div class="th" style="${info.thumb ? `background-image:url('${esc(info.thumb).replace(/'/g, '%27')}')` : ''}">${info.duration ? `<i>${fmtDur(info.duration)}</i>` : ''}</div><div><b>${esc(info.title)}</b><small>${esc([info.uploader, info.site].filter(Boolean).join(' · '))}</small></div></div>
+    <div class="vd-opts">${opts.length ? '<p class="vd-sec">Vídeo</p>' : ''}${opts.map((o, i) => row(o, i, i === 0)).join('')}<p class="vd-sec">Áudio</p>${aud.map((o, i) => row(o, opts.length + i, !opts.length && i === 0)).join('')}</div>
+    ${info.subs && info.subs.length ? `<label class="vd-check"><input type="checkbox" id="vdSubs"> Descarregar também as legendas (${esc(info.subs.map(x => x.split('-')[0]).filter((x, i, a) => a.indexOf(x) === i).join(', '))}${info.subsAuto ? ', automáticas' : ''})</label>` : ''}
+    <p class="hint">Vai para a pasta Transferências e aparece na lista de transferências do Zeus. Usa a tua sessão do Zeus, por isso também funciona com vídeos que pedem login.</p>
+    <div class="row-btns"><button class="btn" type="button" id="vdGo">Descarregar</button><button class="btn ghost" type="button" data-mclose>Cancelar</button></div>`;
+  $('#modal').querySelectorAll('input[name=vdq]').forEach(r => r.addEventListener('change', () => $('#modal').querySelectorAll('.vd-opt').forEach(l => l.classList.toggle('on', l.querySelector('input').checked))));
+  $('#vdGo').addEventListener('click', async () => {
+    const i = +($('#modal').querySelector('input[name=vdq]:checked') || {}).value || 0, o = all[i];
+    const r = await Z.invoke('video:download', info.url, { kind: o.kind, height: o.height || 0, subs: !!($('#vdSubs') && $('#vdSubs').checked), title: info.title });
+    closeModal();
+    toast(r && r.error ? r.error : 'A descarregar — acompanha nas Transferências');
+  });
+}
+$('#vidBtn').addEventListener('click', openVideoDL);
+
 /* ---------- Transferências ---------- */
 let DL = [], dlFilter = '';
 const fmtBytes = n => { if (!n && n !== 0) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i = 0; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(n < 10 ? 1 : 0) : n) + ' ' + u[i]; };
@@ -834,6 +874,8 @@ function dlWhen(ms) {
   return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' }).replace('.', '');
 }
 function dlState(d) {
+  if (d.video && d.state === 'progressing') return (d.note || 'A descarregar') + (d.total ? ` · ${fmtBytes(d.received)} de ${fmtBytes(d.total)}` : '');
+  if (d.video && d.state === 'interrupted' && d.note) return d.note;
   if (d.state === 'progressing') return d.paused ? `Em pausa · ${fmtBytes(d.received)}${d.total ? ' de ' + fmtBytes(d.total) : ''}` : `${fmtBytes(d.received)}${d.total ? ' de ' + fmtBytes(d.total) : ''}`;
   if (d.state === 'cancelled') return 'Cancelada';
   if (d.state === 'interrupted') return 'Interrompida';
@@ -869,7 +911,7 @@ function renderDlList() {
         ${live ? `<div class="dl-bar ${d.total ? '' : 'busy'}"><i style="width:${d.total ? pct : 30}%"></i></div>` : ''}
       </div>
       <div class="dl-acts">
-        ${live ? `<button class="btn ghost sm" type="button" data-dla="pause">${d.paused ? 'Retomar' : 'Pausa'}</button><button class="btn ghost sm" type="button" data-dla="cancel">Cancelar</button>` : ''}
+        ${live && !d.video ? `<button class="btn ghost sm" type="button" data-dla="pause">${d.paused ? 'Retomar' : 'Pausa'}</button><button class="btn ghost sm" type="button" data-dla="cancel">Cancelar</button>` : ''}${live && d.video ? `<button class="btn ghost sm" type="button" data-dla="cancel">Cancelar</button>` : ''}
         ${d.state === 'interrupted' || d.state === 'cancelled' ? `<button class="btn ghost sm" type="button" data-dla="retry">Tentar de novo</button>` : ''}
         ${ok ? `<button class="btn sm" type="button" data-dla="show" title="Mostrar o ficheiro no Finder">${ICO.folder}Mostrar no Finder</button>` : ''}
         <button class="nb" type="button" data-dla="remove" title="Tirar da lista (o ficheiro não é apagado)" aria-label="Tirar da lista">${ICON.x}</button>

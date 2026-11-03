@@ -112,6 +112,16 @@ jobs:
           done
           vendor/ffmpeg-darwin-arm64/ffmpeg/ffmpeg -hide_banner -version | head -1
           vendor/ffmpeg-darwin-arm64/ffmpeg/ffmpeg -hide_banner -f lavfi -i sine=d=1 -c:a aac /tmp/prova.m4a && test -s /tmp/prova.m4a && echo "ffmpeg OK"
+      # yt-dlp (descarregar vídeos): versão fixa, verificada pela soma SHA-256 (universal: serve aos dois Macs).
+      # Dentro do Zeus atualiza-se sozinho uma vez por semana, porque o YouTube muda muitas vezes.
+      - name: yt-dlp (vídeos)
+        run: |
+          mkdir -p vendor/yt-dlp
+          curl -sSL --fail -o vendor/yt-dlp/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_macos
+          echo "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa  vendor/yt-dlp/yt-dlp" | shasum -a 256 -c
+          chmod +x vendor/yt-dlp/yt-dlp
+          file vendor/yt-dlp/yt-dlp
+          vendor/yt-dlp/yt-dlp --version
       - name: Empacotar e assinar (ad-hoc)
         run: |
           node package-mac.js arm64

@@ -38,6 +38,9 @@ const arches = which === 'all' ? ['arm64', 'x64'] : [which];
     // o ffmpeg desta arquitetura (Orfeu) vai para Contents/Resources/ffmpeg
     const ffDir = path.join(__dirname, 'vendor', `ffmpeg-darwin-${arch}`, 'ffmpeg');
     if (fs.existsSync(path.join(ffDir, 'ffmpeg'))) extraResource.push(ffDir); else console.warn(`Aviso: sem o ffmpeg para ${arch}; o Orfeu só lê os formatos comuns.`);
+    // o yt-dlp (descarregar vídeos; universal) vai para Contents/Resources/yt-dlp
+    const ytDir = path.join(__dirname, 'vendor', 'yt-dlp');
+    if (fs.existsSync(path.join(ytDir, 'yt-dlp'))) extraResource.push(ytDir); else console.warn('Aviso: sem o yt-dlp; o botão de descarregar vídeos não funciona.');
     const [appPath] = await packager({
       extraResource,
       dir: __dirname,
