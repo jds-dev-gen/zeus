@@ -182,7 +182,7 @@ async function addPaths(paths, tid, time) {
   loadPeaks();
   const empty = !P.tracks.some(t => t.clips.length);
   if (tid || empty) { let at = time != null ? time : ph; for (const s of srcs) { placeSource(s.id, tid || 'voz', at); at += s.dur; } }
-  else commit(srcs.length === 1 ? `Juntou o ficheiro “${srcs[0].name}”` : `Juntou ${srcs.length} ficheiros`);
+  else { commit(srcs.length === 1 ? `Juntou o ficheiro “${srcs[0].name}”` : `Juntou ${srcs.length} ficheiros`); flash('Ficou na lista “Neste projeto”: arrasta-o para uma pista, ou larga-o logo em cima da pista.'); }
 }
 $('#addSrc').addEventListener('click', async () => { if (!P) return; const srcs = await E.chooseFiles() || []; if (!srcs.length) return; srcs.forEach(s => { P.sources[s.id] = s; }); loadPeaks(); if (!P.tracks.some(t => t.clips.length)) { let at = 0; for (const s of srcs) { placeSource(s.id, 'voz', at); at += s.dur; } } else commit(`Juntou ${srcs.length === 1 ? '“' + srcs[0].name + '”' : srcs.length + ' ficheiros'}`); });
 $('#emptyOpen').addEventListener('click', async () => { const p = await E.create('Projeto novo', []); if (!p) return; setProject(p); $('#addSrc').click(); });
@@ -192,7 +192,7 @@ function laneRect() { const l = document.querySelector('.lane'); return l ? l.ge
 const tx = t => (t - view.x0) * view.pps;
 const xt = x => view.x0 + x / view.pps;
 function buildLanes() {
-  $('#lanes').innerHTML = P.tracks.map(t => `<div class="track ${t.kind} ${t.id === curT ? 'cur' : ''}" data-t="${t.id}"><div class="th"><b><i></i>${t.name}</b><small>${TRACK_INFO[t.id].sub}</small><div class="row"><button type="button" data-mute="${t.id}" class="${t.mute ? 'on' : ''}" title="Calar esta pista">M</button><button type="button" data-solo="${t.id}" class="${t.solo ? 'on' : ''}" title="Ouvir só esta pista">S</button></div></div><div class="lane" data-lane="${t.id}"><canvas></canvas></div></div>`).join('');
+  $('#lanes').innerHTML = P.tracks.map(t => `<div class="track ${t.kind} ${t.id === curT ? 'cur' : ''}" data-t="${t.id}"><div class="th"><b><i></i>${t.name}</b><small>${TRACK_INFO[t.id].sub}</small><div class="row"><button type="button" data-mute="${t.id}" class="${t.mute ? 'on' : ''}" title="Calar esta pista">M</button><button type="button" data-solo="${t.id}" class="${t.solo ? 'on' : ''}" title="Ouvir só esta pista">S</button><button type="button" class="addt" data-addto="${t.id}" title="Juntar um ficheiro a esta pista, na agulha">+</button></div></div><div class="lane" data-lane="${t.id}"><canvas></canvas></div></div>`).join('');
 }
 function fitView() {
   const W = laneRect().width || 600, e0 = Math.max(projEnd(), 20);
@@ -207,6 +207,9 @@ function setZoom(pps, anchorT, anchorX) {
   view.pps = pps; view.x0 = Math.max(0, anchorT - anchorX / pps); clampView(); syncZoom(); drawAll();
 }
 function clampView() { const W = laneRect().width || 600; view.x0 = Math.max(0, Math.min(view.x0, Math.max(0, projEnd() * 1.03 - W / view.pps))); }
+$('#zoomIn').addEventListener('click', () => setZoom(view.pps * 1.6));
+$('#zoomOut').addEventListener('click', () => setZoom(view.pps / 1.6));
+$('#zoomFit').addEventListener('click', () => { fitView(); drawAll(); });
 $('#zoomR').addEventListener('input', e => { const lo = Math.log(ppsMin()), hi = Math.log(PPS_MAX); setZoom(Math.exp(lo + (hi - lo) * e.target.value / 1000)); });
 
 function drawLane(t) {
@@ -220,11 +223,12 @@ function drawLane(t) {
   const dim = t.mute || (P.tracks.some(y => y.solo) && !t.solo);
   g.globalAlpha = dim ? 0.35 : 1;
   const step = view.pps > 150 ? 1 : 3;
+  emptyHint(g, t, W, H);
   for (const c of t.clips) {
     const x0 = tx(c.at), x1 = tx(end(c));
     if (x1 < 0 || x0 > W) continue;
     if (t.kind !== 'voice') {
-      g.fillStyle = bg; roundRect(g, x0 + 0.5, 4, Math.max(2, x1 - x0 - 1), H - 8, 7); g.fill();
+      g.fillStyle = bg; roundRect(g, x0 + 0.5, 4, Math.max(8, x1 - x0 - 1), H - 8, Math.min(7, Math.max(2, (x1 - x0) / 2))); g.fill();
       g.strokeStyle = col; g.globalAlpha = (dim ? 0.35 : 1) * 0.5; g.lineWidth = 1; roundRect(g, x0 + 0.5, 4.5, Math.max(2, x1 - x0 - 1), H - 9, 7); g.stroke(); g.globalAlpha = dim ? 0.35 : 1;
       if (x1 - x0 > 40) { g.save(); g.beginPath(); g.rect(Math.max(0, x0), 0, Math.min(W, x1) - Math.max(0, x0), H); g.clip(); g.fillStyle = col; g.font = '600 11px Geist, sans-serif'; g.fillText((P.sources[c.src] || {}).name || '', Math.max(0, x0) + 8, 17); g.restore(); }
     }
@@ -265,6 +269,23 @@ function drawLane(t) {
     if (b - a > 150) s.appendChild(tag);
     lane.appendChild(s);
   }
+}
+function moveTag(t, c, label) {
+  document.querySelectorAll('.mtag').forEach(x => x.remove());
+  if (!t) return;
+  const lane = document.querySelector(`.lane[data-lane="${t.id}"]`); if (!lane) return;
+  const m = document.createElement('div'); m.className = 'mtag';
+  m.style.left = tx(c ? c.at : label.at) + 'px';
+  const tag = document.createElement('span'); tag.textContent = c ? `${fmt(c.at, 1)} → ${fmt(end(c), 1)}` : label.text; m.appendChild(tag);
+  lane.appendChild(m);
+  if (parseFloat(m.style.left) + 210 > lane.clientWidth) m.classList.add('flip');
+}
+// pistas vazias: um aviso no sítio
+function emptyHint(g, t, W, H) {
+  if (t.clips.length) return;
+  g.fillStyle = css('--faint'); g.font = '12.5px Geist, sans-serif'; g.textAlign = 'center';
+  g.fillText(t.kind === 'voice' ? 'Arrasta para aqui a gravação principal' : t.kind === 'music' ? 'Arrasta música para aqui — ou carrega em + à esquerda' : 'Arrasta efeitos sonoros para aqui — ou carrega em + à esquerda', W / 2, H / 2 + 4);
+  g.textAlign = 'left';
 }
 function roundRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
 function drawLanes() { if (P) P.tracks.forEach(drawLane); }
@@ -333,7 +354,9 @@ new ResizeObserver(() => { if (P) { clampView(); drawAll(); } }).observe($('#tl'
 
 /* ---------- rato na linha do tempo ---------- */
 let drag = null;
-$('#lanes').addEventListener('mousedown', e => {
+$('#lanes').addEventListener('mousedown', async e => {
+  const add = e.target.closest('[data-addto]');
+  if (add) { e.preventDefault(); const srcs = await E.chooseFiles() || []; if (!srcs.length) return; srcs.forEach(s => { P.sources[s.id] = s; }); loadPeaks(); let at = ph; for (const s of srcs) { placeSource(s.id, add.dataset.addto, at); at += s.dur; } return; }
   const b = e.target.closest('[data-mute],[data-solo]');
   if (b) { const t = T(b.dataset.mute || b.dataset.solo); if (b.dataset.mute) t.mute = !t.mute; else t.solo = !t.solo; commit(`${b.dataset.mute ? (t.mute ? 'Calou' : 'Voltou a ouvir') : (t.solo ? 'Só a pista' : 'Todas as pistas')} ${t.name}`); return; }
   const th = e.target.closest('.th'); if (th) { curT = th.parentElement.dataset.t; renderAll(); return; }
@@ -341,16 +364,28 @@ $('#lanes').addEventListener('mousedown', e => {
   e.preventDefault();
   const t = T(lane.dataset.lane), r = lane.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, time = xt(x);
   curT = t.id;
-  // música e efeitos: arrastar pela barra do nome muda o pedaço de sítio
-  const hit = t.clips.find(c => time >= c.at && time <= end(c));
-  if (t.kind !== 'voice' && hit && y < 22) { drag = { mode: 'move', t, c: hit, x: e.clientX, at0: hit.at }; document.body.style.cursor = 'grabbing'; return; }
+  // música e efeitos: arrastar um pedaço muda-o de sítio (também para a outra pista); com ⌥ seleciona
+  const pad = 6 / view.pps;   // pedaços curtos (efeitos): fáceis de agarrar
+  const hit = [...t.clips].reverse().find(c => time >= c.at - pad && time <= end(c) + pad);
+  if (t.kind !== 'voice' && hit && !e.altKey) { drag = { mode: 'move', t, c: hit, x: e.clientX, at0: hit.at, from: t.id }; document.body.classList.add('moving'); return; }
   if (e.shiftKey && sel && sel.tid === t.id) { const a = Math.abs(time - sel.a) < Math.abs(time - sel.b) ? sel.b : sel.a; drag = { mode: 'sel', t, a, x: e.clientX, moved: true }; sel = { tid: t.id, a: Math.min(a, time), b: Math.max(a, time) }; renderAll(); return; }
   drag = { mode: 'sel', t, a: Math.max(0, time), x: e.clientX, moved: false };
 });
 window.addEventListener('mousemove', e => {
   if (!drag) return;
   const r = laneRect(), time = Math.max(0, xt(e.clientX - r.left));
-  if (drag.mode === 'move') { drag.c.at = Math.max(0, drag.at0 + (e.clientX - drag.x) / view.pps); drag.moved = Math.abs(e.clientX - drag.x) > 2; drawLane(drag.t); return; }
+  if (drag.mode === 'move') {
+    if (!drag.moved && Math.abs(e.clientX - drag.x) < 3 && Math.abs(e.clientY - (drag.y || e.clientY)) < 3) { drag.y = drag.y || e.clientY; return; }
+    drag.moved = true;
+    drag.c.at = Math.max(0, drag.at0 + (e.clientX - drag.x) / view.pps);
+    // passar para a outra pista (Música ⇄ Efeitos) se o rato estiver em cima dela
+    const el = document.elementFromPoint(e.clientX, e.clientY), ln = el && el.closest && el.closest('.lane');
+    if (ln && ln.dataset.lane !== drag.t.id && ln.dataset.lane !== 'voz') {
+      const nt = T(ln.dataset.lane); drag.t.clips = drag.t.clips.filter(c => c !== drag.c); nt.clips.push(drag.c); const old = drag.t; drag.t = nt; curT = nt.id; drawLane(old);
+    }
+    moveTag(drag.t, drag.c);
+    drawLane(drag.t); return;
+  }
   if (!drag.moved && Math.abs(e.clientX - drag.x) < 3) return;
   drag.moved = true;
   sel = { tid: drag.t.id, a: Math.min(drag.a, time), b: Math.max(drag.a, time) };
@@ -363,10 +398,24 @@ window.addEventListener('mousemove', e => {
 window.addEventListener('mouseup', () => {
   if (!drag) return;
   const d = drag; drag = null; document.body.style.cursor = '';
-  if (d.mode === 'move') { sortT(d.t); if (d.moved) commit(`Moveu “${(P.sources[d.c.src] || {}).name || 'pedaço'}” para ${fmt(d.c.at, 1)}`); return; }
+  document.body.classList.remove('moving'); moveTag(null);
+  if (d.mode === 'move') {
+    sortT(d.t);
+    if (d.moved) commit(`Moveu “${(P.sources[d.c.src] || {}).name || 'pedaço'}” para ${fmt(d.c.at, 1)}${d.t.id !== d.from ? (d.t.id === 'musica' ? ' (Música)' : ' (Efeitos)') : ''}`);
+    else { sel = { tid: d.t.id, a: d.c.at, b: end(d.c) }; renderAll(); }
+    return;
+  }
   if (!d.moved) { sel = null; seek(d.a); }
   else if (sel && sel.b - sel.a < 0.02) sel = null;
   renderAll();
+});
+$('#lanes').addEventListener('mousemove', e => {
+  if (drag) return;
+  const lane = e.target.closest('.lane'); if (!lane || !P) return;
+  const t = T(lane.dataset.lane); if (t.kind === 'voice') { lane.style.cursor = ''; return; }
+  const time = xt(e.clientX - lane.getBoundingClientRect().left);
+  const pad = 6 / view.pps;
+  lane.style.cursor = !e.altKey && t.clips.some(c => time >= c.at - pad && time <= end(c) + pad) ? 'grab' : '';
 });
 $('#lanes').addEventListener('dblclick', e => {
   const lane = e.target.closest('.lane'); if (!lane) return;
@@ -518,15 +567,21 @@ $('#fwd10').addEventListener('click', () => seek(ph + 10));
 let dragDepth = 0;
 const hasFiles = e => [...(e.dataTransfer.types || [])].some(t => t === 'Files' || t === 'eco/src');
 document.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; if ([...e.dataTransfer.types].includes('Files')) { if (P) $('#drop').hidden = false; else $('#empty').classList.add('dragover'); } });
-document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('#drop').hidden = true; $('#empty').classList.remove('dragover'); document.querySelectorAll('.lane.dragover').forEach(l => l.classList.remove('dragover')); } });
+document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; moveTag(null); $('#drop').hidden = true; $('#empty').classList.remove('dragover'); document.querySelectorAll('.lane.dragover').forEach(l => l.classList.remove('dragover')); } });
 document.addEventListener('dragover', e => {
   if (!hasFiles(e)) return; e.preventDefault();
   document.querySelectorAll('.lane.dragover').forEach(l => l.classList.remove('dragover'));
-  const lane = e.target.closest && e.target.closest('.lane'); if (lane) { lane.classList.add('dragover'); $('#drop').hidden = true; }
-  else if ([...e.dataTransfer.types].includes('Files') && P) $('#drop').hidden = false;
+  const lane = e.target.closest && e.target.closest('.lane');
+  if (lane && P) {
+    lane.classList.add('dragover'); $('#drop').hidden = true;
+    const t = T(lane.dataset.lane), at = Math.max(0, xt(e.clientX - lane.getBoundingClientRect().left));
+    const vEnd = Math.max(0, ...t.clips.map(end));
+    const shown = t.kind === 'voice' ? Math.min(at, vEnd) : at;
+    moveTag(t, null, { at: shown, text: `Largar em ${fmt(shown, 1)} · ${tName(t.id)}` });
+  } else { moveTag(null); if ([...e.dataTransfer.types].includes('Files') && P) $('#drop').hidden = false; }
 });
 document.addEventListener('drop', async e => {
-  if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0;
+  if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0; moveTag(null);
   $('#drop').hidden = true; $('#empty').classList.remove('dragover');
   const lane = e.target.closest && e.target.closest('.lane');
   document.querySelectorAll('.lane.dragover').forEach(l => l.classList.remove('dragover'));
