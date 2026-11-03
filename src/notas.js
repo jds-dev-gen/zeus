@@ -276,4 +276,4 @@ ${END}
   }
 }
 
-module.exports = { Notas, fileBase, toText, FILE_CSS };
+module.exports = { Notas, fileBase, toText, FILE_CSS, findGoogleDrive };

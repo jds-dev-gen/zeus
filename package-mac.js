@@ -58,6 +58,11 @@ const arches = which === 'all' ? ['arm64', 'x64'] : [which];
       extendInfo: {
         NSCameraUsageDescription: 'Os sites que abres no Zeus (por exemplo, videochamadas) podem pedir a câmara.',
         NSMicrophoneUsageDescription: 'As Notas do Zeus usam o microfone para gravar reuniões; os sites que abres (por exemplo, WhatsApp ou videochamadas) também o podem pedir.',
+        NSDesktopFolderUsageDescription: 'O Hermes (ficheiros do Zeus) mostra e arruma os ficheiros da Secretária.',
+        NSDocumentsFolderUsageDescription: 'O Hermes (ficheiros do Zeus) mostra e arruma os teus documentos.',
+        NSDownloadsFolderUsageDescription: 'O Hermes (ficheiros do Zeus) mostra e arruma as transferências.',
+        NSRemovableVolumesUsageDescription: 'O Hermes (ficheiros do Zeus) mostra os discos externos.',
+        NSNetworkVolumesUsageDescription: 'O Hermes (ficheiros do Zeus) mostra as pastas da rede.',
         NSLocationWhenInUseUsageDescription: 'Os sites que abres no Zeus podem pedir a tua localização.',
         NSBluetoothAlwaysUsageDescription: 'Alguns sites podem pedir acesso a dispositivos Bluetooth.',
         LSApplicationCategoryType: 'public.app-category.productivity',

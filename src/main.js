@@ -10,6 +10,7 @@ const {
   clipboard, shell, nativeTheme, Notification, ShareMenu, nativeImage, net, safeStorage, systemPreferences } = require('electron');
 const { setupNotas } = require('./notas-main');
 const { setupOrfeu, isMedia: isOrfeuMedia } = require('./orfeu-main');
+const { setupHermes } = require('./hermes-main');
 const path = require('path');
 const { execFile } = require('child_process');
 const fs = require('fs');
@@ -37,6 +38,7 @@ const DEFAULT_APPS = [
   { id: 'zoom', name: 'Zoom', url: 'zeus://zoom', mode: 'full', icon: 'zoom', preload: false, internal: 'zoom' },
   { id: 'notas', name: 'Notas', url: 'zeus://notas', mode: 'full', icon: 'notas', preload: false, internal: 'notas' },
   { id: 'orfeu', name: 'Orfeu', url: 'zeus://orfeu', mode: 'full', icon: 'orfeu', preload: false, internal: 'orfeu' },
+  { id: 'hermes', name: 'Hermes', url: 'zeus://hermes', mode: 'full', icon: 'hermes', preload: false, internal: 'hermes' },
   // página "Futebol hoje": abre pela bola da barra dos resultados, não aparece na barra das apps
   { id: 'futebol', name: 'Futebol', url: 'zeus://futebol', mode: 'full', icon: '', preload: false, internal: 'futebol', hidden: true },
   { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true, linksInTabs: true },
@@ -214,6 +216,11 @@ function loadState() {
     // apps novas por defeito entram sem apagar as do João
     const ids = new Set(S.apps.map(a => a.id));
     DEFAULT_APPS.forEach(a => { if (!ids.has(a.id) && !(saved.removedApps || []).includes(a.id)) S.apps.push(a); });
+    // 0.16.0: o Hermes (ficheiros) entra logo a seguir ao Orfeu
+    if (!ids.has('hermes')) {
+      const i = S.apps.findIndex(a => a.id === 'hermes'), j = S.apps.findIndex(a => a.id === 'orfeu');
+      if (i > -1 && j > -1 && i !== j + 1) S.apps.splice(j + 1, 0, ...S.apps.splice(i, 1));
+    }
     // 0.15.0: o Orfeu (leitor de áudio e vídeo) entra logo a seguir às Notas
     if (!ids.has('orfeu')) {
       const i = S.apps.findIndex(a => a.id === 'orfeu'), j = S.apps.findIndex(a => a.id === 'notas');
@@ -1362,9 +1369,10 @@ const INTERNAL = {
   futebol: { file: path.join(__dirname, 'futebol', 'index.html'), preload: path.join(__dirname, 'futebol', 'preload.js') },
   zoom: { file: path.join(__dirname, 'zoomapp', 'index.html'), preload: path.join(__dirname, 'zoomapp', 'preload.js') },
   notas: { file: path.join(__dirname, 'notasapp', 'index.html'), preload: path.join(__dirname, 'notasapp', 'preload.js') },
-  orfeu: { file: path.join(__dirname, 'orfeuapp', 'index.html'), preload: path.join(__dirname, 'orfeuapp', 'preload.js') }
+  orfeu: { file: path.join(__dirname, 'orfeuapp', 'index.html'), preload: path.join(__dirname, 'orfeuapp', 'preload.js') },
+  hermes: { file: path.join(__dirname, 'hermesapp', 'index.html'), preload: path.join(__dirname, 'hermesapp', 'preload.js') }
 };
-let radarWC = null, futebolWC = null, zoomWC = null, notasWC = null, orfeuWC = null;
+let radarWC = null, futebolWC = null, zoomWC = null, notasWC = null, orfeuWC = null, hermesWC = null;
 let orfeuApp = null;
 let notasApp = null;
 const isDark = () => S.settings.theme === 'dark' || (S.settings.theme === 'system' && nativeTheme.shouldUseDarkColors);
@@ -1383,6 +1391,12 @@ function ensureInternalView(a) {
   if (a.internal === 'radar') radarWC = wc;
   if (a.internal === 'futebol') futebolWC = wc;
   if (a.internal === 'zoom') zoomWC = wc;
+  if (a.internal === 'hermes') {
+    hermesWC = wc;
+    // o Hermes não pede nada ao sistema pela página (as pastas são lidas pelo processo principal)
+    wc.session.setPermissionRequestHandler((w, perm, cb) => cb(false));
+    wc.session.setPermissionCheckHandler(() => false);
+  }
   if (a.internal === 'orfeu') {
     orfeuWC = wc;
     // o Orfeu não pede nada ao sistema (só ecrã inteiro para os vídeos)
@@ -1400,7 +1414,7 @@ function ensureInternalView(a) {
   wc.on('will-navigate', (e, url) => { e.preventDefault(); if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); });
   wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); return { action: 'deny' }; });
   wc.on('render-process-gone', (e, d) => { if (d.reason !== 'clean-exit') setTimeout(() => { if (!wc.isDestroyed()) wc.reload(); }, 500); });
-  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; if (zoomWC === wc) zoomWC = null; if (notasWC === wc) notasWC = null; if (orfeuWC === wc) orfeuWC = null; });
+  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; if (zoomWC === wc) zoomWC = null; if (notasWC === wc) notasWC = null; if (orfeuWC === wc) orfeuWC = null; if (hermesWC === wc) hermesWC = null; });
   wc.loadFile(def.file).catch(() => {});
   return view;
 }
@@ -2294,6 +2308,17 @@ function setupIPC() {
     getWC: () => orfeuWC, getUi: () => ui, getWin: () => win, getNotas: () => notasApp,
     openNotes: id => { showApp('notas'); const send = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id }); }; if (notasWC && !notasWC.isLoading()) setTimeout(send, 150); else setTimeout(send, 1500); }
   });
+  setupHermes({
+    app, ipcMain, dialog, shell, Menu, BrowserWindow, nativeImage, clipboard,
+    getWC: () => hermesWC, getUi: () => ui, getWin: () => win, getView: () => appViews.get('hermes'),
+    openInOrfeu: paths => orfeuOpenPaths(paths),
+    openInNotas: async p => {
+      const N = notasApp && notasApp.notas;
+      if (N) { await N.scan(); const n = [...N.index.values()].find(i => i.path === p); if (n) { showApp('notas'); const go = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id: n.id }); }; setTimeout(go, notasWC && !notasWC.isLoading() ? 150 : 1500); return; } }
+      shell.openPath(p);
+    }
+  });
+  ipcMain.handle('hermes:theme', e => (hermesWC && e.sender === hermesWC ? (isDark() ? 'dark' : 'light') : null));
   ipcMain.handle('orfeu:theme', e => (orfeuWC && e.sender === orfeuWC ? (isDark() ? 'dark' : 'light') : null));
   handle('downloads:list', () => dlList());
   handle('downloads:do', (act, id) => dlAction(String(act), String(id || '')));
@@ -2401,6 +2426,7 @@ function setupIPC() {
     if (clean.theme && zoomWC && !zoomWC.isDestroyed()) zoomWC.send('zoomapp:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && notasWC && !notasWC.isDestroyed()) notasWC.send('notas:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && orfeuWC && !orfeuWC.isDestroyed()) orfeuWC.send('orfeu:theme', isDark() ? 'dark' : 'light');
+    if (clean.theme && hermesWC && !hermesWC.isDestroyed()) hermesWC.send('hermes:theme', isDark() ? 'dark' : 'light');
     if (!isMac && clean.theme) updateOverlayColors();
     if ('updateRepo' in clean && updater) updater.check(true);
     if ('bigGames' in clean && scores) scores.setBig(clean.bigGames !== false);

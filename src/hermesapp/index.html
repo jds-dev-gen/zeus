@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-PT" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src file: data:; media-src file:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Hermes</title>
+<link rel="stylesheet" href="hermes.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M14 4.5c1.5-1.2 3.6-1.5 5.5-.8M15.2 6.4c1-.6 2.3-.7 3.4-.3"/></svg>
+    <h1>Hermes</h1>
+  </div>
+  <label class="q" id="qbox">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
+    <input id="q" type="search" placeholder="Procurar no Mac (nomes e conteúdo)…" autocomplete="off" spellcheck="false" aria-label="Procurar ficheiros">
+    <kbd id="qInfo">⌘K</kbd>
+  </label>
+  <span class="spacer"></span>
+  <span class="busy" id="busy" hidden></span>
+  <div class="seg" role="group" aria-label="Vista">
+    <button type="button" id="vList" title="Lista"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <button type="button" id="vGrid" title="Ícones"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/></svg></button>
+    <button type="button" id="vSpace" title="Espaço ocupado"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M4 12h16M4 18h7"/></svg></button>
+  </div>
+  <button class="btn" type="button" id="newFolder" title="Nova pasta (⇧⌘N)">Nova pasta</button>
+</header>
+<div class="stage">
+  <aside class="side" id="side"></aside>
+  <section class="main" id="main">
+    <div class="path" id="pathbar"></div>
+    <div class="chips" id="chips" hidden></div>
+    <div class="content" id="content" tabindex="0"></div>
+    <div class="bulk" id="bulk" hidden></div>
+    <div class="status" id="status"></div>
+  </section>
+  <aside class="prev" id="prev"></aside>
+</div>
+<div class="pop" id="pop" hidden></div>
+<div class="modal" id="modal" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<script src="hermes.js"></script>
+</body>
+</html>
