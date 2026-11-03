@@ -290,6 +290,7 @@ function renderRight() {
   const r = $('#right');
   r.hidden = S.settings.tabMode !== 'right';
   if (r.hidden) return;
+  if (rtDrag && rtDrag.live) { rightKey = ''; return; }   // a meio de um arrasto: redesenha no fim
   const wide = !!S.settings.rightWide;
   const dragging = !!(rtDrag && rtDrag.on);
   const key = JSON.stringify([S.tabs.map(x => [x.id, x.title, x.favicon, x.space]), S.currentId, S.spaces, wide, S.pickSpace, dragging]);
@@ -297,7 +298,7 @@ function renderRight() {
   r.classList.toggle('compact', !wide);
   r.classList.toggle('rt-dragging', dragging);
   const toggle = `<button class="rt rt-toggle" type="button" data-rtoggle title="${wide ? 'Só ícones (a página fica mais larga)' : 'Mostrar os títulos'}" aria-label="${wide ? 'Mostrar só os ícones' : 'Mostrar os títulos'}">${wide ? '<span class="arr">›</span><span class="t">Só ícones</span>' : '<span class="arr">‹</span>'}</button>`;
-  const dragCls = t => (dragging && rtDrag.id === t.id ? ' drag' : '');
+  const dragCls = () => '';
   if (!wide) {
     // compacta: só o ícone de cada site; o nome aparece ao passar o rato
     r.innerHTML = toggle + S.spaces.map(s => {
@@ -313,63 +314,119 @@ function renderRight() {
     return `<div class="rt-zone" data-rtzone="${esc(s.id)}" style="display:flex;flex-direction:column;gap:2px"><button type="button" class="rt-head" data-pick="${esc(s.id)}" title="Abrir uma página nova neste espaço">${esc(s.name)}<i>+ página nova</i></button>${list.map(t => `<div class="rt${t.id === S.currentId ? ' on' : ''}${dragCls(t)}" role="button" tabindex="0" data-open="${t.id}" data-rt="${t.id}"><span class="fav">${favHTML(t)}</span><span class="t">${esc(t.url === NEWTAB ? 'Página nova' : t.title)}</span><button class="nb x" type="button" data-close="${t.id}" aria-label="Fechar">${ICON.x}</button></div>`).join('')}${!list.length ? '<div class="rt-empty">Largar aqui</div>' : ''}</div>`;
   }).join('') + `<button class="rt" type="button" data-newtab>${ICON.plus}<span class="t">Separador novo</span></button>`;
 }
-// onde largar: o espaço por baixo do ponteiro e a posição dentro dele
-function rtTarget(x, y, dragId) {
-  const el = document.elementFromPoint(x, y);
-  const z = el && el.closest('[data-rtzone]'); if (!z) return null;
-  const rows = [...z.querySelectorAll('[data-rt]')].filter(c => +c.dataset.rt !== dragId);
-  let before = null, mark = null, after = false;
-  for (const c of rows) { const r = c.getBoundingClientRect(); if (y < r.top + r.height / 2) { before = +c.dataset.rt; mark = c; break; } }
-  if (!mark && rows.length) { mark = rows[rows.length - 1]; after = true; }
-  return { space: z.dataset.rtzone, z, before, mark, after };
+/* Arrastar: o separador "sai" da lista e segue o rato; os outros afastam-se para abrir o lugar onde vai ficar */
+const RT = $('#right');
+// posição de cada linha antes de mexer, para animar a deslocação (FLIP)
+function rtSnap() { const m = new Map(); RT.querySelectorAll('[data-rt], .rt-head, .rt-sp-l, .rt-empty, .rt-ph').forEach(el => m.set(el, el.getBoundingClientRect().top)); return m; }
+function rtAnimate(before) {
+  before.forEach((top, el) => {
+    if (!el.isConnected || el === rtDrag.el) return;
+    const dy = top - el.getBoundingClientRect().top;
+    if (Math.abs(dy) > 0.5) el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 160, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  });
 }
-const clearRtDrop = () => document.querySelectorAll('#right .drop, #right .drop-before, #right .drop-after').forEach(x => x.classList.remove('drop', 'drop-before', 'drop-after'));
-$('#right').addEventListener('pointerdown', e => {
+// onde fica o lugar vazio: espaço por baixo do ponteiro e antes de que separador
+function rtSpot(x, y) {
+  const el = document.elementFromPoint(Math.min(Math.max(x, RT.getBoundingClientRect().left + 4), RT.getBoundingClientRect().right - 4), y);
+  const z = el && el.closest('[data-rtzone]'); if (!z) return null;
+  const rows = [...z.querySelectorAll('[data-rt]')].filter(c => c !== rtDrag.el);
+  let before = null;
+  for (const c of rows) { const r = c.getBoundingClientRect(); if (y < r.top + r.height / 2) { before = c; break; } }
+  return { z, before };
+}
+function rtPlace(spot) {
+  const d = rtDrag, ph = d.ph;
+  if (!spot) return;
+  const ref = spot.before || spot.z.querySelector('.rt-empty') || null;
+  const same = ph.parentNode === spot.z && ((ref && ph.nextSibling === ref) || (!ref && ph === spot.z.lastElementChild));
+  if (same) return;
+  const snap = rtSnap();
+  if (ref) spot.z.insertBefore(ph, ref); else spot.z.appendChild(ph);
+  RT.querySelectorAll('[data-rtzone]').forEach(z => z.classList.toggle('has-ph', z.contains(ph)));
+  rtAnimate(snap);
+}
+function rtStart(e) {
+  const d = rtDrag;
+  // mostra também os espaços vazios (para se poder largar neles), sem saltar a lista
+  const st = RT.scrollTop; d.on = true; rightKey = ''; renderRight(); RT.scrollTop = st;
+  d.live = true;
+  d.el = RT.querySelector(`[data-rt="${d.id}"]`); if (!d.el) { rtDrag = null; return; }
+  const r = d.el.getBoundingClientRect();
+  d.ox = d.x - r.left; d.oy = d.y - r.top; d.gx = r.left; d.gh = r.height;
+  // "fantasma" que segue o rato
+  const g = d.el.cloneNode(true); g.classList.add('rt-ghost'); g.classList.remove('on');
+  Object.assign(g.style, { width: r.width + 'px', height: r.height + 'px', transform: `translate3d(${r.left}px, ${r.top}px, 0) scale(var(--s, 1))` });
+  document.body.appendChild(g); d.ghost = g;
+  requestAnimationFrame(() => g.classList.add('lift'));
+  // lugar vazio onde o separador estava
+  const ph = document.createElement('div'); ph.className = 'rt-ph'; ph.style.height = r.height + 'px'; if (RT.classList.contains('compact')) ph.style.width = r.width + 'px';
+  d.el.after(ph); d.ph = ph; d.el.classList.add('rt-hidden');
+  d.ph.closest('[data-rtzone]').classList.add('has-ph');
+  document.body.classList.add('dragging-card'); RT.classList.add('rt-dragging');
+}
+function rtFrame() {
+  const d = rtDrag; if (!d || !d.live) return;
+  d.raf = 0;
+  // na coluna, o separador só anda para cima e para baixo (fica alinhado com a lista)
+  const b = RT.getBoundingClientRect();
+  d.ghost.style.transform = `translate3d(${d.gx}px, ${Math.max(b.top - 10, Math.min(b.bottom - d.gh + 10, d.cy - d.oy))}px, 0) scale(var(--s, 1))`;
+  rtPlace(rtSpot(d.cx, d.cy));
+}
+function rtEnd(cancel) {
+  const d = rtDrag; rtDrag = null;
+  if (!d) return;
+  cancelAnimationFrame(d.scroll); cancelAnimationFrame(d.raf);
+  if (!d.live) return;
+  rtDragged = true; setTimeout(() => { rtDragged = false; }, 60);
+  document.body.classList.remove('dragging-card');
+  const z = d.ph.closest('[data-rtzone]');
+  const space = z && z.dataset.rtzone;
+  let nx = d.ph.nextElementSibling; while (nx && !nx.dataset.rt) nx = nx.nextElementSibling;
+  const before = nx && nx !== d.el ? +nx.dataset.rt : null;
+  const from = (tabById(d.id) || {}).space;
+  const target = cancel ? d.el : d.ph;
+  const r = (cancel ? (d.el.classList.remove('rt-hidden'), d.ph.remove(), d.el) : target).getBoundingClientRect();
+  d.ghost.classList.remove('lift'); d.ghost.classList.add('land');
+  d.ghost.style.transform = `translate3d(${r.left}px, ${r.top}px, 0) scale(var(--s, 1))`;
+  const finish = () => {
+    d.ghost.remove();
+    if (!cancel) { d.ph.replaceWith(d.el); d.el.classList.remove('rt-hidden'); }
+    RT.classList.remove('rt-dragging');
+    RT.querySelectorAll('.has-ph').forEach(x => x.classList.remove('has-ph'));
+    // mostra já o resultado; o estado do Zeus chega logo a seguir
+    const st = RT.scrollTop; rightKey = ''; renderRight(); RT.scrollTop = st;
+  };
+  setTimeout(finish, 150);
+  if (cancel || !space) return;
+  Z.invoke('tab:move', d.id, space, before);
+  if (from !== space) { const sp = S.spaces.find(x => x.id === space); if (sp) toast('Movido para ' + sp.name); }
+}
+RT.addEventListener('pointerdown', e => {
   if (e.button !== 0 || e.target.closest('[data-close]')) return;
   const c = e.target.closest('[data-rt]'); if (!c) return;
-  rtDrag = { id: +c.dataset.rt, x: e.clientX, y: e.clientY, on: false };
+  rtDrag = { id: +c.dataset.rt, x: e.clientX, y: e.clientY, cx: e.clientX, cy: e.clientY, on: false, live: false };
 });
 window.addEventListener('pointermove', e => {
-  if (!rtDrag) return;
-  if (!rtDrag.on) {
-    if (Math.hypot(e.clientX - rtDrag.x, e.clientY - rtDrag.y) < 6) return;
-    rtDrag.on = true; document.body.classList.add('dragging-card'); { const st = $('#right').scrollTop; rightKey = ''; renderRight(); $('#right').scrollTop = st; }
-  }
-  rtDrag.cx = e.clientX; rtDrag.cy = e.clientY;
-  rtMark();
-  // perto do fundo ou do topo da barra, a lista anda sozinha (espaços que não cabem no ecrã)
-  if (!rtDrag.scroll) {
+  const d = rtDrag; if (!d) return;
+  d.cx = e.clientX; d.cy = e.clientY;
+  if (!d.live) {
+    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) return;
+    rtStart(e); if (!rtDrag) return;
+    // perto do fundo ou do topo, a barra anda sozinha
     const step = () => {
-      if (!rtDrag || !rtDrag.on) return;
-      const r = $('#right'), b = r.getBoundingClientRect(), edge = 48;
-      const v = rtDrag.cy > b.bottom - edge ? Math.min(18, (rtDrag.cy - (b.bottom - edge)) / 2.5) : rtDrag.cy < b.top + edge ? -Math.min(18, ((b.top + edge) - rtDrag.cy) / 2.5) : 0;
-      if (v) { r.scrollTop += v; rtMark(); }
-      rtDrag.scroll = requestAnimationFrame(step);
+      const dd = rtDrag; if (!dd || !dd.live) return;
+      const b = RT.getBoundingClientRect(), edge = 56;
+      const v = dd.cy > b.bottom - edge ? Math.min(16, (dd.cy - (b.bottom - edge)) / 3) : dd.cy < b.top + edge ? -Math.min(16, ((b.top + edge) - dd.cy) / 3) : 0;
+      if (v) { const before = RT.scrollTop; RT.scrollTop += v; if (RT.scrollTop !== before) rtPlace(rtSpot(dd.cx, dd.cy)); }
+      dd.scroll = requestAnimationFrame(step);
     };
-    rtDrag.scroll = requestAnimationFrame(step);
+    d.scroll = requestAnimationFrame(step);
   }
+  if (!d.raf) d.raf = requestAnimationFrame(rtFrame);
 });
-function rtMark() {
-  clearRtDrop();
-  const t = rtTarget(rtDrag.cx, rtDrag.cy, rtDrag.id); if (!t) return;
-  t.z.classList.add('drop');
-  if (t.mark) t.mark.classList.add(t.after ? 'drop-after' : 'drop-before');
-}
-window.addEventListener('pointerup', e => {
-  if (!rtDrag) return;
-  const d = rtDrag; rtDrag = null;
-  if (d.scroll) cancelAnimationFrame(d.scroll);
-  if (!d.on) return;
-  rtDragged = true; setTimeout(() => { rtDragged = false; }, 50);
-  document.body.classList.remove('dragging-card');
-  const t = rtTarget(e.clientX, e.clientY, d.id);
-  clearRtDrop(); { const st = $('#right').scrollTop; rightKey = ''; renderRight(); $('#right').scrollTop = st; }
-  if (!t) return;
-  const from = (tabById(d.id) || {}).space;
-  Z.invoke('tab:move', d.id, t.space, t.before);
-  if (from !== t.space) { const sp = S.spaces.find(s => s.id === t.space); if (sp) toast('Movido para ' + sp.name); }
-});
-window.addEventListener('keydown', e => { if (e.key === 'Escape' && rtDrag) { rtDrag = null; document.body.classList.remove('dragging-card'); clearRtDrop(); rightKey = ''; renderRight(); } });
+window.addEventListener('pointerup', () => { if (rtDrag) rtEnd(false); });
+window.addEventListener('blur', () => { if (rtDrag) rtEnd(true); });
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && rtDrag) { e.preventDefault(); rtEnd(true); } });
 
 function onTabListClick(e) {
   if (rtDragged) return;   // acabou de arrastar: não abre o separador
