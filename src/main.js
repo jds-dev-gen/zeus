@@ -39,9 +39,9 @@ const DEFAULT_APPS = [
   { id: 'radar', name: 'Radar', url: 'zeus://radar', mode: 'full', icon: 'radar', preload: false, internal: 'radar' },
   { id: 'zoom', name: 'Zoom', url: 'zeus://zoom', mode: 'full', icon: 'zoom', preload: false, internal: 'zoom' },
   { id: 'notas', name: 'Notas', url: 'zeus://notas', mode: 'full', icon: 'notas', preload: false, internal: 'notas' },
-  { id: 'orfeu', name: 'Orfeu', url: 'zeus://orfeu', mode: 'full', icon: 'orfeu', preload: false, internal: 'orfeu' },
-  { id: 'hermes', name: 'Hermes', url: 'zeus://hermes', mode: 'full', icon: 'hermes', preload: false, internal: 'hermes' },
-  { id: 'eco', name: 'Eco', url: 'zeus://eco', mode: 'full', icon: 'eco', preload: false, internal: 'eco' },
+  { id: 'orfeu', name: 'Player', url: 'zeus://orfeu', mode: 'full', icon: 'orfeu', preload: false, internal: 'orfeu' },
+  { id: 'hermes', name: 'Disco', url: 'zeus://hermes', mode: 'full', icon: 'hermes', preload: false, internal: 'hermes' },
+  { id: 'eco', name: 'Editor', url: 'zeus://eco', mode: 'full', icon: 'eco', preload: false, internal: 'eco' },
   // página "Futebol hoje": abre pela bola da barra dos resultados, não aparece na barra das apps
   { id: 'futebol', name: 'Futebol', url: 'zeus://futebol', mode: 'full', icon: '', preload: false, internal: 'futebol', hidden: true },
   { id: 'wa', name: 'WhatsApp', url: 'https://web.whatsapp.com/', mode: 'full', icon: 'wa', preload: true, linksInTabs: true },
@@ -219,6 +219,9 @@ function loadState() {
     // apps novas por defeito entram sem apagar as do João
     const ids = new Set(S.apps.map(a => a.id));
     DEFAULT_APPS.forEach(a => { if (!ids.has(a.id) && !(saved.removedApps || []).includes(a.id)) S.apps.push(a); });
+    // 0.18.3: nomes mais diretos (Hermes → Disco, Orfeu → Player, Eco → Editor), só se o João não lhes tiver mudado o nome
+    const RENAME = { hermes: ['Hermes', 'Disco'], orfeu: ['Orfeu', 'Player'], eco: ['Eco', 'Editor'] };
+    S.apps.forEach(a => { const r = RENAME[a.id]; if (r && a.name === r[0]) a.name = r[1]; });
     // 0.18.0: o Eco (editor de áudio) entra logo a seguir ao Hermes
     if (!ids.has('eco')) {
       const i = S.apps.findIndex(a => a.id === 'eco'), j = S.apps.findIndex(a => a.id === 'hermes');

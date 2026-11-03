@@ -3,25 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src data:; media-src file:; connect-src 'none'; base-uri 'none'; form-action 'none'">
-<title>Eco</title>
+<title>Editor</title>
 <link rel="stylesheet" href="eco.css">
 </head>
 <body>
 <header class="head">
-  <div class="brand"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 9v6M7.5 6.5v11M11 9.5v5"/><path d="M14.5 8.2a5 5 0 0 1 0 7.6M17.3 5.6a8.6 8.6 0 0 1 0 12.8"/></svg><h1>Eco</h1></div>
+  <div class="brand"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 9v6M7.5 6.5v11M11 9.5v5"/><path d="M14.5 8.2a5 5 0 0 1 0 7.6M17.3 5.6a8.6 8.6 0 0 1 0 12.8"/></svg><h1>Editor</h1></div>
   <div class="proj"><input id="pName" spellcheck="false" aria-label="Nome do projeto" placeholder="Projeto sem nome"><small id="pInfo"></small></div>
   <span class="spacer"></span>
   <span class="busy" id="busy" hidden></span>
   <button class="ib" type="button" id="undoBtn" title="Desfazer (⌘Z)" aria-label="Desfazer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
   <button class="ib" type="button" id="redoBtn" title="Refazer (⇧⌘Z)" aria-label="Refazer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
-  <button class="btn" type="button" id="orfeuBtn" title="Ouvir o último ficheiro exportado no Orfeu" disabled>Abrir no Orfeu</button>
+  <button class="btn" type="button" id="orfeuBtn" title="Ouvir o último ficheiro exportado no Player" disabled>Abrir no Player</button>
   <button class="btn primary" type="button" id="exportBtn">Exportar…</button>
 </header>
 <div class="stage">
   <aside class="side">
     <div class="lbl">Neste projeto</div>
     <div id="srcs"></div>
-    <button class="add" type="button" id="addSrc">Juntar áudio… <small>ou arrasta do Hermes ou do Finder</small></button>
+    <button class="add" type="button" id="addSrc">Juntar áudio… <small>ou arrasta do Disco ou do Finder</small></button>
     <div class="lbl" style="margin-top:14px">Projetos</div>
     <div id="projs"></div>
     <button class="pj newp" type="button" id="newProj">+ Projeto novo</button>

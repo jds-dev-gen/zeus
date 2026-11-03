@@ -607,7 +607,7 @@ function openExport() {
       <div class="fmt">${Object.entries(F).map(([k, [n, d]]) => `<button type="button" data-fmt="${k}" class="${exp.fmt === k ? 'on' : ''}"><b>${n}</b><small>${d}</small></button>`).join('')}</div>
       <label class="row2"><input type="checkbox" class="sw" id="xLoud" ${exp.loud && P.settings.loudness !== 'off' ? 'checked' : ''} ${P.settings.loudness === 'off' ? 'disabled' : ''}> Igualar o volume (${P.settings.loudness === 'radio' ? '−23 LUFS, rádio' : P.settings.loudness === 'off' ? 'desligado nas definições' : '−16 LUFS, podcast'})</label>
       <label class="row2"><input type="checkbox" class="sw" id="xSel" ${only ? 'checked' : ''} ${sel ? '' : 'disabled'}> Só a seleção${sel ? ` (${fmtLen(sel.b - sel.a)}) — para um excerto nas redes` : ' (não há nada selecionado)'}</label>
-      <label class="row2"><input type="checkbox" class="sw" id="xOrfeu" ${exp.orfeu ? 'checked' : ''}> Abrir no Orfeu quando acabar</label>
+      <label class="row2"><input type="checkbox" class="sw" id="xOrfeu" ${exp.orfeu ? 'checked' : ''}> Abrir no Player quando acabar</label>
       <div class="sum">Fica na pasta ${orig ? `de “${esc(orig.name)}”` : 'que escolheres'} — escolhes o nome a seguir<br>Duração ${fmt(dur)}${!only && Object.values(P.sources).length ? ` · ≈ ${Math.max(1, Math.round(kbps * dur / 8 / 1000))} MB` : ''}${P.settings.denoise ? ' · com limpeza de ruído' : ''}</div>
       <div class="prog" id="xProg" hidden><i></i></div>
       <div class="mbtns"><button class="btn" type="button" id="xCancel">Cancelar</button><button class="btn primary" type="button" id="xGo">Exportar</button></div>`;
@@ -626,7 +626,7 @@ function openExport() {
       if (!r || r.canceled) { closeModal(); return; }
       if (r.error) { $('#xGo').disabled = false; $('#xGo').textContent = 'Exportar'; $('#xProg').hidden = true; flash(r.error); return; }
       P.lastExport = r.path;
-      box.innerHTML = `<h2>Pronto</h2><div class="sum"><b>${esc(r.name)}</b><br>${esc(r.path.replace(/\/[^/]+$/, ''))}</div><div class="mbtns"><button class="btn" type="button" data-x="reveal">Mostrar no Finder</button><button class="btn" type="button" data-x="orfeu">Abrir no Orfeu</button><button class="btn primary" type="button" data-x="close">Fechar</button></div>`;
+      box.innerHTML = `<h2>Pronto</h2><div class="sum"><b>${esc(r.name)}</b><br>${esc(r.path.replace(/\/[^/]+$/, ''))}</div><div class="mbtns"><button class="btn" type="button" data-x="reveal">Mostrar no Finder</button><button class="btn" type="button" data-x="orfeu">Abrir no Player</button><button class="btn primary" type="button" data-x="close">Fechar</button></div>`;
       renderAll();
       return;
     }

@@ -319,7 +319,7 @@ async function renderPreview() {
   }
   if (!s.length) {
     const here = loc.type === 'dir' ? `<h3>${esc(base(loc.path))}</h3><div class="kv"><span>Itens</span><div>${items.length}</div>${info.free ? `<span>Livre</span><div>${bytes(info.free.free)}</div>` : ''}<span>Onde</span><div>${esc(pretty(loc.path))}</div></div><div class="acts"><button class="btn small" type="button" data-a="space">Ver o espaço ocupado</button><button class="btn small" type="button" data-a="revealHere">Mostrar no Finder</button></div>` : '';
-    el.innerHTML = here + `<div class="hint">Escolhe um ficheiro para o ver aqui. Dois cliques abrem-no (áudio e vídeo no Orfeu, notas nas Notas). Arrasta ficheiros para as páginas do Zeus para os anexar.</div>`;
+    el.innerHTML = here + `<div class="hint">Escolhe um ficheiro para o ver aqui. Dois cliques abrem-no (áudio e vídeo no Player, notas nas Notas). Arrasta ficheiros para as páginas do Zeus para os anexar.</div>`;
     return;
   }
   const i = s[0], gen = ++pvGen;
@@ -347,7 +347,7 @@ async function renderPreview() {
   const fit = d.kind === 'image' || d.kind === 'video' || (d.text == null && !!d.ql && d.kind !== 'audio');
   el.innerHTML = `<div class="pv ${fit ? 'fit' : ''}">${pv}</div><h3>${esc(i.name)}</h3><div class="kv">${kv.map(([k, v]) => `<span>${k}</span><div>${v}</div>`).join('')}</div>
     <div class="acts">${i.dir ? '<button class="btn small primary" type="button" data-a="open">Abrir</button>' : '<button class="btn small primary" type="button" data-a="quickLook" title="Ver dentro do Zeus (espaço)">Ver</button><button class="btn small" type="button" data-a="open">Abrir</button><button class="btn small" type="button" data-a="shareMenu">Partilhar ▾</button><button class="btn small" type="button" data-a="openWith">Abrir com…</button>'}<button class="btn small" type="button" data-a="reveal">Mostrar no Finder</button><button class="btn small" type="button" data-a="copyPath">Copiar caminho</button>${ck && (convOpts[ck] || []).length ? '<button class="btn small" type="button" data-a="convertMenu">Converter ▾</button>' : ''}${i.dir ? '<button class="btn small" type="button" data-a="space">Ver o espaço</button>' : ''}</div>
-    <div class="hint">Arrasta ${i.dir ? 'esta pasta' : 'este ficheiro'} para o Gmail, WhatsApp ou Notion para ${i.dir ? 'a' : 'o'} anexar${['audio', 'video'].includes(i.kind) ? ' · abre no Orfeu' : ''}.</div>`;
+    <div class="hint">Arrasta ${i.dir ? 'esta pasta' : 'este ficheiro'} para o Gmail, WhatsApp ou Notion para ${i.dir ? 'a' : 'o'} anexar${['audio', 'video'].includes(i.kind) ? ' · abre no Player' : ''}.</div>`;
   if (i.dir && sizes[i.path] == null) H.folderSize(i.path).then(sz => { if (sz != null) { sizes[i.path] = sz; const e2 = $('#pvSize'); if (e2) e2.textContent = bytes(sz); } });
 }
 $('#prev').addEventListener('click', e => {

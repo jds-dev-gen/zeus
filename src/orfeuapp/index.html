@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src file: data:; media-src file: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'">
-<title>Orfeu</title>
+<title>Player</title>
 <link rel="stylesheet" href="orfeu.css">
 </head>
 <body>
 <header class="top">
   <div class="brand">
     <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5c-2 3-2.4 8 .3 11.5M17 3.5c2 3 2.4 8-.3 11.5"/><path d="M6 4h12"/><path d="M10 5.5v9.5M14 5.5v9.5"/><path d="M7.3 15c1.2 2.2 2.8 3.2 4.7 3.2s3.5-1 4.7-3.2"/><path d="M12 18.2V21M9.5 21h5"/></svg>
-    <h1>Orfeu</h1>
+    <h1>Player</h1>
   </div>
   <label class="q">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
@@ -50,7 +50,7 @@
           <button class="btn small" type="button" data-proxy="aMarks">Marcas para as Notas</button>
           <button class="btn small" type="button" data-proxy="aClip">Cortar um excerto</button>
           <button class="btn small vonly" type="button" data-proxy="aAudio">Só o áudio</button>
-          <button class="btn small" type="button" data-proxy="aEco">Editar no Eco</button>
+          <button class="btn small" type="button" data-proxy="aEco">Abrir no Editor</button>
           <button class="btn small" type="button" data-proxy="aReveal">Mostrar no Finder</button>
         </div>
         <div class="clip" id="clip" hidden>
@@ -73,7 +73,7 @@
           <button class="btn" type="button" id="aMarks">Enviar marcas para as Notas</button>
           <button class="btn" type="button" id="aClip">Cortar um excerto</button>
           <button class="btn vonly" type="button" id="aAudio">Exportar só o áudio</button>
-          <button class="btn" type="button" id="aEco">Editar no Eco</button>
+          <button class="btn" type="button" id="aEco">Abrir no Editor</button>
           <button class="btn" type="button" id="aReveal">Mostrar no Finder</button>
         </div>
       </aside>
@@ -82,7 +82,7 @@
     <div class="empty" id="empty"></div>
   </section>
 </div>
-<div class="drop" id="drop" hidden><div>Larga aqui para abrir no Orfeu</div></div>
+<div class="drop" id="drop" hidden><div>Larga aqui para abrir no Player</div></div>
 <div class="pop" id="pop" hidden></div>
 <script src="orfeu.js"></script>
 </body>

@@ -256,7 +256,7 @@ function setupEco(x) {
     if (w1 - w0 < 0.1) return { error: 'O projeto está vazio.' };
     const first = (p.tracks[0].clips[0] && p.sources[p.tracks[0].clips[0].src]) || Object.values(p.sources)[0];
     const dir = first ? path.dirname(first.path) : app.getPath('music');
-    const base = (p.name || 'Eco').replace(/\s*\(edição\)\s*$/i, '').replace(/[\/\\:]/g, '-').slice(0, 120) + (sel ? ' — excerto' : ' — editado');
+    const base = (p.name || 'Editor').replace(/\s*\(edição\)\s*$/i, '').replace(/[\/\\:]/g, '-').slice(0, 120) + (sel ? ' — excerto' : ' — editado');
     const r = !app.isPackaged && process.env.ZEUS_TEST_SAVE ? { filePath: path.join(process.env.ZEUS_TEST_SAVE, `${base}.${fmt}`) }   // testes, sem janela
       : await dialog.showSaveDialog(x.getWin(), { title: 'Exportar áudio', defaultPath: path.join(dir, `${base}.${fmt}`), filters: [{ name: fmt.toUpperCase(), extensions: [fmt] }] });
     if (r.canceled || !r.filePath) return { canceled: true };

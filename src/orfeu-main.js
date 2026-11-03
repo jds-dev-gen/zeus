@@ -104,7 +104,7 @@ function setupOrfeu(x) {
     save(); return { ids };
   });
   h('openDialog', async () => {
-    const r = await dialog.showOpenDialog(x.getWin(), { title: 'Abrir no Orfeu', buttonLabel: 'Abrir', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Áudio e vídeo', extensions: [...MEDIA_EXT] }, { name: 'Todos os ficheiros', extensions: ['*'] }] });
+    const r = await dialog.showOpenDialog(x.getWin(), { title: 'Abrir no Player', buttonLabel: 'Abrir', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Áudio e vídeo', extensions: [...MEDIA_EXT] }, { name: 'Todos os ficheiros', extensions: ['*'] }] });
     if (r.canceled || !r.filePaths.length) return { ids: [] };
     const ids = await addPaths(r.filePaths);
     D.queue = [...ids.slice(1), ...D.queue.filter(i => !ids.includes(i))]; save();
@@ -136,7 +136,7 @@ function setupOrfeu(x) {
     return out;
   }
   h('addFolder', async () => {
-    const r = await dialog.showOpenDialog(x.getWin(), { title: 'Juntar uma pasta do Mac ao Orfeu', buttonLabel: 'Juntar', properties: ['openDirectory'] });
+    const r = await dialog.showOpenDialog(x.getWin(), { title: 'Juntar uma pasta do Mac ao Player', buttonLabel: 'Juntar', properties: ['openDirectory'] });
     if (r.canceled || !r.filePaths[0]) return null;
     const f = r.filePaths[0];
     if (!D.folders.includes(f)) D.folders.push(f);

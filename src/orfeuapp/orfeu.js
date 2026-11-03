@@ -64,7 +64,7 @@ function renderSide() {
     f('video', ICON.video, 'Vídeo', it.filter(i => i.kind === 'video').length) +
     f('marks', ICON.marks, 'Com marcas', it.filter(i => (i.marks || []).length).length) +
     `<div class="lbl">Pastas</div>` +
-    LIB.folders.map(p => `<div class="f ${view === 'f:' + p.path ? 'on' : ''} ${p.exists ? '' : 'gone'}" role="button" tabindex="0" data-view="${esc('f:' + p.path)}" title="${esc(p.path)}">${ICON.folder}<span class="n">${esc(p.name)}</span><button class="ico x" type="button" data-unfolder="${esc(p.path)}" title="Tirar esta pasta do Orfeu (os ficheiros ficam onde estão)">✕</button></div>`).join('') +
+    LIB.folders.map(p => `<div class="f ${view === 'f:' + p.path ? 'on' : ''} ${p.exists ? '' : 'gone'}" role="button" tabindex="0" data-view="${esc('f:' + p.path)}" title="${esc(p.path)}">${ICON.folder}<span class="n">${esc(p.name)}</span><button class="ico x" type="button" data-unfolder="${esc(p.path)}" title="Tirar esta pasta do Player (os ficheiros ficam onde estão)">✕</button></div>`).join('') +
     `<button class="addf" type="button" id="addFolder">+ Juntar pasta do Mac</button>` +
     `<div class="foot">${LIB.ffmpeg ? 'Lê todos os formatos (com o ffmpeg).' : 'Sem o ffmpeg: só os formatos comuns.'}${LIB.convSize > 50e6 ? `<br>Conversões guardadas: ${sizeTxt(LIB.convSize)} · <button type="button" id="clearConv">limpar</button>` : ''}</div>`;
 }
@@ -176,7 +176,7 @@ function showPlayer() {
   $('#pMeta').textContent = [cur.folder, fmtOf(cur) + (cur.conv ? ' (convertido para o Zeus)' : ''), cur.duration ? clock(cur.duration) : '', cur.width ? cur.width + '×' + cur.height : ''].filter(Boolean).join(' · ');
   $('#sInfo').textContent = [cur.video ? codec(cur.video) : '', cur.audio ? codec(cur.audio) : '', cur.audio && cur.rate ? String(Math.round(cur.rate / 100) / 10).replace('.', ',') + ' kHz' : '', chans(cur.channels), cur.size ? sizeTxt(cur.size) : ''].filter(Boolean).join(' · ');
   renderMarks(); updateTimes(); drawWave(); renderPlayBtn(); requestAnimationFrame(fitVideo);
-  if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: $('#pTitle').textContent, artist: cur.folder || 'Orfeu', album: 'Zeus' });
+  if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: $('#pTitle').textContent, artist: cur.folder || 'Player', album: 'Zeus' });
 }
 media.addEventListener('loadedmetadata', () => {
   if (!cur) return;
@@ -448,7 +448,7 @@ document.addEventListener('keydown', e => {
 /* ---------- tema e arranque ---------- */
 const setTheme = t => { document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark'; drawWave(); };
 O.onTheme(setTheme);
-$('#empty').innerHTML = `<div><b>Orfeu</b>Arrasta ficheiros de áudio ou vídeo para aqui,<br>abre-os com o botão, ou no Finder com “Abrir com › Zeus”.<div class="row"><button class="btn primary" type="button" id="emptyOpen">Abrir…</button><button class="btn" type="button" id="emptyFolder">Juntar pasta do Mac</button></div></div>`;
+$('#empty').innerHTML = `<div><b>Player</b>Arrasta ficheiros de áudio ou vídeo para aqui,<br>abre-os com o botão, ou no Finder com “Abrir com › Zeus”.<div class="row"><button class="btn primary" type="button" id="emptyOpen">Abrir…</button><button class="btn" type="button" id="emptyFolder">Juntar pasta do Mac</button></div></div>`;
 $('#emptyOpen').addEventListener('click', () => $('#open').click());
 $('#emptyFolder').addEventListener('click', () => $('#addFolder').click());
 (async () => {
