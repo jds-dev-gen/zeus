@@ -36,20 +36,21 @@
     <div class="bulk" id="bulk" hidden></div>
     <div class="status" id="status"></div>
   </section>
-  <aside class="prev" id="prev"></aside>
 </div>
 <div class="pop" id="pop" hidden></div>
 <div class="ql" id="ql" hidden>
   <div class="qlhead">
-    <button class="icon" type="button" id="qlPrev" title="Anterior (←)">‹</button>
-    <button class="icon" type="button" id="qlNext" title="Seguinte (→)">›</button>
-    <div class="qlt"><b id="qlName"></b><small id="qlMeta"></small></div>
-    <button class="btn small" type="button" id="qlShare">Partilhar ▾</button>
-    <button class="btn small" type="button" id="qlReveal">Mostrar no Finder</button>
-    <button class="btn small primary" type="button" id="qlOpen">Abrir</button>
-    <button class="icon" type="button" id="qlClose" title="Fechar (Esc ou espaço)">✕</button>
+    <button class="qx" type="button" id="qlClose" title="Fechar (Esc ou espaço)" aria-label="Fechar">✕</button>
+    <div class="qlt"><b id="qlName"></b><small id="qlWhere"></small></div>
+    <span class="qln" id="qlMeta"></span>
   </div>
-  <div class="qlbody" id="qlBody"></div>
+  <div class="qlstage">
+    <button class="qarr l" type="button" id="qlPrev" title="Anterior (←)" aria-label="Anterior">‹</button>
+    <div class="qlbody" id="qlBody"></div>
+    <button class="qarr r" type="button" id="qlNext" title="Seguinte (→)" aria-label="Seguinte">›</button>
+  </div>
+  <div class="qlstrip" id="qlStrip"></div>
+  <div class="qlbottom"><div class="qkv" id="qlKV"></div><div class="qacts" id="qlActs"></div></div>
 </div>
 <div class="modal" id="modal" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 <script src="hermes.js"></script>

@@ -310,14 +310,15 @@ function renderStatus() {
   else parts.push(`${items.length} ite${items.length === 1 ? 'm' : 'ns'}`);
   if (s.length) parts.push(`${s.length} selecionado${s.length > 1 ? 's' : ''}${selBytes() ? ' (' + bytes(selBytes()) + ')' : ''}`);
   const free = info.free ? `Livre: ${bytes(info.free.free)} de ${bytes(info.free.total)}` : '';
-  $('#status').innerHTML = `<span>${parts.join(' · ')}</span><span class="spacer"></span><span>${loc.type === 'search' ? 'Pesquisa do Spotlight · nomes e conteúdo dos documentos' : free}</span>`;
+  const tip = s.length === 1 && !s[0].dir ? '<span class="tip">Dois cliques ou <kbd>espaço</kbd> para ver em grande · <kbd>Enter</kbd> muda o nome</span>' : '';
+  $('#status').innerHTML = `<span>${parts.join(' · ')}</span><span class="spacer"></span>${tip || `<span>${loc.type === 'search' ? 'Pesquisa do Spotlight · nomes e conteúdo dos documentos' : free}</span>`}`;
 }
 
 /* ---------- pré-visualização ---------- */
 let pvGen = 0, convOpts = {};
 async function renderPreview() {
   const s = selected();
-  const el = $('#prev');
+  const el = $('#prev'); if (!el) return;   // 0.18.5: sem coluna da direita (vê-se em grande com dois cliques)
   if (s.length > 1) {
     el.innerHTML = `<div class="pv"><span class="big">${FOLDER.replace(/20/g, '56')}</span></div><h3>${s.length} itens selecionados</h3><div class="kv"><span>Tamanho</span><div>${bytes(selBytes()) || '—'}</div></div><div class="acts"><button class="btn small primary" type="button" data-a="shareMenu">Partilhar ▾</button><button class="btn small" type="button" data-a="quickLook">Ver</button></div><div class="hint">Arrasta-os para uma página do Zeus (Gmail, WhatsApp, Notion…) para os anexar, ou para uma pasta.</div>`;
     return;
@@ -355,7 +356,7 @@ async function renderPreview() {
     <div class="hint">Arrasta ${i.dir ? 'esta pasta' : 'este ficheiro'} para o Gmail, WhatsApp ou Notion para ${i.dir ? 'a' : 'o'} anexar${['audio', 'video'].includes(i.kind) ? ' · abre no Player' : ''}.</div>`;
   if (i.dir && sizes[i.path] == null) H.folderSize(i.path).then(sz => { if (sz != null) { sizes[i.path] = sz; const e2 = $('#pvSize'); if (e2) e2.textContent = bytes(sz); } });
 }
-$('#prev').addEventListener('click', e => {
+if ($('#prev')) $('#prev').addEventListener('click', e => {
   const b = e.target.closest('[data-a]'); if (b) return action(b.dataset.a, selected().map(i => i.path), null, b);
   const s = selected(); if (e.target.closest('.pv') && s.length === 1 && !s[0].dir) openQL(s[0].path);
 });
@@ -444,15 +445,43 @@ async function openQL(p) {
   qlI = k; $('#ql').hidden = false; renderQL();
 }
 function closeQL() { $('#ql').hidden = true; $('#qlBody').innerHTML = ''; qlI = -1; C.focus(); }
+const QI = {
+  play: '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>',
+  open: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+  share: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>',
+  editor: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6M7.5 6.5v11M11 9.5v5"/><path d="M14.5 8.2a5 5 0 0 1 0 7.6M17.3 5.6a8.6 8.6 0 0 1 0 12.8"/></svg>',
+  conv: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>',
+  rename: RA_IC.rename, trash: RA_IC.trash,
+  finder: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  link: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>'
+};
+function renderStrip() {
+  const list = qlList(), box = $('#qlStrip');
+  const from = Math.max(0, qlI - 30), to = Math.min(list.length, qlI + 31);
+  box.innerHTML = list.length < 2 ? '' : list.slice(from, to).map((i, n) => {
+    const k = from + n;
+    return `<button type="button" class="qs ${k === qlI ? 'on' : ''}" data-qk="${k}" title="${esc(i.name)}">${canThumb(i) ? `<span data-qthumb="${esc(i.path)}">${icon(i)}</span>` : icon(i)}</button>`;
+  }).join('');
+  const on = box.querySelector('.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' });
+  box.querySelectorAll('[data-qthumb]').forEach(async el => {
+    const p = el.dataset.qthumb, key = p + '|128|0';
+    let t = thumbs.get(key); if (t === undefined) { t = await H.thumbInfo(p, 128, false).catch(() => null); if (t && t.url) thumbs.set(key, t); }
+    if (t && t.url && el.isConnected) el.innerHTML = `<img src="${esc(t.url)}" alt="" draggable="false">`;
+  });
+}
+$('#qlStrip').addEventListener('click', e => { const b = e.target.closest('[data-qk]'); if (b) { qlI = +b.dataset.qk; renderQL(); } });
 async function renderQL() {
   const list = qlList(); const i = list[qlI]; if (!i) return closeQL();
   const gen = ++qlGen;
   if (!sel.has(i.path)) { sel = new Set([i.path]); anchor = focusI = items.indexOf(i); render(); }
   $('#qlName').textContent = i.name;
-  $('#qlMeta').textContent = [typeName(i), bytes(i.size), when(i.mtime), `${qlI + 1} de ${list.length}`].filter(Boolean).join(' · ');
+  $('#qlWhere').textContent = pretty(dirOf(i.path));
+  $('#qlMeta').textContent = `${qlI + 1} de ${list.length} · ← → para passar · Esc fecha`;
   $('#qlPrev').disabled = qlI <= 0; $('#qlNext').disabled = qlI >= list.length - 1;
+  renderStrip();
   const body = $('#qlBody');
   body.innerHTML = '<div class="none">A abrir…</div>';
+  $('#qlKV').innerHTML = ''; renderQLActs(i, null);
   const d = await H.preview(i.path);
   if (gen !== qlGen || !d) return;
   const big = `<span class="ic ${i.kind === 'doc' ? 'doc' : i.kind}">${esc((i.ext || '').toUpperCase().slice(0, 4))}</span>`;
@@ -465,24 +494,70 @@ async function renderQL() {
   else {
     const u = await H.thumb(i.path, 1600);
     if (gen !== qlGen) return;
-    body.innerHTML = u ? `<img src="${esc(u)}" alt="">` : `<div class="none">${big}Sem pré-visualização para este tipo de ficheiro.<br><button class="btn small primary" type="button" id="qlOpen2" style="margin-top:12px">Abrir na app habitual</button></div>`;
-    const o2 = $('#qlOpen2'); if (o2) o2.onclick = () => H.open(i.path);
+    body.innerHTML = u ? `<img src="${esc(u)}" alt="">` : `<div class="none">${big}Sem pré-visualização para este tipo de ficheiro.</div>`;
   }
+  // informações (em baixo)
+  const kv = [['Tipo', typeName(i) + (d.w ? ` · ${d.w}×${d.h}` : '') + (d.pages ? ` · ${d.pages} página${d.pages > 1 ? 's' : ''}` : '')]];
+  if (d.duration) kv.push(['Duração', new Date(d.duration * 1000).toISOString().slice(d.duration >= 3600 ? 11 : 14, 19)]);
+  kv.push(['Tamanho', bytes(d.size)], ['Modificado', when(d.mtime)], ['Criado', when(d.ctime)], ['Onde', esc(pretty(d.where))]);
+  if (d.from) kv.push(['Veio de', `<span title="${esc(d.from)}">${esc(d.from.replace(/^https?:\/\/(www\.)?/, '').split('/')[0])}</span>`]);
+  if ((d.tags || []).length) kv.push(['Etiquetas', d.tags.map(t => `<i class="tg" style="display:inline-block;background:${TAGC[t] || 'var(--muted)'}"></i> ${esc(t)}`).join(' ')]);
+  $('#qlKV').innerHTML = kv.map(([k, v]) => `<div><span>${k}</span>${v}</div>`).join('');
+  // duração pelo ffmpeg quando o Spotlight não a dá
+  if (!d.duration && (i.kind === 'audio' || i.kind === 'video')) H.thumbInfo(i.path, 0, true).then(t => { if (gen !== qlGen || !t || !t.dur) return; const el = document.createElement('div'); el.innerHTML = `<span>Duração</span>${fmtDur(t.dur)}`; const kvb = $('#qlKV'); kvb.insertBefore(el, kvb.children[1] || null); }).catch(() => {});
+  const ck = i.kind === 'doc' && ['pages', 'md'].includes(i.ext) ? '' : i.kind;
+  if (ck && !convOpts[ck]) convOpts[ck] = await H.convertOptions(ck) || [];
+  if (gen === qlGen) renderQLActs(i, ck && (convOpts[ck] || []).length);
 }
+function renderQLActs(i, canConv) {
+  const media = i.kind === 'audio' || i.kind === 'video';
+  const w = loc.type === 'dir' && info.writable;
+  const b = (a, ic, label, cls = '') => `<button type="button" class="qb ${cls}" data-qa="${a}">${QI[ic]}${label}</button>`;
+  $('#qlActs').innerHTML = [
+    b('open', media ? 'play' : 'open', media ? 'Abrir no Player' : 'Abrir', 'primary'),
+    b('share', 'share', 'Partilhar'),
+    media ? b('editor', 'editor', 'Abrir no Editor') : '',
+    canConv ? b('convert', 'conv', 'Converter ▾') : '',
+    b('openWith', 'open', 'Abrir com…'),
+    w ? b('rename', 'rename', 'Mudar o nome') : '',
+    b('reveal', 'finder', 'Mostrar no Finder'),
+    b('copyPath', 'link', 'Copiar caminho'),
+    w ? b('trash', 'trash', 'Apagar', 'danger') : ''
+  ].join('');
+}
+$('#qlActs').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-qa]'); if (!btn) return;
+  const i = qlList()[qlI]; if (!i) return;
+  const a = btn.dataset.qa;
+  if (a === 'open') return H.open(i.path);
+  if (a === 'share') return shareMenu([i.path], btn);
+  if (a === 'editor') { H.openEditor(i.path); return closeQL(); }
+  if (a === 'convert') return action('convertMenu', [i.path], null, btn);
+  if (a === 'openWith') return action('openWith', [i.path]);
+  if (a === 'reveal') return H.reveal(i.path);
+  if (a === 'copyPath') return action('copyPath', [i.path]);
+  if (a === 'rename') { closeQL(); sel = new Set([i.path]); anchor = focusI = items.indexOf(i); renaming = i.path; return render(); }
+  if (a === 'trash') {
+    if (!btn.classList.contains('confirm')) { btn.classList.add('confirm'); btn.innerHTML = `${QI.trash}Clica outra vez para apagar`; setTimeout(() => { if (btn.isConnected) { btn.classList.remove('confirm'); btn.innerHTML = `${QI.trash}Apagar`; } }, 3500); return; }
+    const k = qlI;
+    await H.trash([i.path]); flash(`“${i.name}” foi para o Lixo.`);
+    await load();
+    const n = qlList().length; if (!n) return closeQL();
+    qlI = Math.min(k, n - 1); renderQL();
+  }
+});
 const qlStep = d => { const n = qlList().length; const k = Math.max(0, Math.min(n - 1, qlI + d)); if (k !== qlI) { qlI = k; renderQL(); } };
 $('#qlPrev').addEventListener('click', () => qlStep(-1));
 $('#qlNext').addEventListener('click', () => qlStep(1));
 $('#qlClose').addEventListener('click', closeQL);
-$('#qlOpen').addEventListener('click', () => { const i = qlList()[qlI]; if (i) H.open(i.path); });
-$('#qlReveal').addEventListener('click', () => { const i = qlList()[qlI]; if (i) H.reveal(i.path); });
-$('#qlShare').addEventListener('click', e => { const i = qlList()[qlI]; if (i) shareMenu([i.path], e.currentTarget); });
 document.addEventListener('keydown', e => {
   if ($('#ql').hidden) return;
+  if (!$('#pop').hidden) { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); $('#pop').hidden = true; } return; }   // menu aberto por cima: Esc fecha só o menu
   const inMedia = document.activeElement && /^(VIDEO|AUDIO|IFRAME)$/.test(document.activeElement.tagName);
   if (e.key === 'Escape' || (e.key === ' ' && !inMedia)) { e.preventDefault(); e.stopImmediatePropagation(); closeQL(); }
   else if ((e.key === 'ArrowLeft' || e.key === 'ArrowUp') && !inMedia) { e.preventDefault(); e.stopImmediatePropagation(); qlStep(-1); }
   else if ((e.key === 'ArrowRight' || e.key === 'ArrowDown') && !inMedia) { e.preventDefault(); e.stopImmediatePropagation(); qlStep(1); }
-  else if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); $('#qlOpen').click(); }
+  else if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); const i = qlList()[qlI]; if (i) H.open(i.path); }
   else e.stopImmediatePropagation();
 }, true);
 
@@ -523,7 +598,7 @@ C.addEventListener('mousedown', e => {
   if (hd) { const k = hd.dataset.sort; sort = { key: k, dir: sort.key === k ? -sort.dir : (k === 'mtime' || k === 'size' ? -1 : 1), user: true }; saveSort(); applySort(); render(); return; }
   const k = idxOf(e.target);
   // duplo clique contado à mão: o primeiro clique redesenha a lista e o "dblclick" do sistema perdia-se
-  if (e.button === 0 && e.detail >= 2 && k >= 0 && lastDown.k === k && Date.now() - lastDown.t < 700 && !e.metaKey && !e.shiftKey) { lastDown = { k: -1, t: 0 }; openItem(items[k]); return; }
+  if (e.button === 0 && e.detail >= 2 && k >= 0 && lastDown.k === k && Date.now() - lastDown.t < 700 && !e.metaKey && !e.shiftKey) { lastDown = { k: -1, t: 0 }; const it = items[k]; if (it.dir) openItem(it); else openQL(it.path); return; }
   if (e.button === 0) lastDown = { k, t: Date.now() };
   if (k < 0) { if (e.button === 0) { sel.clear(); anchor = -1; render(); } return; }
   if (e.button === 2 && sel.has(items[k].path)) return;   // clique direito numa seleção: mantém-na

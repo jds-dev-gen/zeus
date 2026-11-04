@@ -382,6 +382,7 @@ function setupHermes(x) {
   });
 
   /* ---------- abrir ---------- */
+  h('openEditor', p => { p = abs(p); if (p && exists(p) && x.openInEditor) { x.openInEditor(p); return true; } return false; });
   h('open', async p => {
     p = abs(p); if (!p) return false;
     const k = kindOf(p);

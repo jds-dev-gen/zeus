@@ -2548,6 +2548,7 @@ function setupIPC() {
     waChats: q => waChats(q),
     getWC: () => hermesWC, getUi: () => ui, getWin: () => win, getView: () => appViews.get('hermes'),
     openInOrfeu: paths => orfeuOpenPaths(paths),
+    openInEditor: p => { if (ecoApp) ecoApp.openFiles([p]); },
     openInNotas: async p => {
       const N = notasApp && notasApp.notas;
       if (N) { await N.scan(); const n = [...N.index.values()].find(i => i.path === p); if (n) { showApp('notas'); const go = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id: n.id }); }; setTimeout(go, notasWC && !notasWC.isLoading() ? 150 : 1500); return; } }
