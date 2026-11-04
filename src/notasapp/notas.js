@@ -320,9 +320,13 @@ function renderMeta() {
   const parts = [`<button class="star ${cur.fav ? 'on' : ''}" type="button" id="star" title="${cur.fav ? 'Tirar das favoritas' : 'Marcar como favorita'}">${cur.fav ? '★' : '☆'}</button>`];
   parts.push(esc(cur.folder || 'Sem pasta'));
   parts.push(`editada ${when(cur.updated || Date.now())}`);
-  $('#meta').innerHTML = parts.join(' · ').replace(' · ', ' ');
+  $('#meta').innerHTML = parts.join(' · ').replace(' · ', ' ') + (needsSummary(doc) ? `<button class="sumbtn" type="button" id="sumBtn" title="${failedSummary(doc) ? 'O resumo não foi feito quando a transcrição acabou' : 'Fazer o resumo da transcrição com o Claude'}">✦ Fazer o resumo</button>` : '');
 }
-$('#meta').addEventListener('click', e => { if (e.target.closest('#star') && cur) setFav(cur.id, !cur.fav); });
+// uma transcrição sem resumo (por exemplo, porque não havia internet): botão para o fazer
+const h2s = box => [...box.querySelectorAll('h2')].map(h => h.textContent.trim().toLowerCase());
+const needsSummary = box => h2s(box).includes('transcrição') && !h2s(box).includes('resumo');
+const failedSummary = box => [...box.querySelectorAll('p')].some(p => /^O resumo não foi feito/.test(p.textContent.trim()));
+$('#meta').addEventListener('click', e => { if (e.target.closest('#star') && cur) setFav(cur.id, !cur.fav); if (e.target.closest('#sumBtn') && cur) summarizeNote(cur.id); });
 function wordCount() { return (doc.innerText.match(/\S+/g) || []).length; }
 function renderStatus() {
   if (!cur) return;
@@ -695,13 +699,31 @@ async function summarizeNote(id) {
   const n = await Z.read(id); if (!n) return;
   const box = document.createElement('div'); box.innerHTML = sanitize(n.html);
   box.querySelectorAll('.ts').forEach(t => { t.textContent = '[' + t.textContent + '] '; });
-  const text = box.innerText.trim();
+  box.querySelectorAll('p').forEach(p => { if (/^O resumo não foi feito/.test(p.textContent.trim())) p.remove(); });
+  document.body.appendChild(box); box.style.cssText = 'position:fixed;left:-9999px;top:0;width:600px';
+  const text = box.innerText.trim(); box.remove();
   if (text.length < 40) return flash('A nota tem pouco texto para resumir.');
   showJobBar({ txt: 'A fazer o resumo com o Claude…', ind: true });
   const r = await Z.summarize(id, text);
   if (!r || !r.ok) { showJobBar({ txt: 'O resumo falhou: ' + ((r && r.error) || 'erro desconhecido') + '.', err: true, close: true }); return; }
-  await appendTo(id, r.html, '');
-  renderJob();
+  await putSummary(id, r.html, r.title || '');
+  renderJob(); renderMeta();
+  flash('Resumo feito.');
+}
+// o resumo vai para antes da transcrição (como quando corre tudo bem) e sai o aviso "O resumo não foi feito"
+async function putSummary(id, html, newTitle) {
+  const place = box => {
+    const add = document.createElement('div'); add.innerHTML = sanitize(html);
+    box.querySelectorAll('p').forEach(p => { if (/^O resumo não foi feito/.test(p.textContent.trim())) p.remove(); });
+    const tr = [...box.querySelectorAll('h2')].find(h => h.textContent.trim().toLowerCase() === 'transcrição');
+    if (tr) tr.before(...add.childNodes); else box.append(...add.childNodes);
+  };
+  const reTitle = t => (newTitle && /^Reunião — /.test(t) ? `${newTitle} — ${t.replace(/^Reunião — /, '').replace(/,.*$/, '')}` : t);
+  if (cur && cur.id === id) { place(doc); titleEl.value = reTitle(titleEl.value); fitTitle(); dirty = true; await save(); return; }
+  const n = await Z.read(id); if (!n) return;
+  const box = document.createElement('div'); box.innerHTML = sanitize(n.html); place(box);
+  await Z.save(id, { html: box.innerHTML, title: reTitle(n.title) }, toBlocks(box));
+  load();
 }
 function flash(msg) { showJobBar({ txt: msg, close: true }); setTimeout(renderJob, 4000); }
 

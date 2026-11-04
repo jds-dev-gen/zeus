@@ -450,11 +450,18 @@ function setupHermes(x) {
   h('chooseFolder', async title => { const r = await dialog.showOpenDialog(x.getWin(), { title: str(title, 80) || 'Escolher pasta', buttonLabel: 'Escolher', properties: ['openDirectory', 'createDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
   h('trash', async paths => {
     const list = (Array.isArray(paths) ? paths : []).map(abs).filter(p => p && writable(p));
-    let n = 0; const dirs = [];
-    for (const p of list) { try { await shell.trashItem(p); n++; dirs.push(path.dirname(p)); } catch (e) { /* ok */ } }
+    let n = 0, cloud = 0; const dirs = [], fails = [];
+    // Google Drive (e outras clouds do Mac): o Lixo do Mac às vezes recusa; aí apaga-se no próprio Drive (fica no Lixo do Drive 30 dias)
+    const isCloud = p => /\/Library\/CloudStorage\//.test(p) || /^\/Volumes\/GoogleDrive/.test(p) || /\/(My Drive|O meu disco|Meu Drive|Shared drives|Drives partilhados)(\/|$)/.test(p);
+    for (const p of list) {
+      try { await shell.trashItem(p); n++; dirs.push(path.dirname(p)); continue; } catch (e) { if (!isCloud(p)) { fails.push(`${path.basename(p)} (${String(e.message || e).replace(/^Error:\s*/, '').slice(0, 80)})`); continue; } }
+      try { await fsp.rm(p, { recursive: true, force: false }); n++; cloud++; dirs.push(path.dirname(p)); }
+      catch (e) { fails.push(`${path.basename(p)} (${e.code === 'EACCES' || e.code === 'EPERM' ? 'sem autorização' : String(e.message || e).slice(0, 80)})`); }
+    }
     changed(dirs);
-    if (n) toast(n === 1 ? 'Foi para o Lixo.' : `${n} itens foram para o Lixo.`);
-    return { count: n };
+    if (n) toast(cloud ? (cloud === n ? `${n === 1 ? 'Foi apagado' : n + ' itens foram apagados'} no Google Drive (ficam no Lixo do Drive durante 30 dias).` : `${n} itens apagados (os do Google Drive ficam no Lixo do Drive).`) : (n === 1 ? 'Foi para o Lixo.' : `${n} itens foram para o Lixo.`));
+    if (fails.length) toast('Não foi possível apagar: ' + fails.slice(0, 3).join(', ') + (fails.length > 3 ? '…' : ''));
+    return { count: n, fails };
   });
   h('compress', async paths => {
     const list = (Array.isArray(paths) ? paths : []).map(abs).filter(Boolean); if (!list.length) return null;

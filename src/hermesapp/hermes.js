@@ -540,7 +540,7 @@ $('#qlActs').addEventListener('click', async e => {
   if (a === 'trash') {
     if (!btn.classList.contains('confirm')) { btn.classList.add('confirm'); btn.innerHTML = `${QI.trash}Clica outra vez para apagar`; setTimeout(() => { if (btn.isConnected) { btn.classList.remove('confirm'); btn.innerHTML = `${QI.trash}Apagar`; } }, 3500); return; }
     const k = qlI;
-    await H.trash([i.path]); flash(`“${i.name}” foi para o Lixo.`);
+    const tr = await H.trash([i.path]); if (!tr || !tr.count) return;
     await load();
     const n = qlList().length; if (!n) return closeQL();
     qlI = Math.min(k, n - 1); renderQL();
@@ -590,7 +590,7 @@ C.addEventListener('mousedown', e => {
     setTimeout(() => { if (b.isConnected) { b.classList.remove('confirm'); b.innerHTML = RA_IC.trash; b.closest('.ra').classList.remove('show'); } }, 3500);
     return;
   }
-  action('trash', [it.path]).then(() => flash(`“${it.name}” foi para o Lixo.`));
+  action('trash', [it.path]);
 }, true);
 C.addEventListener('mousedown', e => {
   if (e.target.closest('[data-ren]')) return;
@@ -683,7 +683,7 @@ async function action(a, paths, arg, anchorEl) {
     case 'trashAsk': {
       if (!anchorEl || !anchorEl.classList.contains('confirm')) { if (anchorEl) { anchorEl.classList.add('confirm'); anchorEl.textContent = 'Clica outra vez para mover para o Lixo'; setTimeout(() => { if (anchorEl.isConnected) { anchorEl.classList.remove('confirm'); anchorEl.textContent = 'Apagar'; } }, 3500); } return; }
       const n = paths.length === 1 ? `“${base(paths[0])}”` : `${paths.length} itens`;
-      await H.trash(paths); sel.clear(); await load(); flash(`${n} foi para o Lixo.`); return;
+      await H.trash(paths); sel.clear(); await load(); return;
     }
     case 'trash': if (paths.length) { await H.trash(paths); sel.clear(); return load(); } return;
     case 'tag': await H.setTag(paths, arg, !(items.find(i => i.path === paths[0]) || {}).tags || !(items.find(i => i.path === paths[0]).tags || []).includes(arg)); return load();

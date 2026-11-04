@@ -285,7 +285,7 @@ function setupNotas(x) {
         if (j.stage === 'resumir') {
           let sum = null, err = '';
           if (getKey() && (j.transcript || []).length) {
-            try { sum = await claudeSummary(segsToText(j.transcript)); } catch (e) { err = e.message || String(e); }
+            try { sum = await claudeSummary(segsToText(j.transcript)); } catch (e) { err = netErr(e); }
           }
           j.html = (sum ? summaryHtml(sum) : '') + transcriptHtml(j.transcript || [], err);
           j.title = sum && sum.titulo ? sum.titulo : '';
@@ -398,6 +398,7 @@ function setupNotas(x) {
     if (!m) throw new Error('resposta sem resumo');
     return JSON.parse(m[0]);
   }
+  const netErr = e => { const m = String((e && e.message) || e || ''); return /INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|NETWORK_CHANGED|net::ERR_/i.test(m) ? 'não havia ligação à internet' : m; };
   h('hasKey', () => !!getKey());
   h('setKey', async k => {
     k = str(k, 300).trim();
@@ -408,7 +409,7 @@ function setupNotas(x) {
   });
   h('summarize', async (id, text) => {
     try { const s = await claudeSummary(str(text, 200000)); return { ok: true, html: summaryHtml(s), title: s.titulo || '' }; }
-    catch (e) { return { ok: false, error: e.message || String(e) }; }
+    catch (e) { return { ok: false, error: netErr(e) }; }
   });
 
   // ao sair do Zeus a meio de uma gravação: guarda o que já foi gravado e transcreve-o na próxima vez
