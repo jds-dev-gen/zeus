@@ -1094,10 +1094,16 @@ function homeFeedRemove(id) {
 /* Espaço escolhido na barra da direita (clique no título do espaço): a casinha e o separador novo abrem nesse espaço */
 let pickSpace = null;
 function takePick() { const p = pickSpace && S.spaces.some(x => x.id === pickSpace) ? pickSpace : null; if (pickSpace) { pickSpace = null; pushState(); } return p; }
+// espaço "Recentes": o que se abre a partir da casinha fica aí (depois arrasta-se para outro espaço, se se quiser)
+function recentSpace() {
+  let s = S.spaces.find(x => x.id === 'rec') || S.spaces.find(x => /^recentes$/i.test(String(x.name).trim()));
+  if (!s) { s = { id: 'rec', name: 'Recentes' }; S.spaces.unshift(s); saveState(); }
+  return s.id;
+}
 function goHome() {
   const t = cur();
   const picked = takePick();
-  const space = picked || (t ? t.space : S.spaces[0].id);
+  const space = picked || recentSpace();
   if (!(t && t.url === NEWTAB && !fullApp && t.space === space)) {
     const blank = S.tabs.find(x => x.url === NEWTAB && x.space === space);
     if (blank) { toTop(blank); openTab(blank.id); } else newTab({ space });

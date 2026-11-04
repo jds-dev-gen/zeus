@@ -44,6 +44,11 @@ const EXTNAME = { doc: 'Word', docx: 'Word', pages: 'Pages', txt: 'Texto', md: '
 const typeName = i => (i.dir ? 'Pasta' : EXTNAME[i.ext] || KNAME[i.kind] || (i.ext ? i.ext.toUpperCase() : 'Ficheiro'));
 const FOLDER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const icon = (i, big) => i.dir ? `<span class="ic folder">${big ? FOLDER.replace(/20/g, '64') : FOLDER}</span>` : `<span class="ic ${i.kind === 'doc' ? 'doc' : i.kind}">${esc((i.ext || '').slice(0, 4).toUpperCase() || '·')}</span>`;
+const RA_IC = {
+  rename: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+  trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>'
+};
+const rowActs = i => (loc && loc.type === 'dir' && info.writable && renaming !== i.path ? `<span class="ra"><button type="button" data-ra="rename" title="Mudar o nome (Enter)" aria-label="Mudar o nome">${RA_IC.rename}</button><button type="button" data-ra="trash" title="Mover para o Lixo (⌘⌫)" aria-label="Mover para o Lixo">${RA_IC.trash}</button></span>` : '');
 const tagDots = i => (i.tags || []).filter(t => TAGC[t]).length ? `<span class="tgs">${i.tags.filter(t => TAGC[t]).map(t => `<i class="tg" style="background:${TAGC[t]}" title="${esc(t)}"></i>`).join('')}</span>` : '';
 const pretty = p => { const h = P.home; let s = p; for (const c of P.cloud) if (p.startsWith(c.path)) s = c.name + p.slice(c.path.length); if (s === p && h && p.startsWith(h)) s = '~' + p.slice(h.length); return s.split('/').filter(Boolean).join(' › '); };
 
@@ -195,7 +200,7 @@ function renderList() {
     items.slice(0, 3000).map((i, k) => {
       const nm = renaming === i.path ? `<input data-ren="${esc(i.path)}" value="${esc(i.name)}">` : `<span class="t">${esc(i.name)}</span>`;
       const row = `<div class="row ${w ? 'wide' : ''} ${w ? '' : sel.has(i.path) ? 'sel' : ''} ${clip && clip.cut && clip.paths.includes(i.path) ? 'cut' : ''}" data-i="${k}" ${i.dir ? `data-drop="${esc(i.path)}"` : ''} draggable="true">
-        <span class="n">${canThumb(i) ? `<span class="lt" data-thumb="${esc(i.path)}" data-ts="64">${icon(i)}</span>` : icon(i)}${nm}${tagDots(i)}</span>${w ? `<span class="sub" title="${esc(dirOf(i.path))}">${esc(pretty(dirOf(i.path)))}</span>` : ''}<span>${when(i.mtime)}</span><span class="num">${sizeCell(i)}</span>${w ? '' : `<span class="sub">${esc(typeName(i))}</span>`}</div>`;
+        <span class="n">${canThumb(i) ? `<span class="lt" data-thumb="${esc(i.path)}" data-ts="64">${icon(i)}</span>` : icon(i)}${nm}${tagDots(i)}${rowActs(i)}</span>${w ? `<span class="sub" title="${esc(dirOf(i.path))}">${esc(pretty(dirOf(i.path)))}</span>` : ''}<span>${when(i.mtime)}</span><span class="num">${sizeCell(i)}</span>${w ? '' : `<span class="sub">${esc(typeName(i))}</span>`}</div>`;
       return w ? `<div class="rowwrap ${sel.has(i.path) ? 'sel' : ''}" data-wrap="${k}">${row}${i.snip ? `<div class="snip">${hl(i.snip, loc.q)}</div>` : ''}</div>` : row;
     }).join('');
   observeThumbs();
@@ -210,7 +215,7 @@ function renderGrid() {
   const z = ZS[zsize];
   $('#content').innerHTML = `<div class="grid" style="--cw:${z.w}px;--ih:${z.h}px">${items.slice(0, 2000).map((i, k) => {
     const media = i.kind === 'video' || i.kind === 'audio';
-    return `<div class="cell ${sel.has(i.path) ? 'sel' : ''} ${clip && clip.cut && clip.paths.includes(i.path) ? 'cut' : ''}" data-i="${k}" ${i.dir ? `data-drop="${esc(i.path)}"` : ''} draggable="true" title="${esc(i.name)}">
+    return `<div class="cell ${sel.has(i.path) ? 'sel' : ''} ${clip && clip.cut && clip.paths.includes(i.path) ? 'cut' : ''}" data-i="${k}" ${i.dir ? `data-drop="${esc(i.path)}"` : ''} draggable="true" title="${esc(i.name)}">${rowActs(i)}
     <div class="im ${canThumb(i) ? 'th' : ''} k-${esc(i.kind || '')}" ${canThumb(i) || media ? `data-thumb="${esc(i.path)}" data-ts="${canThumb(i) ? z.q : 0}" ${media ? 'data-dur="1"' : ''}` : ''}>${icon(i, true)}${i.kind === 'video' ? `<i class="badge">${PLAY}<b></b></i>` : i.kind === 'audio' ? '<i class="badge"><b></b></i>' : ''}</div>
     <div class="nm">${renaming === i.path ? `<input data-ren="${esc(i.path)}" value="${esc(i.name)}">` : esc(i.name)}</div>${tagDots(i)}<small>${i.dir ? sizeCell(i) : bytes(i.size)}${!i.dir && zsize > 0 ? ' · ' + when(i.mtime) : ''}</small></div>`;
   }).join('')}</div>`;
@@ -346,7 +351,7 @@ async function renderPreview() {
   if (gen !== pvGen) return;
   const fit = d.kind === 'image' || d.kind === 'video' || (d.text == null && !!d.ql && d.kind !== 'audio');
   el.innerHTML = `<div class="pv ${fit ? 'fit' : ''}">${pv}</div><h3>${esc(i.name)}</h3><div class="kv">${kv.map(([k, v]) => `<span>${k}</span><div>${v}</div>`).join('')}</div>
-    <div class="acts">${i.dir ? '<button class="btn small primary" type="button" data-a="open">Abrir</button>' : '<button class="btn small primary" type="button" data-a="quickLook" title="Ver dentro do Zeus (espaço)">Ver</button><button class="btn small" type="button" data-a="open">Abrir</button><button class="btn small" type="button" data-a="shareMenu">Partilhar ▾</button><button class="btn small" type="button" data-a="openWith">Abrir com…</button>'}<button class="btn small" type="button" data-a="reveal">Mostrar no Finder</button><button class="btn small" type="button" data-a="copyPath">Copiar caminho</button>${ck && (convOpts[ck] || []).length ? '<button class="btn small" type="button" data-a="convertMenu">Converter ▾</button>' : ''}${i.dir ? '<button class="btn small" type="button" data-a="space">Ver o espaço</button>' : ''}</div>
+    <div class="acts">${i.dir ? '<button class="btn small primary" type="button" data-a="open">Abrir</button>' : '<button class="btn small primary" type="button" data-a="quickLook" title="Ver dentro do Zeus (espaço)">Ver</button><button class="btn small" type="button" data-a="open">Abrir</button><button class="btn small" type="button" data-a="shareMenu">Partilhar ▾</button><button class="btn small" type="button" data-a="openWith">Abrir com…</button>'}<button class="btn small" type="button" data-a="reveal">Mostrar no Finder</button>${loc.type === 'dir' && info.writable ? '<button class="btn small" type="button" data-a="rename">Mudar o nome</button><button class="btn small danger" type="button" data-a="trashAsk">Apagar</button>' : ''}<button class="btn small" type="button" data-a="copyPath">Copiar caminho</button>${ck && (convOpts[ck] || []).length ? '<button class="btn small" type="button" data-a="convertMenu">Converter ▾</button>' : ''}${i.dir ? '<button class="btn small" type="button" data-a="space">Ver o espaço</button>' : ''}</div>
     <div class="hint">Arrasta ${i.dir ? 'esta pasta' : 'este ficheiro'} para o Gmail, WhatsApp ou Notion para ${i.dir ? 'a' : 'o'} anexar${['audio', 'video'].includes(i.kind) ? ' · abre no Player' : ''}.</div>`;
   if (i.dir && sizes[i.path] == null) H.folderSize(i.path).then(sz => { if (sz != null) { sizes[i.path] = sz; const e2 = $('#pvSize'); if (e2) e2.textContent = bytes(sz); } });
 }
@@ -497,6 +502,21 @@ function selectIndex(k, e) {
 }
 function selectPaths(paths) { sel = new Set(paths.filter(p => items.some(i => i.path === p))); const k = items.findIndex(i => sel.has(i.path)); anchor = focusI = k; render(); const el = document.querySelector(`[data-i="${k}"]`); if (el) el.scrollIntoView({ block: 'nearest' }); }
 const C = $('#content');
+// botões ao passar o rato: mudar o nome e apagar (duas vezes, para não apagar sem querer)
+C.addEventListener('mousedown', e => {
+  const b = e.target.closest('[data-ra]'); if (!b) return;
+  e.stopPropagation(); e.preventDefault();
+  const k = idxOf(b); if (k < 0) return;
+  const it = items[k];
+  if (b.dataset.ra === 'rename') { sel = new Set([it.path]); anchor = focusI = k; renaming = it.path; render(); return; }
+  if (!b.classList.contains('confirm')) {
+    b.classList.add('confirm'); b.innerHTML = `${RA_IC.trash}<span>Apagar?</span>`; b.title = 'Clica outra vez para mover para o Lixo';
+    b.closest('.ra').classList.add('show');
+    setTimeout(() => { if (b.isConnected) { b.classList.remove('confirm'); b.innerHTML = RA_IC.trash; b.closest('.ra').classList.remove('show'); } }, 3500);
+    return;
+  }
+  action('trash', [it.path]).then(() => flash(`“${it.name}” foi para o Lixo.`));
+}, true);
 C.addEventListener('mousedown', e => {
   if (e.target.closest('[data-ren]')) return;
   const hd = e.target.closest('[data-sort]');
@@ -585,6 +605,11 @@ async function action(a, paths, arg, anchorEl) {
     case 'moveTo': case 'copyTo': { const d = await H.chooseFolder(a === 'moveTo' ? 'Mover para' : 'Copiar para'); if (!d) return; const r = await (a === 'moveTo' ? H.move(paths, d) : H.copy(paths, d)); if (r && r.error) flash(r.error); else flash(`${(r.paths || []).length} ${a === 'moveTo' ? 'movido' : 'copiado'}${(r.paths || []).length === 1 ? '' : 's'} para ${base(d)}.`); return load(); }
     case 'compress': { busy('A comprimir…'); const r = await H.compress(paths); busy(''); if (r && r.error) flash(r.error); await load(); if (r && r.path) selectPaths([r.path]); return; }
     case 'unzip': { busy('A descomprimir…'); const r = await H.unzip(one); busy(''); if (r && r.error) flash(r.error); await load(); if (r && r.path) selectPaths([r.path]); return; }
+    case 'trashAsk': {
+      if (!anchorEl || !anchorEl.classList.contains('confirm')) { if (anchorEl) { anchorEl.classList.add('confirm'); anchorEl.textContent = 'Clica outra vez para mover para o Lixo'; setTimeout(() => { if (anchorEl.isConnected) { anchorEl.classList.remove('confirm'); anchorEl.textContent = 'Apagar'; } }, 3500); } return; }
+      const n = paths.length === 1 ? `“${base(paths[0])}”` : `${paths.length} itens`;
+      await H.trash(paths); sel.clear(); await load(); flash(`${n} foi para o Lixo.`); return;
+    }
     case 'trash': if (paths.length) { await H.trash(paths); sel.clear(); return load(); } return;
     case 'tag': await H.setTag(paths, arg, !(items.find(i => i.path === paths[0]) || {}).tags || !(items.find(i => i.path === paths[0]).tags || []).includes(arg)); return load();
     case 'pin': P = await H.pin(one); return renderSide();
@@ -664,8 +689,15 @@ C.addEventListener('dragstart', e => {
 const dropTarget = el => { const d = el && el.closest && el.closest('[data-drop]'); return d ? d.dataset.drop : null; };
 let overEl = null;
 const clearOver = () => { if (overEl) overEl.classList.remove('drop'); overEl = null; C.classList.remove('drop'); };
+function dragScroll(e) {
+  const r = C.getBoundingClientRect(), edge = 70;
+  if (e.clientX < r.left || e.clientX > r.right) return;
+  const v = e.clientY > r.bottom - edge ? (e.clientY - (r.bottom - edge)) / edge : e.clientY < r.top + edge ? -((r.top + edge) - e.clientY) / edge : 0;
+  if (v) C.scrollTop += Math.round(Math.sign(v) * (6 + 30 * Math.min(1, Math.abs(v))));
+}
 document.addEventListener('dragover', e => {
   if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+  dragScroll(e);
   const t = dropTarget(e.target);
   const inContent = e.target.closest && e.target.closest('#content');
   if (!t && !(inContent && loc.type === 'dir' && info.writable)) return;
