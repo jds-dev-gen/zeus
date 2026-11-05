@@ -428,9 +428,10 @@ function setupHermes(x) {
   async function transfer(paths, dest, copy) {
     dest = abs(dest);
     if (!dest || !writable(dest)) return { error: 'Não é possível pôr ficheiros nesta pasta.' };
-    const out = [], touched = [dest];
+    const out = [], touched = [dest], fails = [];
     for (const p0 of (Array.isArray(paths) ? paths : []).slice(0, 2000)) {
-      const p = abs(p0); if (!p || !exists(p)) continue;
+      let p = abs(p0); if (!p) continue;
+      if (!exists(p)) { const alt = [p.normalize('NFC'), p.normalize('NFD')].find(exists); if (!alt) { fails.push(`${path.basename(p)} já não existe`); continue; } p = alt; }
       if (!copy && !writable(p)) continue;
       if (dest === p || dest.startsWith(p + path.sep)) continue;           // pasta para dentro de si mesma
       if (!copy && path.dirname(p) === dest) continue;
@@ -439,10 +440,10 @@ function setupHermes(x) {
         if (copy) await fsp.cp(p, dst, { recursive: true, preserveTimestamps: true, errorOnExist: true });
         else { try { await fsp.rename(p, dst); } catch (e) { if (e.code !== 'EXDEV') throw e; await fsp.cp(p, dst, { recursive: true, preserveTimestamps: true }); await fsp.rm(p, { recursive: true, force: true }); } }
         out.push(dst); touched.push(path.dirname(p));
-      } catch (e) { /* passa ao seguinte */ }
+      } catch (e) { fails.push(`${path.basename(p)} (${e.code === 'EACCES' || e.code === 'EPERM' ? 'sem autorização' : String(e.message || e).slice(0, 80)})`); }
     }
     changed(touched);
-    return { paths: out };
+    return { paths: out, fails };
   }
   h('move', (paths, dest) => transfer(paths, dest, false));
   h('copy', (paths, dest) => transfer(paths, dest, true));

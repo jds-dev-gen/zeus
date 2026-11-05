@@ -756,11 +756,11 @@ C.addEventListener('dragstart', e => {
   const k = idxOf(e.target); if (k < 0) return;
   e.preventDefault();
   if (!sel.has(items[k].path)) selectIndex(k);
-  dragging = selected().map(i => i.path);
+  dragging = selected().map(i => i.path); dragAt = Date.now();
   H.drag(dragging);
-  setTimeout(() => { dragging = null; }, 60000);
 });
 // para dentro: ficheiros de fora (Finder) são copiados; de dentro do Hermes são movidos (⌥ copia)
+let dragAt = 0;
 const dropTarget = el => { const d = el && el.closest && el.closest('[data-drop]'); return d ? d.dataset.drop : null; };
 let overEl = null;
 const clearOver = () => { if (overEl) overEl.classList.remove('drop'); overEl = null; C.classList.remove('drop'); };
@@ -770,8 +770,10 @@ function dragScroll(e) {
   const v = e.clientY > r.bottom - edge ? (e.clientY - (r.bottom - edge)) / edge : e.clientY < r.top + edge ? -((r.top + edge) - e.clientY) / edge : 0;
   if (v) C.scrollTop += Math.round(Math.sign(v) * (6 + 30 * Math.min(1, Math.abs(v))));
 }
+// um arrasto que começou aqui dentro (mesmo que o Mac não diga que leva "ficheiros", como nas pastas do Google Drive)
+const internalDrag = () => !!dragging && Date.now() - dragAt < 120000;
 document.addEventListener('dragover', e => {
-  if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+  if (!e.dataTransfer || (![...e.dataTransfer.types].includes('Files') && !internalDrag())) return;
   dragScroll(e);
   const t = dropTarget(e.target);
   const inContent = e.target.closest && e.target.closest('#content');
@@ -787,13 +789,21 @@ document.addEventListener('drop', async e => {
   const t = dropTarget(e.target) || (e.target.closest && e.target.closest('#content') && loc.type === 'dir' ? loc.path : null);
   clearOver();
   if (!t) return;
-  const paths = [...(e.dataTransfer.files || [])].map(f => H.pathFor(f)).filter(Boolean);
-  if (!paths.length) return;
-  const move = !!dragging && !e.altKey && paths.every(p => dragging.includes(p));
+  const ext = [...(e.dataTransfer.files || [])].map(f => H.pathFor(f)).filter(Boolean);
+  // arrasto que começou no Disco: usam-se os caminhos que se agarraram (o Mac pode entregar os nomes noutra forma
+  // de acentos, ou nem os entregar nas pastas do Google Drive); de fora (Finder) copia-se o que vier
+  const nfc = p => String(p).normalize('NFC');
+  const mine = internalDrag() && (!ext.length || ext.every(p => dragging.some(d => nfc(d) === nfc(p) || base(nfc(d)) === base(nfc(p)))));
+  const paths = mine ? dragging.slice() : ext;
   dragging = null;
-  if (paths.every(p => dirOf(p) === t) && move) return;
+  if (!paths.length) return;
+  const move = mine && !e.altKey;
+  if (move && paths.every(p => nfc(dirOf(p)) === nfc(t))) return;
   const r = await (move ? H.move(paths, t) : H.copy(paths, t));
-  if (r && r.error) flash(r.error); else flash(`${(r.paths || []).length} ${move ? 'movido' : 'copiado'}${(r.paths || []).length === 1 ? '' : 's'} para ${base(t)}.`);
+  const n = (r && r.paths || []).length;
+  if (r && r.error) flash(r.error);
+  else if (!n) flash(`Não foi possível ${move ? 'mover' : 'copiar'} para ${base(t)}${r && r.fails && r.fails.length ? ': ' + r.fails[0] : '.'}`);
+  else flash(`${n} ${move ? 'movido' : 'copiado'}${n === 1 ? '' : 's'} para ${base(t)}.${r.fails && r.fails.length ? ` (${r.fails.length} não deu)` : ''}`);
   await load();
 });
 
