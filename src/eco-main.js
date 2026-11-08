@@ -57,7 +57,9 @@ function setupEco(x) {
         clips: (Array.isArray(t.clips) ? t.clips : []).slice(0, 5000).filter(c => c && out.sources[c.src]).map(c => ({
           id: str(c.id, 40) || newId(), src: str(c.src, 40), in: num(c.in, 0, 0), out: num(c.out, 0, 0), at: num(c.at, 0, 0), gain: num(c.gain, 1, 0, 8),
           ramp: Array.isArray(c.ramp) ? [num(c.ramp[0], 1, 0, 8), num(c.ramp[1], 1, 0, 8)] : [1, 1]
-        })).filter(c => c.out - c.in > 0.001) });
+        })).filter(c => c.out - c.in > 0.001),
+        // pontos de volume (key frames) da pista: [{ t: segundos, g: 0–1,5 }]
+        env: (Array.isArray(t.env) ? t.env : []).slice(0, 500).map(k => ({ t: num(k && k.t, 0, 0), g: num(k && k.g, 1, 0, 1.5) })).sort((a, b) => a.t - b.t) });
     }
     const s = p.settings || {};
     out.settings = { denoise: !!s.denoise, denoiseAmount: num(s.denoiseAmount, 0.5, 0, 1), pauses: num(s.pauses, 1.5, 0.4, 5), loudness: ['podcast', 'radio', 'off'].includes(s.loudness) ? s.loudness : 'podcast' };
@@ -204,6 +206,17 @@ function setupEco(x) {
       if (!labs.length) continue;
       const mix = labs.length === 1 ? `${labs[0]}anull` : `${labs.join('')}amix=inputs=${labs.length}:normalize=0:dropout_transition=0`;
       let fx = `,volume=${t.gain.toFixed(3)}`;
+      // pontos de volume: linha que liga os pontos (antes do primeiro e depois do último fica igual)
+      if (t.env && t.env.length) {
+        const k = t.env.map(e => ({ t: Math.max(0, e.t - w0), g: e.g }));
+        let ex = k[k.length - 1].g.toFixed(4);
+        for (let i = k.length - 1; i >= 1; i--) {
+          const a = k[i - 1], b = k[i], span = Math.max(0.001, b.t - a.t);
+          ex = `if(lt(t\\,${b.t.toFixed(4)})\\,${a.g.toFixed(4)}+(${(b.g - a.g).toFixed(4)})*(t-${a.t.toFixed(4)})/${span.toFixed(4)}\\,${ex})`;
+        }
+        ex = `if(lt(t\\,${k[0].t.toFixed(4)})\\,${k[0].g.toFixed(4)}\\,${ex})`;
+        fx += `,volume='${ex}':eval=frame`;
+      }
       if (t.kind === 'voice' && o.denoise) fx += `,afftdn=nr=${Math.round(6 + o.denoiseAmount * 24)}:nf=-30:tn=1,highpass=f=70`;
       chains.push(`${mix}${fx}[t_${t.id}]`);
       trackOut[t.id] = `[t_${t.id}]`;

@@ -385,7 +385,7 @@ async function shareMenu(paths, anchorEl) {
   const pop = $('#pop');
   const one = paths.length === 1, nm = one ? base(paths[0]) : `${paths.length} ficheiros`;
   const tiles = [];
-  if (targets.wa) tiles.push(['wa', 'WhatsApp', 'Escolher a conversa']);
+  if (targets.wa) tiles.push(['wa', 'WhatsApp', 'Abre o WhatsApp']);
   if (targets.mail) tiles.push(['mail', 'Gmail', 'Mensagem nova']);
   if (targets.sheet) tiles.push(['sheet', 'Mais…', 'Mail, AirDrop, Mensagens']);
   tiles.push(['copy', one ? 'Copiar o ficheiro' : 'Copiar os ficheiros', 'Para colar com ⌘V'], ['path', 'Copiar o caminho', 'Onde está no Mac']);
@@ -426,7 +426,7 @@ async function shareMenu(paths, anchorEl) {
     const b = e.target.closest('[data-sh]'); if (!b) return;
     const k = b.dataset.sh;
     if (k === 'home') return home();
-    if (k === 'wa') return wa();
+    if (k === 'wa') { pop.hidden = true; flash('A abrir o WhatsApp: escolhe lá a conversa e confirma em baixo.'); return H.share(paths, 'wa'); }
     pop.hidden = true;
     if (k === 'waPick') return H.share(paths, 'wa');
     if (k === 'sheet') { const r = anchorEl ? anchorEl.getBoundingClientRect() : { left: 300, bottom: 300 }; return H.share(paths, 'sheet', { x: r.left, y: r.bottom + 4 }); }

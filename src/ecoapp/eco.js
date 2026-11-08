@@ -37,6 +37,17 @@ const T = id => P && P.tracks.find(t => t.id === id);
 const projEnd = () => (P ? Math.max(0, ...P.tracks.map(t => Math.max(0, ...t.clips.map(end)))) : 0);
 const sortT = t => t.clips.sort((a, b) => a.at - b.at);
 function rampAt(c, t) { const r = c.ramp || [1, 1]; return r[0] + (r[1] - r[0]) * Math.min(1, Math.max(0, (t - c.at) / len(c))); }
+// pontos de volume (key frames) na Música e nos Efeitos
+const ENV_MAX = 1.5;
+function envAt(t, time) {
+  const k = t.env || []; if (!k.length) return 1;
+  if (time <= k[0].t) return k[0].g;
+  for (let i = 1; i < k.length; i++) if (time < k[i].t) { const a = k[i - 1], b = k[i]; return a.g + (b.g - a.g) * (time - a.t) / Math.max(0.001, b.t - a.t); }
+  return k[k.length - 1].g;
+}
+const envTop = 22, envPad = 8;
+const envY = (g, H) => envTop + (1 - g / ENV_MAX) * (H - envTop - envPad);
+const envG = (y, H) => Math.max(0, Math.min(ENV_MAX, (1 - (y - envTop) / (H - envTop - envPad)) * ENV_MAX));
 function splitAt(t, time) {
   const out = [];
   for (const c of t.clips) {
@@ -239,12 +250,25 @@ function drawLane(t) {
       const ta = xt(px), tb = xt(px + step);
       let v = 0.04;
       if (pk) { const s0 = c.in + (ta - c.at), s1 = c.in + (tb - c.at); let i0 = Math.max(0, Math.floor(s0 * PPS_PEAKS)), i1 = Math.min(pk.length, Math.max(i0 + 1, Math.ceil(s1 * PPS_PEAKS))); let m = 0; for (let i = i0; i < i1; i++) if (pk[i] > m) m = pk[i]; v = Math.max(0.02, m / 255); }
-      v *= Math.min(2, c.gain * rampAt(c, (ta + tb) / 2));
+      v *= Math.min(2, c.gain * rampAt(c, (ta + tb) / 2) * envAt(t, (ta + tb) / 2));
       const bh = Math.max(1, Math.min(1, v) * amp * 2);
       g.fillRect(px, mid - bh / 2, step === 1 ? 1 : 2, bh);
     }
   }
   g.globalAlpha = 1;
+  // limites entre pedaços (onde se dividiu com a serra)
+  g.fillStyle = css('--faint');
+  for (let i = 1; i < t.clips.length; i++) { const a = t.clips[i - 1], b = t.clips[i]; if (Math.abs(end(a) - b.at) < 0.01) { const x = tx(b.at); if (x > -2 && x < W + 2) g.fillRect(x - 0.5, t.kind === 'voice' ? 0 : 4, 1, t.kind === 'voice' ? H : H - 8); } }
+  // linha do volume (Música e Efeitos): clicar na linha cria um ponto; arrastar os pontos sobe ou desce o volume
+  if (t.kind !== 'voice' && t.clips.length) {
+    const k = t.env || [];
+    g.strokeStyle = css(TRACK_INFO[t.id].color); g.lineWidth = 1.5; g.globalAlpha = k.length ? 0.95 : 0.35;
+    g.beginPath();
+    for (let px = 0; px <= W; px += 3) { const y = envY(envAt(t, xt(px)), H); if (px === 0) g.moveTo(px, y); else g.lineTo(px, y); }
+    g.stroke(); g.globalAlpha = 1;
+    for (const p of k) { const x = tx(p.t); if (x < -6 || x > W + 6) continue; const y = envY(p.g, H); g.fillStyle = css('--bg'); g.beginPath(); g.arc(x, y, 4.5, 0, 7); g.fill(); g.strokeStyle = css(TRACK_INFO[t.id].color); g.lineWidth = 2; g.stroke(); }
+    if (!k.length) { g.fillStyle = css('--faint'); g.font = '10.5px Geist, sans-serif'; g.textAlign = 'right'; g.fillText('volume — clica na linha para pôr um ponto', W - 8, envY(1, H) - 5); g.textAlign = 'left'; }
+  }
   // cortes na voz: onde dois pedaços se juntam
   if (t.kind === 'voice') {
     g.strokeStyle = css('--faint'); g.setLineDash([4, 4]); g.lineWidth = 1.5;
@@ -354,6 +378,34 @@ new ResizeObserver(() => { if (P) { clampView(); drawAll(); } }).observe($('#tl'
 
 /* ---------- rato na linha do tempo ---------- */
 let drag = null;
+let saw = false;   // ferramenta "serra": um clique divide o pedaço nesse ponto
+function hitTest(t, x, y, H) {
+  const time = xt(x);
+  if (saw) { const c = t.clips.find(c => time > c.at && time < end(c)); return c ? { kind: 'saw', c, time } : { kind: 'none', time }; }
+  if (t.kind !== 'voice' && t.clips.length) {
+    const k = t.env || [];
+    const pi = k.findIndex(p => Math.hypot(tx(p.t) - x, envY(p.g, H) - y) < 8);
+    if (pi > -1) return { kind: 'envpt', i: pi, time };
+    if (Math.abs(envY(envAt(t, time), H) - y) < 6) return { kind: 'envline', time };
+  }
+  const edge = 6;
+  // numa junção entre dois pedaços, conta o lado do ponteiro: à esquerda é o fim do primeiro, à direita o início do segundo
+  let best = null;
+  for (const c of t.clips) {
+    const x0 = tx(c.at), x1 = tx(end(c)); if (x1 - x0 <= 14) continue;
+    for (const [side, ex] of [['l', x0], ['r', x1]]) {
+      const d = Math.abs(x - ex); if (d > edge) continue;
+      const inner = side === 'l' ? x >= ex : x <= ex;
+      const score = d - (inner ? 100 : 0);
+      if (!best || score < best.score) best = { score, side, c };
+    }
+  }
+  if (best) return { kind: 'edge', side: best.side, c: best.c, time };
+  const pad = 6 / view.pps;
+  const c = [...t.clips].reverse().find(c => time >= c.at - pad && time <= end(c) + pad);
+  return c ? { kind: 'clip', c, time } : { kind: 'none', time };
+}
+const srcDur = c => (P.sources[c.src] || {}).dur || (c.out + 3600);
 $('#lanes').addEventListener('mousedown', async e => {
   const add = e.target.closest('[data-addto]');
   if (add) { e.preventDefault(); const srcs = await E.chooseFiles() || []; if (!srcs.length) return; srcs.forEach(s => { P.sources[s.id] = s; }); loadPeaks(); let at = ph; for (const s of srcs) { placeSource(s.id, add.dataset.addto, at); at += s.dur; } return; }
@@ -364,16 +416,61 @@ $('#lanes').addEventListener('mousedown', async e => {
   e.preventDefault();
   const t = T(lane.dataset.lane), r = lane.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, time = xt(x);
   curT = t.id;
+  const h = hitTest(t, x, y, r.height);
+  // serra: divide o pedaço neste ponto
+  if (h.kind === 'saw') { splitAt(t, h.time); commit(`Dividiu “${(P.sources[h.c.src] || {}).name || 'pedaço'}” em ${fmt(h.time, 1)} (${tName(t.id)})`); return; }
+  if (saw) return;
+  // pontos de volume: ⌥ ou dois cliques apaga; arrastar mexe; clicar na linha cria
+  if (h.kind === 'envpt') {
+    if (e.altKey || e.detail >= 2) { t.env.splice(h.i, 1); commit(`Tirou um ponto de volume (${tName(t.id)})`); return; }
+    drag = { mode: 'env', t, p: t.env[h.i], H: r.height, top: r.top, moved: false }; return;
+  }
+  if (h.kind === 'envline' && !e.altKey) {
+    t.env = t.env || [];
+    const p = { t: Math.max(0, h.time), g: envAt(t, h.time) };
+    t.env.push(p); t.env.sort((a, b) => a.t - b.t);
+    drag = { mode: 'env', t, p, H: r.height, top: r.top, moved: true, added: true }; drawLane(t); return;
+  }
+  // pontas de um pedaço: arrastar encurta ou alonga
+  if (h.kind === 'edge') {
+    const c = h.c, ripple = t.kind === 'voice';
+    drag = { mode: 'trim', t, c, side: h.side, x: e.clientX, in0: c.in, out0: c.out, at0: c.at, later: ripple ? t.clips.filter(o => o !== c && o.at >= end(c) - 0.001).map(o => [o, o.at]) : [] };
+    document.body.classList.add('trimming'); return;
+  }
   // música e efeitos: arrastar um pedaço muda-o de sítio (também para a outra pista); com ⌥ seleciona
-  const pad = 6 / view.pps;   // pedaços curtos (efeitos): fáceis de agarrar
-  const hit = [...t.clips].reverse().find(c => time >= c.at - pad && time <= end(c) + pad);
-  if (t.kind !== 'voice' && hit && !e.altKey) { drag = { mode: 'move', t, c: hit, x: e.clientX, at0: hit.at, from: t.id }; document.body.classList.add('moving'); return; }
+  if (t.kind !== 'voice' && h.kind === 'clip' && !e.altKey) { drag = { mode: 'move', t, c: h.c, x: e.clientX, at0: h.c.at, from: t.id }; document.body.classList.add('moving'); return; }
   if (e.shiftKey && sel && sel.tid === t.id) { const a = Math.abs(time - sel.a) < Math.abs(time - sel.b) ? sel.b : sel.a; drag = { mode: 'sel', t, a, x: e.clientX, moved: true }; sel = { tid: t.id, a: Math.min(a, time), b: Math.max(a, time) }; renderAll(); return; }
   drag = { mode: 'sel', t, a: Math.max(0, time), x: e.clientX, moved: false };
 });
 window.addEventListener('mousemove', e => {
   if (!drag) return;
   const r = laneRect(), time = Math.max(0, xt(e.clientX - r.left));
+  if (drag.mode === 'env') {
+    drag.moved = true;
+    const p = drag.p, k = drag.t.env, i = k.indexOf(p);
+    const lo = i > 0 ? k[i - 1].t + 0.01 : 0, hi = i < k.length - 1 ? k[i + 1].t - 0.01 : 1e9;
+    p.t = Math.max(lo, Math.min(hi, time));
+    p.g = envG(e.clientY - drag.top, drag.H);
+    drawLane(drag.t);
+    moveTag(drag.t, null, { at: p.t, text: `${Math.round(p.g * 100)}% · ${fmt(p.t, 1)}` });
+    return;
+  }
+  if (drag.mode === 'trim') {
+    const c = drag.c, dt = (e.clientX - drag.x) / view.pps, sd = srcDur(c);
+    drag.moved = Math.abs(e.clientX - drag.x) > 1;
+    if (drag.side === 'r') {
+      c.out = Math.max(drag.in0 + 0.05, Math.min(sd, drag.out0 + dt));
+      drag.later.forEach(([o, at]) => { o.at = at + (c.out - drag.out0); });
+    } else if (drag.t.kind === 'voice') {
+      c.in = Math.max(0, Math.min(drag.out0 - 0.05, drag.in0 + dt));
+      drag.later.forEach(([o, at]) => { o.at = at - (c.in - drag.in0); });
+    } else {
+      c.in = Math.max(0, Math.max(drag.in0 - drag.at0, Math.min(drag.out0 - 0.05, drag.in0 + dt)));
+      c.at = drag.at0 + (c.in - drag.in0);
+    }
+    moveTag(drag.t, c);
+    drawLane(drag.t); return;
+  }
   if (drag.mode === 'move') {
     if (!drag.moved && Math.abs(e.clientX - drag.x) < 3 && Math.abs(e.clientY - (drag.y || e.clientY)) < 3) { drag.y = drag.y || e.clientY; return; }
     drag.moved = true;
@@ -398,7 +495,9 @@ window.addEventListener('mousemove', e => {
 window.addEventListener('mouseup', () => {
   if (!drag) return;
   const d = drag; drag = null; document.body.style.cursor = '';
-  document.body.classList.remove('moving'); moveTag(null);
+  document.body.classList.remove('moving', 'trimming'); moveTag(null);
+  if (d.mode === 'env') { if (d.moved) commit(d.added ? `Pôs um ponto de volume em ${fmt(d.p.t, 1)} (${tName(d.t.id)})` : `Volume ${Math.round(d.p.g * 100)}% em ${fmt(d.p.t, 1)} (${tName(d.t.id)})`); else renderAll(); return; }
+  if (d.mode === 'trim') { sortT(d.t); if (d.moved) commit(`${d.side === 'l' ? 'Mudou o início' : 'Mudou o fim'} de “${(P.sources[d.c.src] || {}).name || 'pedaço'}” (${fmtLen(len(d.c))})`); else renderAll(); return; }
   if (d.mode === 'move') {
     sortT(d.t);
     if (d.moved) commit(`Moveu “${(P.sources[d.c.src] || {}).name || 'pedaço'}” para ${fmt(d.c.at, 1)}${d.t.id !== d.from ? (d.t.id === 'musica' ? ' (Música)' : ' (Efeitos)') : ''}`);
@@ -412,13 +511,16 @@ window.addEventListener('mouseup', () => {
 $('#lanes').addEventListener('mousemove', e => {
   if (drag) return;
   const lane = e.target.closest('.lane'); if (!lane || !P) return;
-  const t = T(lane.dataset.lane); if (t.kind === 'voice') { lane.style.cursor = ''; return; }
-  const time = xt(e.clientX - lane.getBoundingClientRect().left);
-  const pad = 6 / view.pps;
-  lane.style.cursor = !e.altKey && t.clips.some(c => time >= c.at - pad && time <= end(c) + pad) ? 'grab' : '';
+  const t = T(lane.dataset.lane), r = lane.getBoundingClientRect();
+  const h = hitTest(t, e.clientX - r.left, e.clientY - r.top, r.height);
+  if (saw) { lane.style.cursor = h.kind === 'saw' ? 'crosshair' : 'not-allowed'; if (h.kind === 'saw') moveTag(t, null, { at: h.time, text: `Dividir em ${fmt(h.time, 1)}` }); else moveTag(null); return; }
+  lane.style.cursor = h.kind === 'envpt' ? 'move' : h.kind === 'envline' ? 'cell' : h.kind === 'edge' ? 'ew-resize' : (h.kind === 'clip' && t.kind !== 'voice' && !e.altKey) ? 'grab' : '';
+  lane.title = h.kind === 'envpt' ? 'Arrastar para mudar o volume · dois cliques ou ⌥ + clique apaga' : h.kind === 'envline' ? 'Clicar para pôr um ponto de volume' : h.kind === 'edge' ? 'Arrastar para encurtar ou alongar' : '';
 });
+$('#lanes').addEventListener('mouseleave', () => { if (saw && !drag) moveTag(null); });
 $('#lanes').addEventListener('dblclick', e => {
-  const lane = e.target.closest('.lane'); if (!lane) return;
+  const lane = e.target.closest('.lane'); if (!lane || saw) return;
+  { const t0 = T(lane.dataset.lane), r0 = lane.getBoundingClientRect(); if (['envpt', 'envline'].includes(hitTest(t0, e.clientX - r0.left, e.clientY - r0.top, r0.height).kind)) return; }
   const t = T(lane.dataset.lane), time = xt(e.clientX - lane.getBoundingClientRect().left);
   const c = t.clips.find(y => time >= y.at && time <= end(y));
   if (c) { sel = { tid: t.id, a: c.at, b: end(c) }; renderAll(); }
@@ -440,7 +542,14 @@ $('#tl').addEventListener('wheel', e => {
 function needSel() { if (!sel) { flash('Seleciona primeiro um bocado na onda (arrasta com o rato).'); return false; } return true; }
 const tName = id => ({ voz: 'Voz', musica: 'Música', efeitos: 'Efeitos' }[id]);
 const rangeTxt = () => `${fmt(sel.a)} → ${fmt(sel.b)}`;
+function setSaw(on) { saw = !!on; $('[data-op="saw"]').classList.toggle('on', saw); document.body.classList.toggle('saw', saw); if (!saw) moveTag(null); }
 const OPS = {
+  saw() { setSaw(!saw); if (saw) flash('Serra: clica onde queres dividir · Esc sai'); },
+  split() {
+    const t = T(curT); const c = activeClip(t, ph);
+    if (!c || ph <= c.at + 0.01 || ph >= end(c) - 0.01) { flash(`Não há som da pista ${tName(t.id)} na agulha para dividir.`); return; }
+    splitAt(t, ph); commit(`Dividiu “${(P.sources[c.src] || {}).name || 'pedaço'}” em ${fmt(ph, 1)} (${tName(t.id)})`);
+  },
   cut() { if (!needSel()) return; const t = T(sel.tid); clipboard = copyRange(t, sel.a, sel.b); removeRange(t, sel.a, sel.b, true); const l = rangeTxt(); seek(sel.a); sel = null; commit(`Cortou ${l} (${tName(t.id)})`); },
   copy() { if (!needSel()) return; clipboard = copyRange(T(sel.tid), sel.a, sel.b); flash(`Copiado: ${fmtLen(clipboard.len)}`); renderAll(); },
   paste() {
@@ -492,7 +601,6 @@ function syncSettings() {
   $('#sDenoise').checked = s.denoise; $('#sDenoiseAmt').value = Math.round(s.denoiseAmount * 100); $('#sDenoiseAmt').disabled = !s.denoise;
   $('#sPauses').value = String(s.pauses); $('#sLoud').value = s.loudness;
   $('#loudNote').textContent = s.loudness === 'podcast' ? '−16 LUFS, como o Spotify e a Apple Podcasts.' : s.loudness === 'radio' ? '−23 LUFS, a norma da rádio e da televisão.' : 'O volume fica como está.';
-  for (const t of P.tracks) { const r = document.querySelector(`[data-tg="${t.id}"]`); if (document.activeElement !== r) r.value = Math.round(t.gain * 100); document.querySelector(`[data-tgv="${t.id}"]`).textContent = Math.round(t.gain * 100) + '%'; }
   $('#sDuck').checked = T('musica').duck !== false;
 }
 $('#sDenoise').addEventListener('change', e => { P.settings.denoise = e.target.checked; commit(e.target.checked ? 'Limpar ruído: ligado' : 'Limpar ruído: desligado'); });
@@ -500,10 +608,6 @@ $('#sDenoiseAmt').addEventListener('change', e => { P.settings.denoiseAmount = e
 $('#sPauses').addEventListener('change', e => { P.settings.pauses = +e.target.value; scheduleSave(); });
 $('#sLoud').addEventListener('change', e => { P.settings.loudness = e.target.value; commit(`Volume final: ${e.target.selectedOptions[0].textContent}`); });
 $('#sDuck').addEventListener('change', e => { T('musica').duck = e.target.checked; commit(e.target.checked ? 'A música baixa com a voz' : 'A música não baixa com a voz'); });
-document.querySelectorAll('[data-tg]').forEach(r => {
-  r.addEventListener('input', () => { const t = T(r.dataset.tg); t.gain = r.value / 100; document.querySelector(`[data-tgv="${t.id}"]`).textContent = r.value + '%'; drawLanes(); });
-  r.addEventListener('change', () => { const t = T(r.dataset.tg); commit(`Volume da ${t.name === 'Efeitos' ? 'pista Efeitos' : t.name}: ${r.value}%`); });
-});
 $('#hearBtn').addEventListener('click', async () => {
   if (!P || !projEnd()) return;
   stopPlay();
@@ -535,7 +639,7 @@ function frame() {
     if (!c) { if (!a.paused) a.pause(); a.dataset.c = ''; continue; }
     const src = P.sources[c.src]; if (!src) continue;
     const want = c.in + (now - c.at);
-    let vol = (t.mute || (solo && !t.solo)) ? 0 : t.gain * c.gain * rampAt(c, now);
+    let vol = (t.mute || (solo && !t.solo)) ? 0 : t.gain * c.gain * rampAt(c, now) * envAt(t, now);
     if (t.id === 'musica' && t.duck !== false) vol *= duck;
     a.volume = Math.min(1, Math.max(0, vol));
     if (a.dataset.u !== src.url) { a.dataset.u = src.url; a.src = src.url; a.currentTime = want; a.dataset.c = c.id; a.play().catch(() => {}); continue; }
@@ -670,6 +774,8 @@ document.addEventListener('keydown', e => {
   else if (cmd && k === '-') { e.preventDefault(); setZoom(view.pps / 1.6); }
   else if (cmd && k === '0') { e.preventDefault(); fitView(); drawAll(); }
   else if (k === 'Backspace' || k === 'Delete') { e.preventDefault(); if (sel) OPS.del(); }
+  else if ((k === 's' || k === 'S') && !cmd) { e.preventDefault(); if (e.shiftKey) OPS.saw(); else OPS.split(); }
+  else if (k === 'Escape' && saw) { setSaw(false); }
   else if (k === 'Escape') { sel = null; $('#pop').hidden = true; renderAll(); }
   else if (k === 'ArrowLeft') { e.preventDefault(); seek(ph - (e.shiftKey ? 10 : 1)); follow(); }
   else if (k === 'ArrowRight') { e.preventDefault(); seek(ph + (e.shiftKey ? 10 : 1)); follow(); }

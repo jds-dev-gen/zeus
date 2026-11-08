@@ -32,6 +32,7 @@
       <button class="t" type="button" data-op="copy" title="Copiar a seleção (⌘C)">Copiar</button>
       <button class="t" type="button" data-op="paste" title="Colar na agulha (⌘V)">Colar</button>
       <button class="t" type="button" data-op="del" title="Apagar a seleção (⌫) — o resto junta-se">Apagar</button>
+      <button class="t" type="button" data-op="saw" title="Serra: clicar num som divide-o nesse ponto (⇧S) — S divide na agulha"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14 15 2l4 4L7 18z"/><path d="M5 16l-2 2M7 10l2 2M10 7l2 2M13 4l2 2"/><path d="M14 20h7"/></svg>Serra</button>
       <button class="t" type="button" data-op="silence" title="Pôr a seleção em silêncio, sem mexer no resto">Silêncio</button>
       <span class="vsep"></span>
       <button class="t" type="button" data-op="fadein" title="O som entra aos poucos na seleção"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 20 21 4"/></svg>Fade in</button>
@@ -72,10 +73,8 @@
     </div>
     <div class="card">
       <h3>Pistas</h3>
-      <div class="sl"><span class="tn">Voz</span><input type="range" data-tg="voz" min="0" max="150" aria-label="Volume da voz"><b data-tgv="voz"></b></div>
-      <div class="sl"><span class="tn">Música</span><input type="range" data-tg="musica" min="0" max="150" aria-label="Volume da música"><b data-tgv="musica"></b></div>
       <label class="opt">Música baixa quando há voz <input type="checkbox" class="sw" id="sDuck"></label>
-      <div class="sl"><span class="tn">Efeitos</span><input type="range" data-tg="efeitos" min="0" max="150" aria-label="Volume dos efeitos"><b data-tgv="efeitos"></b></div>
+      <div class="note">Para baixar ou subir a música ou um efeito num ponto, clica na linha do volume dessa pista e arrasta o ponto. Dois cliques num ponto apagam-no.</div>
     </div>
     <div class="card hist-card">
       <h3>Histórico</h3>
