@@ -423,7 +423,7 @@ function setupNotas(x) {
   // para o Orfeu: criar uma nota (com o ficheiro de áudio/vídeo original ligado) e transcrever um WAV para ela
   async function createNote(title, html, audioAbs) { const id = await serial(() => notas.create('', title, html, audioAbs || '')); send('changed'); return id; }
   function transcribeInto(id, wav, secs) { addJob({ id, wav, secs, stage: 'transcrever', pct: 0, at: Date.now() }); }
-  return { notas, isRecording: () => !!rec, quitCheck, createNote, transcribeInto, modelState };
+  return { notas, isRecording: () => !!rec, quitCheck, createNote, transcribeInto, modelState, getKey, setKey, whisper: () => ({ bin: binPath(), model: modelPath() }) };
 }
 
 module.exports = { setupNotas, toText };

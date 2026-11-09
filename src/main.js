@@ -7,7 +7,8 @@
  */
 const {
   app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog,
-  clipboard, shell, nativeTheme, Notification, ShareMenu, nativeImage, net, safeStorage, systemPreferences } = require('electron');
+  clipboard, shell, nativeTheme, Notification, ShareMenu, nativeImage, net, safeStorage, systemPreferences, powerMonitor } = require('electron');
+const { setupMacGyver } = require('./macgyver-main');
 const { setupNotas } = require('./notas-main');
 const { setupOrfeu, isMedia: isOrfeuMedia } = require('./orfeu-main');
 const { setupHermes } = require('./hermes-main');
@@ -407,6 +408,7 @@ function createWindow() {
   ui.on('will-navigate', e => e.preventDefault());
   ui.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url }); return { action: 'deny' }; });
   ui.on('before-input-event', (e, input) => {
+    if (mgKey(e, input)) return;
     // atalhos vindos da interface; o Option é tratado pela própria interface
     if (input.type === 'keyDown' && (input.meta || input.control) && /^[1-9]$/.test(input.key) && !input.alt) {
       e.preventDefault(); jumpInSpace(+input.key);
@@ -533,6 +535,7 @@ function applyLayout() {
     fullscreenView.setVisible(true);
     shownAt.delete(fullscreenView);   // ao sair do ecrã inteiro volta a receber o tamanho normal
   }
+  placeMg();
 }
 
 let pushTimer = null;
@@ -585,6 +588,7 @@ function wireWeb(wc, kind, ctx = {}) {
   wc.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(wc, d.url); });
   // Option (Mac) / Alt (Windows): a interface decide se é o mosaico ou uma combinação de teclas
   wc.on('before-input-event', (e, input) => {
+    if (mgKey(e, input)) return;
     if (input.key === 'Alt') { lastAltWC = wc; ui && ui.send('alt', input.type === 'keyDown' ? 'down' : 'up'); return; }
     if (input.type === 'keyDown' && input.alt) ui && ui.send('alt', 'chord');
     if (input.type === 'keyDown' && (input.meta || input.control) && !input.alt && /^[1-9]$/.test(input.key)) {
@@ -1002,7 +1006,18 @@ async function callFeed(f, params) {
   throw new Error(`O endereço não devolveu a agenda (${last ? last.message : 'sem resposta'}). Confirma que colaste o código novo (com a chave), que é o URL da aplicação Web (acaba em /exec) e que a implementação está como "Executar como: Eu" e "Quem tem acesso: Qualquer pessoa".`);
 }
 const localDate = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-async function homeToday(force) {
+// tarefas do MacGyver juntas às do Google na página principal (sem repetir as que ele já pôs no Google)
+function withMg(data) {
+  if (!mgApp) return data;
+  const mine = mgApp.homeTasks(localDate());
+  const ids = new Set(mine.map(t => t.g).filter(Boolean));
+  const tasks = data.tasks.filter(t => !ids.has(t.id)).concat(mine);
+  tasks.sort((a, b) => (b.overdue - a.overdue) || a.due.localeCompare(b.due) || a.title.localeCompare(b.title));
+  return Object.assign({}, data, { tasks });
+}
+function noteFeed(f, d) { const v = (d && d.v) || 1; if (f.v !== v) { f.v = v; saveState(); } }
+async function homeToday(force) { return withMg(await homeTodayGoogle(force)); }
+async function homeTodayGoogle(force) {
   const feeds = S.settings.homeFeeds || [];
   if (!feeds.length) return { feeds: 0, events: [], tasks: [], errors: [] };
   if (!force && todayCache.data && Date.now() - todayCache.t < 5 * 60 * 1000 && todayCache.date === localDate()) return todayCache.data;
@@ -1013,6 +1028,7 @@ async function homeToday(force) {
     const label = f.label || (appById(f.appId) || {}).name || f.account || 'Google';
     if (e) { errors.push({ feed: f.id, label, error: e.message }); continue; }
     if (d.account && !f.account) { f.account = d.account; saveState(); }
+    noteFeed(f, d);
     (d.events || []).forEach(ev => events.push(Object.assign({}, ev, { feed: f.id, label })));
     (d.tasks || []).forEach(t => tasks.push(Object.assign({}, t, { feed: f.id, label })));
     if (d.tasksError) errors.push({ feed: f.id, label, error: d.tasksError });
@@ -1024,6 +1040,7 @@ async function homeToday(force) {
   return data;
 }
 async function homeTaskDone(feedId, list, task) {
+  if (feedId === 'mg' && mgApp) { try { await mgApp.homeDone(task); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } }
   const f = (S.settings.homeFeeds || []).find(x => x.id === feedId); if (!f) return { ok: false };
   try { await callFeed(f, { action: 'done', list, task }); todayCache.t = 0; return { ok: true }; }
   catch (e) { return { ok: false, error: e.message }; }
@@ -1035,6 +1052,10 @@ function homeScriptCode() {
   if (!pendingKey) pendingKey = S.pendingKey || require('crypto').randomBytes(18).toString('base64url');
   S.pendingKey = pendingKey; saveState();
   try { return fs.readFileSync(path.join(__dirname, '..', 'assets', 'zeus-hoje.gs'), 'utf8').replace("var ZEUS_KEY = '';", `var ZEUS_KEY = '${pendingKey}';`); }
+  catch (e) { return ''; }
+}
+function homeScriptCodeFor(f) {
+  try { return fs.readFileSync(path.join(__dirname, '..', 'assets', 'zeus-hoje.gs'), 'utf8').replace("var ZEUS_KEY = '';", `var ZEUS_KEY = '${f.key || ''}';`); }
   catch (e) { return ''; }
 }
 // abre o Apps Script numa janela com a sessão (a conta) da app escolhida e copia o código
@@ -1446,6 +1467,7 @@ function ensureInternalView(a) {
   }
   wc.on('will-navigate', (e, url) => { e.preventDefault(); if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); });
   wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); return { action: 'deny' }; });
+  wc.on('before-input-event', (e, input) => { mgKey(e, input); });
   wc.on('render-process-gone', (e, d) => { if (d.reason !== 'clean-exit') setTimeout(() => { if (!wc.isDestroyed()) wc.reload(); }, 500); });
   wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; if (zoomWC === wc) zoomWC = null; if (notasWC === wc) notasWC = null; if (orfeuWC === wc) orfeuWC = null; if (hermesWC === wc) hermesWC = null; if (ecoWC === wc) ecoWC = null; });
   wc.loadFile(def.file).catch(() => {});
@@ -2024,6 +2046,131 @@ function appMenu(id) {
     { type: 'separator' },
     { label: 'Remover da barra', click: () => removeApp(id) }
   ]).popup({ window: win });
+}
+
+/* ------------------------------------------------------------------ */
+/* MacGyver — a bolinha no canto inferior direito da página             */
+/* ------------------------------------------------------------------ */
+let mgView = null, mgWC = null, mgApp = null;
+let mgMode = { mode: 'orb', h: 0 };
+const mgSend = (ev, d) => { if (mgWC && !mgWC.isDestroyed()) mgWC.send('macgyver:' + ev, d); };
+function placeMg() {
+  if (!mgView || !win) return;
+  const r = L.page;
+  const hide = !r || L.overlay || L.cover || fullscreenView || (mgApp && mgApp.hidden() && mgMode.mode === 'orb');
+  if (hide) { if (mgView.getVisible()) mgView.setVisible(false); return; }
+  let w = 100, h = 100;
+  if (mgMode.mode === 'panel') { w = 470; h = Math.min(r.height - 8, 820); }
+  else if (mgMode.mode === 'bubble') { w = 460; h = Math.min(r.height - 8, Math.max(160, mgMode.h || 260)); }
+  // afastada 14 px da direita, para não tapar a barra de deslocamento da página
+  const b = { x: Math.round(r.x + r.width - w - 14), y: Math.round(r.y + r.height - h), width: w, height: h };
+  const cb = mgView.getBounds();
+  if (cb.x !== b.x || cb.y !== b.y || cb.width !== b.width || cb.height !== b.height) mgView.setBounds(b);
+  if (!mgView.getVisible()) mgView.setVisible(true);
+  // sempre por cima das outras vistas
+  const kids = win.contentView.children;
+  if (kids[kids.length - 1] !== mgView) { win.contentView.removeChildView(mgView); win.contentView.addChildView(mgView); }
+}
+// ⌥ Espaço: começa a ouvir (e envia quando o João se cala); outra vez: envia já
+function mgKey(e, input) {
+  if (!mgApp) return false;
+  if (input.code === 'Space' && input.alt && !input.meta && !input.control && !input.shift) {
+    e.preventDefault();
+    if (ui && !ui.isDestroyed()) ui.send('alt', 'chord');   // não abre o mosaico ao largar o ⌥
+    if (input.type === 'keyDown' && !input.isAutoRepeat) mgApp.listenKey();
+    return true;
+  }
+  return false;
+}
+function mgToggle() {
+  if (!mgApp) return;
+  if (mgApp.hidden()) { mgApp.setHidden(false); placeMg(); }
+  mgSend('toggle', true);
+}
+// a página aberta (só sites; nunca as apps internas do Zeus)
+function mgPageView() {
+  const view = fullApp ? appViews.get(fullApp) : (cur() && cur().url !== NEWTAB ? tabViews.get(S.currentId) : null);
+  if (!view || view.__internal) return null;
+  const wc = view.webContents; if (!wc || wc.isDestroyed() || !/^https?:/.test(wc.getURL())) return null;
+  return wc;
+}
+function mgPageLite() { const wc = mgPageView(); return wc ? { title: wc.getTitle(), url: wc.getURL() } : null; }
+async function mgPage() {
+  const wc = mgPageView(); if (!wc) return null;
+  let r = {};
+  try { r = await wc.executeJavaScriptInIsolatedWorld(1999, [{ code: `({ sel: String(getSelection() || '').slice(0, 4000), text: (document.body && document.body.innerText || '').slice(0, 20000) })` }]) || {}; } catch (e) { /* página sem acesso */ }
+  return { title: wc.getTitle(), url: wc.getURL(), selection: r.sel || '', text: r.text || '' };
+}
+function mgScriptUpdate() {
+  const f = (S.settings.homeFeeds || []).find(x => (x.v || 1) < 2);
+  if (!f) return { ok: true };
+  const code = homeScriptCodeFor(f); if (!code) return { ok: false, error: 'Não encontrei o código.' };
+  clipboard.writeText(code);
+  const a = appById(f.appId); if (!a) return { ok: false, error: 'A app da conta já não existe.' };
+  const { ses } = sessionForApp(a);
+  const w = new BrowserWindow({ width: 1180, height: 820, parent: win, title: 'Apps Script — ' + a.name, autoHideMenuBar: true, backgroundColor: '#ffffff', webPreferences: WEB_PREFS(ses) });
+  const wc = w.webContents;
+  wc.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(wc, d.url); });
+  wc.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 700, parent: w, autoHideMenuBar: true, webPreferences: WEB_PREFS(ses) } }));
+  const start = f.authuser != null ? `https://script.google.com/u/${f.authuser}/home` : 'https://script.google.com/home';
+  googleUA(wc, start); w.loadURL(start).catch(() => {});
+  return { ok: true };
+}
+function setupMg() {
+  if (mgView || !win) return;
+  mgApp = setupMacGyver({
+    app, ipcMain, net, Notification, systemPreferences,
+    getWC: () => mgWC,
+    send: (ev, d) => mgSend(ev, d),
+    feeds: () => S.settings.homeFeeds || [],
+    callFeed: (f, params) => callFeed(f, params),
+    noteFeed,
+    tasksChanged: () => { mgSend('changed', true); todayCache.t = 0; if (ui && !ui.isDestroyed()) ui.send('ui-command', { cmd: 'today-refresh' }); },
+    notas: () => notasApp && notasApp.notas,
+    getKey: () => (notasApp ? notasApp.getKey() : ''),
+    setKey: k => { if (notasApp) notasApp.setKey(k); },
+    whisper: () => (notasApp ? notasApp.whisper() : null),
+    currentPage: () => mgPage(),
+    pageLite: () => mgPageLite(),
+    openURL: url => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); },
+    openNote: id => { showApp('notas'); const go = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id }); }; setTimeout(go, notasWC && !notasWC.isLoading() ? 150 : 1500); },
+    openNotas: () => showApp('notas'),
+    scriptUpdate: () => mgScriptUpdate(),
+    isDark,
+    focused: () => !!(win && win.isFocused()),
+    // o João está ao Mac e o Zeus está aberto (para não avisar com o Mac a dormir)
+    active: () => !!(win && !win.isMinimized() && win.isVisible() && (win.isFocused() || powerMonitor.getSystemIdleTime() < 300)),
+    focusWin: () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } },
+    show: () => { if (mgApp && mgApp.hidden() && mgMode.mode === 'orb') { /* fica escondida até haver balão */ } placeMg(); },
+    layout: (mode, h) => {
+      const was = mgMode.mode;
+      mgMode = { mode, h };
+      placeMg();
+      if (mode === 'panel' && mgWC) mgWC.focus();
+      if (was === 'panel' && mode !== 'panel' && mgWC && mgWC.isFocused()) { const v = fullApp ? appViews.get(fullApp) : tabViews.get(S.currentId); if (v) v.webContents.focus(); else ui.focus(); }
+    }
+  });
+  mgView = new WebContentsView({ webPreferences: {
+    partition: 'persist:zeus-macgyver', preload: path.join(__dirname, 'macgyver', 'preload.js'),
+    sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, spellcheck: true, backgroundThrottling: false
+  } });
+  mgView.setBackgroundColor('#00000000');
+  mgView.__internal = true;
+  mgWC = mgView.webContents;
+  // só o microfone (para falar com ele); nada mais
+  const ses = mgWC.session;
+  ses.setPermissionRequestHandler((w, perm, cb, d) => cb(w === mgWC && perm === 'media' && !!d && Array.isArray(d.mediaTypes) && d.mediaTypes.length > 0 && d.mediaTypes.every(t => t === 'audio')));
+  ses.setPermissionCheckHandler((w, perm) => perm === 'media' && w === mgWC);
+  mgWC.on('will-navigate', e => e.preventDefault());
+  mgWC.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); return { action: 'deny' }; });
+  mgWC.on('before-input-event', (e, input) => { mgKey(e, input); });
+  mgWC.on('render-process-gone', (e, d) => { if (d.reason !== 'clean-exit') setTimeout(() => { if (!mgWC.isDestroyed()) mgWC.reload(); }, 800); });
+  win.contentView.addChildView(mgView);
+  mgView.setVisible(false);
+  mgWC.loadFile(path.join(__dirname, 'macgyver', 'index.html')).catch(() => {});
+  win.on('focus', () => mgSend('focus', true));
+  win.on('blur', () => mgSend('focus', false));
+  placeMg();
 }
 
 /* ------------------------------------------------------------------ */
@@ -2704,6 +2851,7 @@ function setupIPC() {
     if (clean.theme && orfeuWC && !orfeuWC.isDestroyed()) orfeuWC.send('orfeu:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && hermesWC && !hermesWC.isDestroyed()) hermesWC.send('hermes:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && ecoWC && !ecoWC.isDestroyed()) ecoWC.send('eco:theme', isDark() ? 'dark' : 'light');
+    if (clean.theme) mgSend('theme', isDark());
     if (!isMac && clean.theme) updateOverlayColors();
     if ('updateRepo' in clean && updater) updater.check(true);
     if ('bigGames' in clean && scores) scores.setBig(clean.bigGames !== false);
@@ -2813,6 +2961,7 @@ function buildMenu() {
         { label: 'Separadores (mosaico)', accelerator: 'CmdOrCtrl+E', click: toUI('mosaic') },
         { label: 'Claude', accelerator: 'CmdOrCtrl+Shift+K', click: () => setClaude(!S.claudeOpen) },
         { label: 'Enviar esta página ao Claude', accelerator: 'CmdOrCtrl+Shift+J', click: () => sendPageToClaude() },
+        { label: 'MacGyver', accelerator: 'CmdOrCtrl+Shift+M', click: () => mgToggle() },
         { type: 'separator' },
         { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => { const w = curWC(); if (w && w === radarWC) w.send('radar:refresh'); else if (w) w.reload(); } },
         { label: 'Recarregar sem cache', accelerator: 'CmdOrCtrl+Shift+R', click: () => { const w = curWC(); if (w) w.reloadIgnoringCache(); } },
@@ -2920,6 +3069,7 @@ app.whenReady().then(async () => {
   // o Zeus abre sempre na página principal (hora, meteorologia, agenda e tarefas)
   goHome();
   setTimeout(() => { S.apps.filter(a => a.preload && a.url).forEach(a => ensureAppView(a)); applyLayout(); pushState(); }, 2500);
+  setupMg();
   if (S.claudeOpen) ensureClaudeView();
   // ficheiros abertos no Finder antes de o Zeus estar pronto
   if (pendingMedia.length) setTimeout(() => { const q = pendingMedia.splice(0); if (q.length) orfeuOpenPaths(q); }, 1200);

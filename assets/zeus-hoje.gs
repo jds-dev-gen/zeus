@@ -8,8 +8,10 @@
  *     Executar como: Eu · Quem tem acesso: Qualquer pessoa.
  *  4. Autoriza o acesso e copia o URL da aplicação Web para o Zeus.
  *
- * Só lê a agenda e as tarefas desta conta; a única alteração possível é marcar uma tarefa como concluída
- * (quando carregas no visto, no Zeus). Só responde a quem tiver a chave abaixo, que só o Zeus conhece.
+ * Lê a agenda e as tarefas desta conta. As únicas alterações possíveis são nas tarefas (Google Tasks):
+ * marcar como feita, criar e mudar o título ou a data — é assim que as tarefas do MacGyver aparecem também
+ * no telemóvel. Só responde a quem tiver a chave abaixo, que só o Zeus conhece.
+ * Versão 2 (com o MacGyver).
  */
 var ZEUS_KEY = '';
 var TASKS_MISSING = 'Falta o serviço Google Tasks API: no editor, Serviços (+) › Google Tasks API › Adicionar, e depois uma versão nova da implementação.';
@@ -23,18 +25,49 @@ function doGet(e) {
       Tasks.Tasks.patch({ status: 'completed' }, p.list, p.task);
       return out_({ ok: true });
     }
-    return out_(hoje_(p.date));
+    if (p.action === 'add' && p.title) {
+      if (typeof Tasks === 'undefined') return out_({ ok: false, error: TASKS_MISSING });
+      var list = p.list || '@default';
+      var t = { title: String(p.title).slice(0, 500), notes: p.notes ? String(p.notes).slice(0, 4000) : '' };
+      if (/^\d{4}-\d{2}-\d{2}$/.test(p.due || '')) t.due = p.due + 'T00:00:00.000Z';
+      var made = Tasks.Tasks.insert(t, list);
+      return out_({ ok: true, v: 2, id: made.id, list: list === '@default' ? defaultList_() : list });
+    }
+    if (p.action === 'update' && p.list && p.task) {
+      if (typeof Tasks === 'undefined') return out_({ ok: false, error: TASKS_MISSING });
+      var patch = {};
+      if (p.title) patch.title = String(p.title).slice(0, 500);
+      if (p.notes != null && p.notes !== '') patch.notes = String(p.notes).slice(0, 4000);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(p.due || '')) patch.due = p.due + 'T00:00:00.000Z';
+      if (p.status === 'needsAction' || p.status === 'completed') patch.status = p.status;
+      Tasks.Tasks.patch(patch, p.list, p.task);
+      return out_({ ok: true, v: 2 });
+    }
+    if (p.action === 'delete' && p.list && p.task) {
+      if (typeof Tasks === 'undefined') return out_({ ok: false, error: TASKS_MISSING });
+      Tasks.Tasks.remove(p.list, p.task);
+      return out_({ ok: true, v: 2 });
+    }
+    return out_(hoje_(p.date, p.days));
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   }
 }
 
-function hoje_(dateStr) {
+function defaultList_() {
+  try { return Tasks.Tasklists.get('@default').id; } catch (x) { return '@default'; }
+}
+
+function hoje_(dateStr, daysStr) {
   var tz = Session.getScriptTimeZone();
   var start = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
   start.setHours(0, 0, 0, 0);
-  var end = new Date(start.getTime()); end.setDate(end.getDate() + 1);
+  // days: quantos dias a partir de date (1 = só esse dia; o MacGyver pede os próximos dias)
+  var days = Math.max(1, Math.min(31, parseInt(daysStr, 10) || 1));
+  var end = new Date(start.getTime()); end.setDate(end.getDate() + days);
   var today = Utilities.formatDate(start, tz, 'yyyy-MM-dd');
+  var last = new Date(end.getTime()); last.setDate(last.getDate() - 1);
+  var upto = Utilities.formatDate(last, tz, 'yyyy-MM-dd');
 
   // agenda: todos os calendários visíveis
   var events = [];
@@ -64,7 +97,7 @@ function hoje_(dateStr) {
   // tarefas: por fazer, com data até hoje (inclui as atrasadas)
   var tasks = [];
   if (typeof Tasks === 'undefined') {
-    return { ok: true, v: 1, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: [], tasksError: TASKS_MISSING };
+    return { ok: true, v: 2, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: [], tasksError: TASKS_MISSING };
   }
   var lists = (Tasks.Tasklists.list({ maxResults: 100 }).items) || [];
   lists.forEach(function (l) {
@@ -74,14 +107,14 @@ function hoje_(dateStr) {
       (r.items || []).forEach(function (t) {
         if (!t.due || !t.title) return;
         var due = String(t.due).slice(0, 10);
-        if (due > today) return;
+        if (due > upto) return;
         tasks.push({ id: t.id, list: l.id, listName: l.title, title: t.title, due: due, overdue: due < today, notes: t.notes || '' });
       });
       page = r.nextPageToken;
     } while (page);
   });
 
-  return { ok: true, v: 1, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: tasks };
+  return { ok: true, v: 2, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: tasks };
 }
 
 function out_(o) {

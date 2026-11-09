@@ -615,6 +615,9 @@ const hhmm = iso => { const d = new Date(iso); return String(d.getHours()).padSt
 async function loadToday(force) {
   const box = $('#today'); if (!box) return;
   if (!(S.settings.homeFeeds || []).length) {
+    // sem contas Google: mostra só as tarefas do MacGyver (se houver)
+    let mg = null; try { mg = await Z.invoke('home:today', true); } catch (e) { /* ok */ }
+    if (mg && mg.tasks && mg.tasks.length) { todayData = mg; renderToday(true); return; }
     box.innerHTML = `<div class="today-empty"><div><b>Agenda e tarefas de hoje</b><span>Liga as tuas contas Google para veres aqui os compromissos e as tarefas do dia.</span></div><button class="btn ghost" type="button" data-todaysetup>Ligar contas</button></div>`;
     return;
   }
@@ -625,8 +628,9 @@ async function loadToday(force) {
   todayBusy = false;
   renderToday();
 }
-function renderToday() {
+function renderToday(noFeeds) {
   const box = $('#today'); if (!box || !todayData) return;
+  if (noFeeds === undefined) noFeeds = !(S.settings.homeFeeds || []).length;
   const multi = (S.settings.homeFeeds || []).length > 1;
   const now = Date.now();
   const tag = x => multi ? `<em class="acc">${esc(x.label)}</em>` : '';
@@ -638,7 +642,7 @@ function renderToday() {
   const tk = todayData.tasks.map(t => `<li class="tk ${t.overdue ? 'late' : ''}"><button class="chk" type="button" data-taskdone="${esc(t.feed)}|${esc(t.list)}|${esc(t.id)}" aria-label="Marcar “${esc(t.title)}” como feita"></button><span class="what"><b>${esc(t.title)}</b><small>${t.overdue ? 'Atrasada · ' + esc(t.due.split('-').reverse().slice(0, 2).join('/')) + ' · ' : ''}${esc(t.listName || '')}</small>${tag(t)}</span></li>`).join('');
   const errs = (todayData.errors || []).map(e => `<p class="err">${esc(e.label)}: ${esc(e.error)}</p>`).join('');
   box.innerHTML = `<div class="today-grid">
-    <section><span class="lbl-mono">Agenda de hoje <button class="linkbtn" type="button" data-todayreload title="Atualizar">↻</button></span>${ev ? `<ul class="today-list">${ev}</ul>` : '<p class="hint">Nada marcado para hoje.</p>'}</section>
+    <section><span class="lbl-mono">Agenda de hoje ${noFeeds ? '' : '<button class="linkbtn" type="button" data-todayreload title="Atualizar">↻</button>'}</span>${noFeeds ? '<p class="hint">Liga as contas Google para ver a agenda. <button class="linkbtn" type="button" data-todaysetup>Ligar contas</button></p>' : ev ? `<ul class="today-list">${ev}</ul>` : '<p class="hint">Nada marcado para hoje.</p>'}</section>
     <section><span class="lbl-mono">Tarefas de hoje</span>${tk ? `<ul class="today-list">${tk}</ul>` : '<p class="hint">Sem tarefas para hoje.</p>'}</section>
   </div>${errs}`;
 }
@@ -1290,6 +1294,7 @@ Z.on('ui-command', c => {
   if (c.cmd === 'zoom-save') openZoomSave();
   if (c.cmd === 'downloads') modal === 'downloads' ? closeModal() : openDownloads();
   if (c.cmd === 'focus-ask' || c.cmd === 'home') goHomeUI();
+  if (c.cmd === 'today-refresh') { if ($('#today')) loadToday(true); }
 });
 
 /* ------------------------------------------------------------------ */
