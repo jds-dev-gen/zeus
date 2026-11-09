@@ -167,6 +167,7 @@ function renderPanel() {
     for (const [name, tt] of groups) if (tt.length) h += `<div class="sec"><span>${name}</span><span>${tt.length}</span></div>${tt.map(t => taskRow(t, name === 'Próximos dias')).join('')}`;
     if (!tasks.length) h += '<div class="empty">Não há tarefas por fazer.</div>';
   }
+  if (ST.feeds.old.length && tab === 'today') h += `<p class="note">As tarefas que crio ainda ficam só no Mac. <button class="linkbtn" type="button" data-gosettings>Pôr também no telemóvel…</button></p>`;
   if (!ST.feeds.count) h += '<p class="note">Para ver a agenda e as tarefas do Google, liga as contas na página principal do Zeus (Agenda e tarefas de hoje).</p>';
   for (const e of ST.errors || []) h += `<p class="err">${esc(e.label)}: ${esc(e.error)}</p>`;
   $('#list').innerHTML = h;
@@ -207,6 +208,7 @@ function renderSettings() {
   if (f.old.length) google += `<p class="note">Para as minhas tarefas aparecerem também no telemóvel (Google Tasks), o código do Apps Script de <b>${esc(f.old.join(', '))}</b> tem de ser atualizado. Carrega no botão: copio o código novo e abro o Apps Script — cola-o por cima do antigo, guarda, e em <b>Implementar › Gerir implementações</b> edita a implementação com <b>Versão: Nova versão</b>.</p><div class="row"><button class="b p" type="button" data-script>Copiar o código e abrir o Apps Script</button></div>`;
   const v = ST.voice;
   $('#settings').innerHTML = `
+    ${f.old.length ? `<h3>Telemóvel</h3>${google}` : ''}
     <h3>Avisos</h3>
     <label class="opt"><span>Resumo da manhã<small>A primeira vez que abres o Zeus depois das 7h</small></span>${sw('morning', s.morning)}</label>
     <div class="opt"><span>Antes das reuniões<small>Com a agenda das contas Google</small></span><span style="display:flex;gap:8px;align-items:center"><select data-set="meetingLead">${[5, 10, 15].map(n => `<option value="${n}" ${s.meetingLead === n ? 'selected' : ''}>${n} min</option>`).join('')}</select>${sw('meetings', s.meetings)}</span></div>
@@ -214,7 +216,7 @@ function renderSettings() {
     <h3>Voz</h3>
     <label class="opt"><span>Responder em voz alta<small>Quando lhe falas (⌥ Espaço ou o micro)</small></span>${sw('speak', s.speak)}</label>
     ${v.ok ? '<p class="note">Carrega em <b>⌥ Espaço</b> e fala: envio quando parares (ou carrega outra vez). A voz é transcrita no próprio Mac.</p>' : `<p class="note">${esc(v.why)}</p>${v.model ? '<div class="row"><button class="b" type="button" data-notas>Abrir as Notas</button></div>' : ''}`}
-    <h3>Google</h3>${google}
+    ${f.old.length ? '' : `<h3>Google</h3>${google}`}
     <h3>Claude</h3>
     ${ST.key ? '<p class="note">A conversa usa a chave da API da Anthropic guardada nas Notas.</p>' : '<p class="note">Para conversar, cola aqui a chave da API da Anthropic (fica guardada no Porta-chaves, a mesma das Notas).</p><input class="key" id="keyIn" type="password" placeholder="sk-ant-…" autocomplete="off"><div class="row"><button class="b p" type="button" data-savekey>Guardar a chave</button></div><p class="err" id="keyErr" hidden></p>'}
     <div class="row" style="margin-top:18px"><button class="b" type="button" data-clear>Começar conversa nova</button><button class="b" type="button" data-hide>Esconder a bolinha</button></div>
@@ -275,7 +277,7 @@ $('#panel').addEventListener('click', async e => {
   if (t.closest('[data-open]')) { MG.open(t.closest('[data-open]').dataset.open); return; }
   if (t.closest('[data-say]')) { send(t.closest('[data-say]').dataset.say); return; }
   if (t.closest('[data-note]')) { MG.openNote(t.closest('[data-note]').dataset.note); return; }
-  if (t.closest('[data-gokey]')) { settingsOpen = true; renderPanel(); return; }
+  if (t.closest('[data-gokey]') || t.closest('[data-gosettings]')) { settingsOpen = true; renderPanel(); $('#settings').scrollTop = 0; return; }
   const pa = t.closest('[data-pact]');
   if (pa) { const [id, i] = pa.dataset.pact.split('|'); const a = panelAlerts.find(x => x.id === id); if (a) { panelAlerts.splice(panelAlerts.indexOf(a), 1); await doAct(a, a.actions[+i]); renderChat(); } return; }
   if (t.closest('[data-script]')) { const r = await MG.scriptUpdate(); if (r && r.error) flashErr(r.error); return; }
