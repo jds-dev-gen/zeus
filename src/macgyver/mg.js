@@ -180,13 +180,14 @@ function renderChat() {
   let h = '';
   if (!msgs.length) {
     h = `<div class="hello"><b>Olá, João.</b><span>Diz-me o que tens de fazer e eu lembro-te. Experimenta:</span>
+      ${ST.page ? '<button type="button" data-say="Resume esta página.">Resume esta página</button>' : ''}
       <button type="button" data-say="O que tenho hoje?">O que tenho hoje?</button>
       <button type="button" data-say="Lembra-me de responder a isto amanhã às 10">Lembra-me de responder a isto amanhã às 10</button>
       <button type="button" data-say="Que tarefas ficaram da última reunião?">Que tarefas ficaram da última reunião?</button></div>`;
   }
   for (const m of msgs) {
     if (m.role === 'me') { h += `<div class="me">${m.voice ? '<span class="vo">🎙</span>' : ''}${esc(m.text)}</div>`; continue; }
-    h += `<div class="ai ${m.err ? 'err' : ''}">${md(m.text)}${(m.made || []).map(t => `<div class="made"><span class="ck"></span><div>${esc(t.title)}<small>${[t.due ? dayName(t.due) : 'Sem data', t.time ? 'às ' + t.time : '', t.link ? 'com a página ligada' : ''].filter(Boolean).join(' · ')}</small></div></div>`).join('')}${(m.notes || []).map(n => `<button type="button" class="notelink" data-note="${esc(n.id)}">📝 ${esc(n.title)}</button>`).join(' ')}${m.err && !ST.key ? '<div class="row"><button class="b p" type="button" data-gokey>Pôr a chave</button></div>' : ''}</div>`;
+    h += `<div class="ai ${m.err ? 'err' : ''}">${md(m.text)}${(m.made || []).map(t => `<div class="made"><span class="ck"></span><div>${esc(t.title)}<small>${[t.due ? dayName(t.due) : 'Sem data', t.time ? 'às ' + t.time : '', t.link ? 'com a página ligada' : ''].filter(Boolean).join(' · ')}</small></div></div>`).join('')}${(m.steps || []).length ? `<div class="steps">${m.steps.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}${(m.notes || []).map(n => `<button type="button" class="notelink" data-note="${esc(n.id)}">📝 ${esc(n.title)}</button>`).join(' ')}${m.err && !ST.key ? '<div class="row"><button class="b p" type="button" data-gokey>Pôr a chave</button></div>' : ''}</div>`;
   }
   for (const a of panelAlerts) h += `<div class="ai"><b>${esc(a.title)}</b>${a.text ? '\n' + esc(a.text) : ''}<div class="acts">${a.actions.map((x, i) => `<button class="b ${x.primary ? 'p' : ''}" type="button" data-pact="${esc(a.id)}|${i}">${esc(x.label)}</button>`).join('')}</div></div>`;
   if (thinking) h += '<div class="ai think">A pensar<span class="dots"></span></div>';
@@ -195,7 +196,7 @@ function renderChat() {
 }
 function renderCtx() {
   const b = $('#ctx'), p = ST && ST.page;
-  b.hidden = !p;
+  b.hidden = !p; $('#sumBtn').hidden = !p || thinking;
   if (p) { b.textContent = '📄 ' + (p.title || hostOf(p.url)); b.classList.toggle('off', !ctxOn); b.title = ctxOn ? 'O MacGyver pode ver esta página. Carrega para não a usar nesta conversa.' : 'O MacGyver não vai ver esta página. Carrega para voltar a usar.'; }
 }
 function renderSettings() {
@@ -249,6 +250,7 @@ $('#mic').addEventListener('click', () => {
   if (listening) listenStop(false); else listenStart('click');
 });
 $('#ctx').addEventListener('click', () => { ctxOn = !ctxOn; renderCtx(); });
+$('#sumBtn').addEventListener('click', () => { ctxOn = true; send('Resume esta página.'); });
 
 /* ---------- cliques no painel ---------- */
 $('#orb').addEventListener('click', () => {
@@ -349,6 +351,7 @@ function closeBubble() {
 }
 async function doAct(a, x) {
   if (!x) return;
+  if (a.kind === 'confirm') { await MG.confirmReply(a.cid, x.id === 'yes'); return; }
   if (x.id === 'day') { if (bubble === a) bubble = null; tab = 'today'; await refresh(true); setMode('panel'); return; }
   if (x.id === 'ok') return;
   const r = await MG.act({ kind: a.kind, task: a.task }, x);
@@ -371,8 +374,14 @@ $('#bubble').addEventListener('click', async e => {
 });
 
 /* ---------- avisos vindos do processo principal ---------- */
-MG.onAlert(a => {
+MG.onAlert(async a => {
   startLoop();
+  // pedido de confirmação a meio de uma conversa: vai sempre para o painel, à vista
+  if (a.kind === 'confirm') {
+    if (!panelAlerts.some(x => x.id === a.id)) panelAlerts.push(a);
+    if (mode !== 'panel') { if (bubble && bubble.type === 'voice') bubble = null; await refresh(); setMode('panel'); } else renderChat();
+    return;
+  }
   if (mode === 'panel') { if (!panelAlerts.some(x => x.id === a.id)) panelAlerts.push(a); renderChat(); return; }
   if (bubble && bubble.type === 'alert' && bubble.id === a.id) return;
   if (bubble && (bubble.type === 'alert' || bubble.type === 'listen' || (bubble.type === 'voice' && !bubble.answer))) { if (!alertQ.some(x => x.id === a.id)) alertQ.push(a); renderBubble(); return; }

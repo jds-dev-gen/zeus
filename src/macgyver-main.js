@@ -207,8 +207,25 @@ function setupMacGyver(x) {
     { name: 'procurar_notas', description: 'Procura nas Notas do Zeus (notas e reuniões gravadas, com resumos, decisões e tarefas). Devolve as mais recentes que têm todas as palavras.', input_schema: { type: 'object', properties: { texto: { type: 'string' } }, required: ['texto'] } },
     { name: 'notas_recentes', description: 'As notas e reuniões mais recentes (título, data, início do texto).', input_schema: { type: 'object', properties: { quantas: { type: 'integer', minimum: 1, maximum: 15 } } } },
     { name: 'ler_nota', description: 'Lê o texto de uma nota (por id).', input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
-    { name: 'pagina_aberta', description: 'Título, endereço, texto selecionado e o texto da página que o utilizador tem aberta no Zeus.', input_schema: { type: 'object', properties: {} } }
+    { name: 'pagina_aberta', description: 'Título, endereço, texto selecionado e o texto da página que o utilizador tem aberta no Zeus. Usa-a para resumir ou responder sobre a página.', input_schema: { type: 'object', properties: {} } },
+    { name: 'elementos_da_pagina', description: 'Lista os elementos onde se pode mexer na página aberta (ligações, botões, campos, opções), cada um com um id. Os visíveis no ecrã vêm primeiro. Com "procurar", só os que têm essas palavras.', input_schema: { type: 'object', properties: { procurar: { type: 'string' } } } },
+    { name: 'clicar', description: 'Carrega num elemento da página aberta (id de elementos_da_pagina). Se o clique enviar, publicar, comprar, apagar ou aceitar alguma coisa, o Zeus pede primeiro confirmação ao João.', input_schema: { type: 'object', properties: { id: { type: 'integer' }, para_que: { type: 'string', description: 'O que este clique faz, em poucas palavras (ex.: "enviar o email ao Pedro").' } }, required: ['id', 'para_que'] } },
+    { name: 'escrever', description: 'Escreve texto num campo da página aberta (id de elementos_da_pagina). Nunca palavras-passe nem dados de pagamento.', input_schema: { type: 'object', properties: { id: { type: 'integer' }, texto: { type: 'string' }, apagar_antes: { type: 'boolean', description: 'Substituir o que lá está.' }, enter: { type: 'boolean', description: 'Carregar em Enter no fim (ex.: numa pesquisa).' } }, required: ['id', 'texto'] } },
+    { name: 'deslizar', description: 'Desliza a página aberta: para baixo, para cima, para o topo, para o fim, ou até um texto.', input_schema: { type: 'object', properties: { direcao: { type: 'string', enum: ['baixo', 'cima', 'topo', 'fim'] }, ate_texto: { type: 'string' } } } },
+    { name: 'abrir_pagina', description: 'Abre um endereço (ou uma pesquisa na web) num separador novo do Zeus, que passa a ser a página aberta.', input_schema: { type: 'object', properties: { endereco: { type: 'string' } }, required: ['endereco'] } },
+    { name: 'voltar_atras', description: 'Volta à página anterior no separador aberto.', input_schema: { type: 'object', properties: {} } }
   ];
+  // cliques que mudam alguma coisa no mundo: o João confirma antes
+  const RISKY = /\b(enviar|envia|send|submeter|submit|publicar|publish|post(ar)?|tweet|responder a todos|comprar|buy|pagar|pay|encomendar|order|checkout|finalizar|apagar|eliminar|delete|remove|remover|excluir|aceitar|accept|confirmar|confirm|subscrever|subscribe|assinar|sign|transferir|transfer|reservar|book|partilhar|share|convidar|invite|arquivar|archive|sair|log ?out|terminar sessão)\b/i;
+  const confirms = new Map();
+  function confirmAsk(text, detail) {
+    const id = uid();
+    return new Promise(res => {
+      const t = setTimeout(() => { confirms.delete(id); res(false); }, 3 * 60 * 1000);
+      confirms.set(id, ok => { clearTimeout(t); confirms.delete(id); res(!!ok); });
+      x.send('alert', { id, kind: 'confirm', cid: id, title: text, text: detail || '', actions: [{ id: 'yes', label: 'Sim, pode', primary: true }, { id: 'no', label: 'Não' }] });
+    });
+  }
   function system() {
     const now = new Date();
     return `És o MacGyver, o agente pessoal do João, dentro do Zeus (o browser dele). O João é subdiretor do Observador (jornal digital português) e coordena também a produção de podcasts e rádio.
@@ -222,7 +239,14 @@ Regras:
 - "Isto", "esta página", "este email", "este artigo" referem-se à página aberta: usa ligar_pagina e, se precisares de perceber o que é, pagina_aberta.
 - Quando te pedem para tirar tarefas de uma reunião, procura a nota, lê-a e cria só as tarefas que são do João (ou sem responsável), com o prazo que lá estiver.
 - Se faltar informação essencial, pergunta numa frase. Se a API do Google falhar, diz isso claramente.
-- Não inventes compromissos nem tarefas.`;
+- Não inventes compromissos nem tarefas.
+
+Páginas (o Zeus é um browser):
+- Para resumir a página aberta, usa pagina_aberta e responde com 3 a 6 pontos curtos começados por "• " (o essencial, números e nomes concretos), mais uma frase final se houver alguma coisa a fazer. Sem títulos.
+- Podes também mexer na página como o João faria: vê os elementos com elementos_da_pagina, depois clicar, escrever, deslizar; abrir_pagina abre um endereço ou uma pesquisa. Depois de cada ação confirma o resultado (título e endereço) antes da próxima; se a página mudou, volta a ver os elementos.
+- Cliques que enviam, publicam, compram, pagam, apagam, aceitam ou partilham alguma coisa: o Zeus pergunta ao João antes. Se ele disser que não, paras e dizes que não fizeste. Nunca escrevas palavras-passe, códigos ou dados de pagamento; nunca inicies sessão por ele.
+- Quando escreveres um email ou mensagem por ele, deixa-o pronto mas não envies sem ele pedir expressamente.
+- No fim diz em poucas palavras o que fizeste.`;
   }
   async function runTool(name, inp, ctx) {
     inp = inp || {};
@@ -275,10 +299,39 @@ Regras:
       return { titulo: n.title, atualizada: ymd(new Date(n.updated)), texto: (n.text || '').slice(0, 14000) };
     }
     if (name === 'pagina_aberta') {
-      const p = ctx.page || await pageNow();
+      const p = ctx.acted ? await pageNow() : (ctx.page || await pageNow());
       if (!p) return { erro: 'Não há nenhuma página aberta (o João está na página principal ou numa app do Zeus).' };
-      return { titulo: p.title, endereco: p.url, selecao: p.selection || undefined, texto: (p.text || '').slice(0, 9000) };
+      return { titulo: p.title, endereco: p.url, selecao: p.selection || undefined, texto: (p.text || '').slice(0, 40000) };
     }
+    if (name === 'elementos_da_pagina') return x.pageAct('elements', { q: inp.procurar || '' });
+    if (name === 'clicar') {
+      const el = await x.pageAct('inspect', { id: inp.id });
+      if (!el) return { erro: 'Esse elemento já não está na página (vê outra vez os elementos).' };
+      const why = str(inp.para_que, 120);
+      const risky = (el.submits && (el.post || el.pwd)) || RISKY.test(el.label) || RISKY.test(why);
+      if (risky) {
+        const ok = await confirmAsk(`Carrego em “${el.label || 'este botão'}”?`, why ? `Para ${why.replace(/^para /i, '')}.` : '');
+        if (!ok) { ctx.steps.push(`Não carreguei em «${el.label}» (o João disse que não)`); return { recusado: true, nota: 'O João disse que não. Não carregues e não tentes outra forma.' }; }
+      }
+      const r = await x.pageAct('click', { id: inp.id });
+      ctx.acted = true;
+      if (r.ok) ctx.steps.push(`Carreguei em «${r.carregou_em || el.label}»`);
+      return r;
+    }
+    if (name === 'escrever') {
+      const r = await x.pageAct('type', { id: inp.id, text: String(inp.texto || '').slice(0, 5000), clear: !!inp.apagar_antes, enter: !!inp.enter });
+      ctx.acted = true;
+      if (r.ok) ctx.steps.push(`Escrevi “${str(inp.texto, 40)}${String(inp.texto || '').length > 40 ? '…' : ''}”`);
+      return r;
+    }
+    if (name === 'deslizar') return x.pageAct('scroll', { dir: inp.direcao || 'baixo', text: inp.ate_texto || '' });
+    if (name === 'abrir_pagina') {
+      const r = await x.pageAct('open', { url: inp.endereco });
+      ctx.acted = true;
+      if (r.ok) ctx.steps.push(`Abri ${r.titulo || r.endereco}`);
+      return r;
+    }
+    if (name === 'voltar_atras') { const r = await x.pageAct('back', {}); ctx.acted = true; if (r.ok) ctx.steps.push('Voltei à página anterior'); return r; }
     return { erro: 'Ferramenta desconhecida.' };
   }
   async function api(body, key) {
@@ -307,7 +360,7 @@ Regras:
     if (!key) return { ok: false, needKey: true, error: 'Para conversar, o MacGyver precisa da chave da API da Anthropic (a mesma das Notas).' };
     if (asking) return { ok: false, error: 'Ainda estou a responder à pergunta anterior.' };
     asking = true; x.send('state', { thinking: true });
-    const ctx = { made: [], done: [], notes: [], page: opts.page === false ? null : await pageNow() };
+    const ctx = { made: [], done: [], notes: [], steps: [], acted: false, page: opts.page === false ? null : await pageNow() };
     const me = { role: 'me', text, at: Date.now(), voice: !!opts.voice };
     D.chat.push(me); save();
     try {
@@ -319,8 +372,8 @@ Regras:
       const pageHint = ctx.page ? `\n\n[Página aberta no Zeus: “${ctx.page.title || ''}” — ${ctx.page.url}${ctx.page.selection ? ` — texto selecionado: “${ctx.page.selection.slice(0, 600)}”` : ''}]` : '\n\n[Sem página aberta: o João está na página principal ou numa app do Zeus.]';
       const msgs = hist.concat([{ role: 'user', content: text + pageHint }]);
       let out = '';
-      for (let step = 0; step < 10; step++) {
-        const j = await api({ model: MODEL, max_tokens: 1200, system: system(), tools: TOOLS, messages: msgs }, key);
+      for (let step = 0; step < 16; step++) {
+        const j = await api({ model: MODEL, max_tokens: 1600, system: system(), tools: TOOLS, messages: msgs }, key);
         const content = j.content || [];
         const txt = content.filter(c => c.type === 'text').map(c => c.text).join('').trim();
         const uses = content.filter(c => c.type === 'tool_use');
@@ -329,13 +382,13 @@ Regras:
         const results = [];
         for (const u of uses) {
           let r; try { r = await runTool(u.name, u.input, ctx); } catch (e) { r = { erro: e.message }; }
-          results.push({ type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(r).slice(0, 30000) });
+          results.push({ type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(r).slice(0, 45000) });
         }
         msgs.push({ role: 'user', content: results });
-        if (step === 9) out = txt || 'Fiz o que consegui, mas o pedido ficou a meio.';
+        if (step === 15) out = txt || 'Fiz o que consegui, mas o pedido ficou a meio.';
       }
       const made = [...new Set(ctx.made)].map(id => uById(id) || (findLocal(id) && Object.assign({}, findLocal(id), { origin: 'mg' }))).filter(Boolean);
-      const ai = { role: 'ai', text: out || 'Feito.', at: Date.now(), made: made.map(t => ({ id: t.id, title: t.title, due: t.due, time: t.time, link: t.link })), notes: ctx.notes.slice(0, 3) };
+      const ai = { role: 'ai', text: out || 'Feito.', at: Date.now(), made: made.map(t => ({ id: t.id, title: t.title, due: t.due, time: t.time, link: t.link })), notes: ctx.notes.slice(0, 3), steps: ctx.steps.slice(0, 12) };
       D.chat.push(ai); save();
       if (opts.voice && D.settings.speak) speak(ai.text);
       return { ok: true, msg: ai };
@@ -569,6 +622,7 @@ Regras:
     try { return { ok: true, text: await transcribe(buf) }; } catch (e) { return { ok: false, error: e.message }; }
   });
   h('stopSpeaking', () => { stopSpeaking(); return true; });
+  h('confirmReply', (id, ok) => { const f = confirms.get(String(id)); if (f) f(!!ok); return true; });
   h('speak', t => { speak(t); return true; });
   h('openNotas', () => { x.openNotas(); return true; });
   h('scriptUpdate', () => x.scriptUpdate());

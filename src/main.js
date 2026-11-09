@@ -2098,8 +2098,114 @@ function mgPageLite() { const wc = mgPageView(); return wc ? { title: wc.getTitl
 async function mgPage() {
   const wc = mgPageView(); if (!wc) return null;
   let r = {};
-  try { r = await wc.executeJavaScriptInIsolatedWorld(1999, [{ code: `({ sel: String(getSelection() || '').slice(0, 4000), text: (document.body && document.body.innerText || '').slice(0, 20000) })` }]) || {}; } catch (e) { /* página sem acesso */ }
+  try { r = await wc.executeJavaScriptInIsolatedWorld(1999, [{ code: `({ sel: String(getSelection() || '').slice(0, 4000), text: (document.body && document.body.innerText || '').slice(0, 60000) })` }]) || {}; } catch (e) { /* página sem acesso */ }
   return { title: wc.getTitle(), url: wc.getURL(), selection: r.sel || '', text: r.text || '' };
+}
+// O MacGyver a mexer na página aberta: ver os elementos, carregar, escrever, deslizar, abrir e voltar.
+// Os cliques e o texto chegam à página como se viessem do rato e do teclado (sendInputEvent / insertText).
+const MG_ELEMENTS_JS = q => `(() => {
+  const fold = t => String(t || '').normalize('NFD').replace(/\\p{M}/gu, '').toLowerCase();
+  const want = fold(${JSON.stringify(String(q || ''))}).split(/\\s+/).filter(Boolean);
+  const SEL = 'a[href], button, input:not([type=hidden]), textarea, select, summary, [role=button], [role=link], [role=tab], [role=menuitem], [role=option], [role=checkbox], [role=switch], [role=textbox], [role=searchbox], [role=combobox], [contenteditable=""], [contenteditable=true]';
+  let n = +(document.documentElement.dataset.mgN || 0);
+  const out = [];
+  const vh = innerHeight, vw = innerWidth;
+  for (const el of document.querySelectorAll(SEL)) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    const st = getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none' || +st.opacity === 0) continue;
+    if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
+    const tag = el.tagName.toLowerCase(), type = (el.getAttribute('type') || '').toLowerCase();
+    let label = el.getAttribute('aria-label') || (el.labels && el.labels[0] && el.labels[0].innerText) || '';
+    if (!label) label = tag === 'input' || tag === 'textarea' ? (el.placeholder || el.title || el.name || '') : (el.innerText || el.title || el.value || '');
+    if (!label && tag === 'a') { const img = el.querySelector('img[alt]'); label = img ? img.alt : ''; }
+    label = String(label).replace(/\\s+/g, ' ').trim().slice(0, 90);
+    const kind = tag === 'a' || el.getAttribute('role') === 'link' ? 'ligação' : tag === 'select' ? 'lista' : (tag === 'input' && !/^(button|submit|reset|image|checkbox|radio)$/.test(type)) || tag === 'textarea' || el.isContentEditable || /textbox|searchbox|combobox/.test(el.getAttribute('role') || '') ? 'campo' : type === 'checkbox' || type === 'radio' || /checkbox|switch/.test(el.getAttribute('role') || '') ? 'opção' : 'botão';
+    if (!label && kind !== 'campo') continue;
+    if (want.length && !want.every(w => fold(label + ' ' + (el.getAttribute('href') || '')).includes(w))) continue;
+    if (!el.dataset.mg) el.dataset.mg = String(++n);
+    const vis = r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw;
+    const it = { id: +el.dataset.mg, tipo: kind, texto: label || '(sem nome)', visivel: vis };
+    if (kind === 'ligação') { const h = el.getAttribute('href') || ''; if (h && !h.startsWith('javascript')) it.endereco = h.slice(0, 120); }
+    if (kind === 'campo') { it.valor = type === 'password' ? (el.value ? '••••' : '') : String(el.value != null ? el.value : el.innerText || '').slice(0, 80); if (type === 'password') it.palavra_passe = true; }
+    if (kind === 'opção') it.marcada = !!(el.checked || el.getAttribute('aria-checked') === 'true');
+    out.push(it);
+  }
+  document.documentElement.dataset.mgN = String(n);
+  out.sort((a, b) => (b.visivel - a.visivel) || (a.id - b.id));
+  return { titulo: document.title, endereco: location.href, total: out.length, elementos: out.slice(0, 140) };
+})()`;
+const MG_INSPECT_JS = id => `(() => {
+  const el = document.querySelector('[data-mg="${+id}"]');
+  if (!el) return null;
+  el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+  const r = el.getBoundingClientRect();
+  const tag = el.tagName.toLowerCase(), type = (el.getAttribute('type') || '').toLowerCase();
+  const label = String(el.getAttribute('aria-label') || el.innerText || el.value || el.title || el.placeholder || '').replace(/\\s+/g, ' ').trim().slice(0, 90);
+  const form = el.closest('form');
+  const submits = form && (tag === 'button' && (type === '' || type === 'submit') || (tag === 'input' && /^(submit|image)$/.test(type)));
+  const post = form && (form.method || '').toLowerCase() === 'post';
+  const pwd = form && !!form.querySelector('input[type=password]');
+  // contorno por um instante, para o João ver onde o MacGyver mexe
+  const o = el.style.outline, of = el.style.outlineOffset;
+  el.style.outline = '3px solid #8f5cff'; el.style.outlineOffset = '2px';
+  setTimeout(() => { el.style.outline = o; el.style.outlineOffset = of; }, 1400);
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height, tag, type, label, href: el.getAttribute('href') || '', submits: !!submits, post: !!post, pwd, editable: el.isContentEditable || tag === 'textarea' || (tag === 'input' && !/^(button|submit|reset|image|checkbox|radio|file)$/.test(type)), password: type === 'password' };
+})()`;
+const mgSleep = ms => new Promise(r => setTimeout(r, ms));
+async function mgSettle(wc, min = 500) {
+  await mgSleep(min);
+  if (wc.isDestroyed()) return;
+  if (wc.isLoading()) await new Promise(res => { const t = setTimeout(res, 8000); wc.once('did-stop-loading', () => { clearTimeout(t); setTimeout(res, 300); }); });
+}
+async function mgPageAct(op, a = {}) {
+  const js = (wc, code) => wc.executeJavaScriptInIsolatedWorld(1999, [{ code }]);
+  const info = wc => (wc && !wc.isDestroyed() ? { titulo: wc.getTitle(), endereco: wc.getURL() } : {});
+  if (op === 'open') {
+    const url = toURL(a.url);
+    if (!/^https?:/.test(url)) return { erro: 'Endereço inválido.' };
+    newTab({ url, space: spaceForOpener() });
+    await mgSleep(300);
+    const wc = mgPageView(); if (!wc) return { erro: 'Não consegui abrir a página.' };
+    await mgSettle(wc, 900);
+    return Object.assign({ ok: true }, info(wc));
+  }
+  const wc = mgPageView();
+  if (!wc) return { erro: 'Não há nenhuma página aberta (o João está na página principal ou numa app interna do Zeus).' };
+  if (op === 'back') { if (!wc.navigationHistory.canGoBack()) return { erro: 'Não há página anterior.' }; wc.navigationHistory.goBack(); await mgSettle(wc, 600); return Object.assign({ ok: true }, info(wc)); }
+  if (op === 'elements') { try { return await js(wc, MG_ELEMENTS_JS(a.q)); } catch (e) { return { erro: 'Não consegui ler esta página.' }; } }
+  if (op === 'inspect') { try { return await js(wc, MG_INSPECT_JS(a.id)); } catch (e) { return null; } }
+  if (op === 'click') {
+    const el = await js(wc, MG_INSPECT_JS(a.id)).catch(() => null);
+    if (!el) return { erro: 'Esse elemento já não está na página (vê outra vez os elementos).' };
+    await mgSleep(250);
+    const z = wc.getZoomFactor() || 1, x = Math.round(el.x * z), y = Math.round(el.y * z);
+    wc.sendInputEvent({ type: 'mouseMove', x, y });
+    wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+    wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+    await mgSettle(wc, 700);
+    return Object.assign({ ok: true, carregou_em: el.label }, info(wc));
+  }
+  if (op === 'type') {
+    const el = await js(wc, MG_INSPECT_JS(a.id)).catch(() => null);
+    if (!el) return { erro: 'Esse campo já não está na página.' };
+    if (el.password) return { erro: 'Não escrevo palavras-passe.' };
+    await js(wc, `(() => { const el = document.querySelector('[data-mg="${+a.id}"]'); el.focus(); ${a.clear ? `if (el.isContentEditable) { const s = getSelection(); s.selectAllChildren(el); } else if (el.select) el.select();` : `if (!el.isContentEditable && el.setSelectionRange && /^(text|search|url|email|tel|)$/.test(el.type || '')) { const n = (el.value || '').length; el.setSelectionRange(n, n); }`} return true; })()`).catch(() => {});
+    await mgSleep(80);
+    if (a.clear) wc.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' }), wc.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
+    wc.insertText(String(a.text || ''));
+    if (a.enter) { await mgSleep(120); wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'char', keyCode: '\r' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' }); await mgSettle(wc, 700); }
+    return Object.assign({ ok: true }, info(wc));
+  }
+  if (op === 'scroll') {
+    const code = a.text ? `(() => { const f = t => String(t).normalize('NFD').replace(/\\p{M}/gu, '').toLowerCase(); const q = f(${JSON.stringify(String(a.text))}); const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (f(n.textContent).includes(q) && n.parentElement && n.parentElement.getBoundingClientRect().height > 0) { n.parentElement.scrollIntoView({ block: 'center', behavior: 'smooth' }); return true; } } return false; })()`
+      : a.dir === 'topo' ? `scrollTo({ top: 0, behavior: 'smooth' }), true` : a.dir === 'fim' ? `scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), true` : `scrollBy({ top: ${a.dir === 'cima' ? -1 : 1} * innerHeight * 0.8, behavior: 'smooth' }), true`;
+    const ok = await js(wc, code).catch(() => false);
+    await mgSleep(500);
+    return ok ? { ok: true } : { erro: 'Não encontrei esse texto na página.' };
+  }
+  return { erro: 'Ação desconhecida.' };
 }
 function mgScriptUpdate() {
   const f = (S.settings.homeFeeds || []).find(x => (x.v || 1) < 2);
@@ -2131,6 +2237,7 @@ function setupMg() {
     setKey: k => { if (notasApp) notasApp.setKey(k); },
     whisper: () => (notasApp ? notasApp.whisper() : null),
     currentPage: () => mgPage(),
+    pageAct: (op, a) => mgPageAct(op, a),
     pageLite: () => mgPageLite(),
     openURL: url => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); },
     openNote: id => { showApp('notas'); const go = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id }); }; setTimeout(go, notasWC && !notasWC.isLoading() ? 150 : 1500); },
