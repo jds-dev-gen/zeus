@@ -92,7 +92,7 @@ function colTasks(areaId) {
 function renderBoard() {
   const cols = S.areas.map(a => ({ id: a.id, name: a.name, color: a.color }));
   if (S.tasks.some(t => !t.area) || (showDone && S.done.some(t => !t.area)) || !cols.length) cols.push({ id: '', name: 'Sem tema', color: '' });
-  let h = '<div class="board" id="board">';
+  let h = `<div class="board" id="board" data-n="${cols.length + 1}">`;
   for (const c of cols) {
     const tt = colTasks(c.id), n = tt.filter(t => !t.done).length;
     h += `<section class="col" data-area="${esc(c.id)}">
@@ -102,12 +102,19 @@ function renderBoard() {
     </section>`;
   }
   h += `<div class="newcol" id="newcol"><button type="button" data-newarea>+ Tema novo</button></div></div>`;
-  const sx = $('#board') ? $('#board').parentElement.scrollLeft : 0;
-  const scrolls = [...document.querySelectorAll('.col')].map(c => [c.dataset.area, c.querySelector('.cards').scrollTop]);
+  const sy = $('#stage').scrollTop;
   $('#stage').innerHTML = h;
-  $('#stage').scrollLeft = sx;
-  for (const [id, top] of scrolls) { const c = document.querySelector(`.col[data-area="${CSS.escape(id)}"] .cards`); if (c) c.scrollTop = top; }
+  fitCols();
+  $('#stage').scrollTop = sy;
 }
+// como os espaços: 4 temas por linha se couberem com pelo menos 300 px cada, senão 3 (menos num ecrã estreito)
+function fitCols() {
+  const b = $('#board'); if (!b) return;
+  const w = $('#stage').clientWidth - 44, gap = 18, items = +b.dataset.n || 1;
+  const n = w >= 4 * 300 + 3 * gap ? 4 : w >= 3 * 250 + 2 * gap ? 3 : w >= 2 * 240 + gap ? 2 : 1;
+  b.style.setProperty('--cols', Math.min(n, items));
+}
+window.addEventListener('resize', fitCols);
 function renderList() {
   const add = (d, n) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
   const wk = add(S.today, 7);
@@ -221,7 +228,7 @@ async function newArea(name) {
   const r = await TF.addArea(name);
   if (r && r.ok === false) { toast(r.error); return; }
   await load();
-  setTimeout(() => { const s = $('#stage'); s.scrollLeft = s.scrollWidth; const i = document.querySelector(`[data-addin="${CSS.escape(r.area.id)}"]`); if (i) i.focus(); }, 30);
+  setTimeout(() => { const i = document.querySelector(`[data-addin="${CSS.escape(r.area.id)}"]`); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } }, 30);
 }
 function newAreaInput() {
   const nc = $('#newcol') || null;
@@ -230,7 +237,7 @@ function newAreaInput() {
   const i = $('#naIn'); i.focus();
   i.addEventListener('keydown', e => { if (e.key === 'Enter') newArea(i.value); if (e.key === 'Escape') render(); });
   i.addEventListener('blur', () => setTimeout(() => { if ($('#naIn') && !$('#naIn').value.trim()) render(); }, 150));
-  $('#stage').scrollLeft = $('#stage').scrollWidth;
+  nc.scrollIntoView({ block: 'center' });
 }
 
 /* menu de um tema */
@@ -308,7 +315,10 @@ $('#stage').addEventListener('pointerdown', e => {
     place(ev.clientX, ev.clientY);
   };
   function place(x, y) {
-    const col = [...document.querySelectorAll('.col')].find(c => { const b = c.getBoundingClientRect(); return x >= b.left && x <= b.right; });
+    // o tema debaixo do rato (ou o mais perto, nos espaços entre colunas e linhas)
+    let col = null, best = 1e9;
+    for (const c of document.querySelectorAll('.col')) { const b = c.getBoundingClientRect(); const dx = x < b.left ? b.left - x : x > b.right ? x - b.right : 0, dy = y < b.top ? b.top - y : y > b.bottom ? y - b.bottom : 0; const d = dx + dy; if (d < best) { best = d; col = c; } }
+    if (best > 60) col = null;
     document.querySelectorAll('.col.drop').forEach(c => c !== col && c.classList.remove('drop'));
     if (!col) return;
     col.classList.add('drop');
@@ -323,9 +333,7 @@ $('#stage').addEventListener('pointerdown', e => {
   function autoScroll() {
     raf = 0; if (!ghost) return;
     const st = $('#stage'), b = st.getBoundingClientRect(), x = last.clientX, y = last.clientY;
-    if (x > b.right - 60) st.scrollLeft += Math.ceil((x - (b.right - 60)) / 4); else if (x < b.left + 60) st.scrollLeft -= Math.ceil(((b.left + 60) - x) / 4);
-    const col = slot && slot.closest('.cards');
-    if (col) { const cb = col.getBoundingClientRect(); if (y > cb.bottom - 40) col.scrollTop += Math.ceil((y - (cb.bottom - 40)) / 3); else if (y < cb.top + 40) col.scrollTop -= Math.ceil(((cb.top + 40) - y) / 3); }
+    if (y > b.bottom - 60) st.scrollTop += Math.ceil((y - (b.bottom - 60)) / 3); else if (y < b.top + 60) st.scrollTop -= Math.ceil(((b.top + 60) - y) / 3);
     place(x, y);
     raf = requestAnimationFrame(autoScroll);
   }

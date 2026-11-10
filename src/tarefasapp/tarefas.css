@@ -39,8 +39,9 @@ input, textarea, select { font: inherit; color: inherit; }
 
 .stage { flex: 1; overflow: auto; padding: 22px; }
 /* quadro: uma coluna por tema */
-.board { display: flex; gap: 18px; align-items: flex-start; min-height: 100%; padding-bottom: 30px; }
-.col { flex: none; width: 316px; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 14px 12px 12px; display: flex; flex-direction: column; max-height: calc(100vh - 120px); }
+/* no máximo 3 temas por linha, todos da mesma largura; os outros passam para baixo (como os espaços) */
+.board { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 18px; align-items: start; padding-bottom: 40px; max-width: 1640px; margin: 0 auto; }
+.col { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 14px 12px 12px; display: flex; flex-direction: column; }
 .col.drop { border-color: var(--fg); }
 .ch { display: flex; align-items: center; gap: 9px; padding: 4px 6px 12px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
 .ch .cd { width: 10px; height: 10px; border-radius: 50%; flex: none; }
@@ -50,7 +51,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .ch .more { margin-left: auto; color: var(--faint); width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; flex: none; }
 .ch .more:hover { background: var(--surface); color: var(--fg); }
 .ch input { font: 500 12.5px var(--mono); letter-spacing: 1.5px; text-transform: uppercase; border: 1px solid var(--line2); border-radius: 6px; padding: 3px 6px; background: var(--surface); outline: none; width: 100%; }
-.cards { display: flex; flex-direction: column; gap: 9px; overflow-y: auto; min-height: 20px; padding: 2px; margin: -2px; }
+.cards { display: flex; flex-direction: column; gap: 9px; min-height: 20px; }
 .empty-col { color: var(--faint); font-size: 12.5px; text-align: center; padding: 14px 6px; }
 
 .card { border-radius: 15px; padding: 13px 14px 11px 12px; color: #fff; position: relative; cursor: pointer; display: grid; grid-template-columns: 24px 1fr; gap: 0 10px; transition: transform .12s ease, box-shadow .12s ease; user-select: none; }
@@ -81,7 +82,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .add { margin-top: 10px; border: 1.5px dashed var(--line2); border-radius: 14px; padding: 10px 12px; display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 14px; flex: none; }
 .add:hover { border-color: var(--muted); color: var(--fg); }
 .add input { flex: 1; border: 0; outline: none; background: none; min-width: 0; }
-.newcol { flex: none; width: 220px; border: 1.5px dashed var(--line2); border-radius: 22px; padding: 18px; color: var(--muted); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.newcol { min-height: 64px; border: 1.5px dashed var(--line2); border-radius: 22px; padding: 18px; color: var(--muted); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .newcol:hover { border-color: var(--muted); color: var(--fg); }
 .newcol input { width: 100%; border: 1px solid var(--line2); border-radius: 8px; padding: 7px 9px; background: var(--panel); outline: none; }
 
