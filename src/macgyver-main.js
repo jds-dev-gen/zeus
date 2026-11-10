@@ -185,7 +185,7 @@ function setupMacGyver(x) {
     if (!title) throw new Error('A tarefa precisa de um título.');
     let area = '';
     if (o.area) { const a = findArea(o.area) || (o.newArea ? addArea(o.area) : null); area = a ? a.id : ''; }
-    const t = { id: uid(), title, due: okDate(o.due), time: okTime(o.time), notes: String(o.notes || '').slice(0, 4000), link: o.link && /^https?:/.test(o.link.url || '') ? { url: String(o.link.url).slice(0, 2000), title: str(o.link.title, 200) } : null, source: str(o.source, 120), created: Date.now(), done: false, area, prio: PRIOS.includes(o.prio) ? o.prio : '', order: nextOrder(area) };
+    const t = { id: uid(), title, due: okDate(o.due), time: okTime(o.time), notes: String(o.notes || '').slice(0, 4000), link: o.link && /^https?:/.test(o.link.url || '') ? { url: String(o.link.url).slice(0, 2000), title: str(o.link.title, 200), app: String(o.link.app || ''), kind: o.link.kind === 'email' ? 'email' : '' } : null, source: str(o.source, 120), created: Date.now(), done: false, area, prio: PRIOS.includes(o.prio) ? o.prio : '', order: nextOrder(area) };
     if (t.time && !t.due) t.due = ymd();
     D.tasks.push(t); save(); x.tasksChanged();
     pushToGoogle(t);
@@ -206,7 +206,7 @@ function setupMacGyver(x) {
       if (o.area !== undefined) { const a = o.area ? findArea(o.area) || (o.newArea ? addArea(o.area) : null) : null; const na = a ? a.id : ''; if (na !== (t.area || '')) { t.area = na; if (o.order === undefined) t.order = nextOrder(na); } }
       if (o.prio !== undefined) t.prio = PRIOS.includes(o.prio) ? o.prio : '';
       if (o.order !== undefined && isFinite(+o.order)) t.order = +o.order;
-      if (o.link !== undefined) t.link = o.link && /^https?:/.test(o.link.url || '') ? { url: String(o.link.url).slice(0, 2000), title: str(o.link.title, 200) } : null;
+      if (o.link !== undefined) t.link = o.link && /^https?:/.test(o.link.url || '') ? { url: String(o.link.url).slice(0, 2000), title: str(o.link.title, 200), app: String(o.link.app || ''), kind: o.link.kind === 'email' ? 'email' : '' } : null;
       if (o.title != null && str(o.title)) t.title = str(o.title, 300);
       if (o.due !== undefined) t.due = okDate(o.due);
       if (o.time !== undefined) { t.time = okTime(o.time); if (t.time && !t.due) t.due = ymd(); }
@@ -273,6 +273,18 @@ function setupMacGyver(x) {
     });
   }
 
+  // é um email aberto? (Gmail: …/#inbox/<id>; Proton Mail: …/<pasta>/<id>; Outlook: …/id/<id>)
+  function emailOf(p) {
+    const u = String(p.url || '');
+    let subject = '';
+    const gm = /^https:\/\/mail\.google\.com\//.test(u) || (!app.isPackaged && process.env.ZEUS_TEST_MAIL && u.startsWith(process.env.ZEUS_TEST_MAIL));   // nos testes, uma imitação do Gmail
+    if (gm && /#[^/]+\/[A-Za-z0-9_-]{12,}/.test(u)) subject = String(p.title || '').replace(/\s+-\s+[^-]+@[^-]+-\s+Gmail\s*$/i, '').replace(/\s+-\s+Gmail\s*$/i, '');
+    else if (/^https:\/\/mail\.proton\.me\//.test(u) && /\/[A-Za-z0-9_=-]{20,}(\?|#|$)/.test(u)) subject = String(p.title || '').replace(/\s*\|\s*Proton Mail\s*$/i, '').replace(/^.*?\s\|\s/, '');
+    else if (/^https:\/\/outlook\.(live|office)\.com\//.test(u) && /\/id\//.test(u)) subject = String(p.title || '').replace(/\s+-\s+Outlook.*$/i, '');
+    else return null;
+    return { url: u, title: 'Email: ' + (str(subject, 150) || 'abrir'), app: p.appId || '', kind: 'email' };
+  }
+
   /* ---------- a página aberta ---------- */
   async function pageNow() { try { return (await x.currentPage()) || null; } catch (e) { return null; } }
 
@@ -329,6 +341,7 @@ Regras:
 - Para mexer em tarefas usa as ferramentas; nunca digas que fizeste algo que não fizeste. Antes de mudar ou fechar uma tarefa existente, vê o id com ver_tarefas.
 - Datas relativas ("amanhã", "sexta", "para a semana") convertem-se a partir de hoje. "De manhã" sem hora = 10:00; "à tarde" = 15:00; "ao fim do dia" = 18:00. Se não houver momento nenhum, cria sem hora.
 - "Isto", "esta página", "este email", "este artigo" referem-se à página aberta: usa ligar_pagina e, se precisares de perceber o que é, pagina_aberta.
+- Quando passas um email a tarefa, o email fica ligado à tarefa (o João chega lá com um clique): lê-o com pagina_aberta, título com o que há a fazer e notas curtas com quem enviou e o essencial.
 - Quando te pedem para tirar tarefas de uma reunião, procura a nota, lê-a e cria só as tarefas que são do João (ou sem responsável), com o prazo que lá estiver.
 - Se faltar informação essencial, pergunta numa frase. Se a API do Google falhar, diz isso claramente.
 - Não inventes compromissos nem tarefas.
@@ -356,7 +369,10 @@ Páginas (o Zeus é um browser):
     }
     if (name === 'criar_tarefa') {
       let link = null;
-      if (inp.ligar_pagina) { const p = ctx.page || await pageNow(); if (p && /^https?:/.test(p.url || '')) link = { url: p.url, title: p.title }; }
+      // um email aberto (Gmail, Proton…) fica sempre ligado à tarefa, para lá chegar com um clique
+      const pg = ctx.page || (inp.ligar_pagina ? await pageNow() : null);
+      const mail = pg && emailOf(pg);
+      if ((inp.ligar_pagina || mail) && pg && /^https?:/.test(pg.url || '')) link = mail || { url: pg.url, title: pg.title, app: pg.appId || '' };
       const t = addTask({ title: inp.titulo, due: inp.data, time: inp.hora, notes: inp.notas, link, source: inp.origem, area: inp.tema, prio: inp.prioridade });
       if (inp.tema && !t.area) ctx.steps.push(`O tema “${str(inp.tema, 40)}” não existe; ficou sem tema`);
       ctx.made.push(t.id);
@@ -643,7 +659,7 @@ Páginas (o Zeus é um browser):
   const fmtWhen = t => !t.due ? '' : (t.due === ymd() ? 'hoje' : t.due === addDays(ymd(), 1) ? 'amanhã' : t.due.split('-').reverse().slice(0, 2).join('/')) + (t.time ? ' às ' + t.time : '');
   function taskAlert(t) {
     const acts = [{ id: 'done', label: 'Já fiz', primary: !t.link }, { id: 'snooze', label: 'Daqui a 1 h' }, { id: 'tomorrow', label: 'Amanhã' }];
-    if (t.link) acts.unshift({ id: 'open', label: 'Abrir a página', primary: true });
+    if (t.link) acts.unshift({ id: 'open', label: t.link.kind === 'email' ? 'Abrir o email' : 'Abrir a página', primary: true });
     alert({ kind: 'task', task: t.id, title: t.title, text: t.notes ? t.notes.slice(0, 220) : (t.link ? t.link.title || t.link.url : ''), source: t.source || '', actions: acts });
   }
   async function morning() {
@@ -711,7 +727,7 @@ Páginas (o Zeus é um browser):
     if (id === 'done' && a.task) { await doneTask(a.task); return { ok: true, toast: 'Feito.' }; }
     if (id === 'snooze' && a.task) { const d = new Date(Date.now() + 3600000); await changeTask(a.task, { due: ymd(d), time: hm(d) }); return { ok: true, toast: 'Volto a lembrar às ' + hm(d) + '.' }; }
     if (id === 'tomorrow' && a.task) { const t = findLocal(a.task); await changeTask(a.task, { due: addDays(ymd(), 1), time: t && t.time ? t.time : '' }); return { ok: true, toast: 'Passou para amanhã.' }; }
-    if (id === 'open' && a.task) { const t = findLocal(a.task); if (t && t.link) x.openURL(t.link.url); return { ok: true }; }
+    if (id === 'open' && a.task) { const t = findLocal(a.task); if (t && t.link) x.openURL(t.link.url, t.link.app); return { ok: true }; }
     if (id === 'meet' && action.url) { x.openURL(action.url); return { ok: true }; }
     if (id === 'roll') {
       const ts = unified().filter(t => t.due && t.due <= ymd());
@@ -738,7 +754,7 @@ Páginas (o Zeus é um browser):
   ht('addArea', (name, color) => ({ ok: true, area: addArea(name, color) }));
   ht('changeArea', (id, o) => ({ ok: true, area: changeArea(String(id), o || {}) }));
   ht('removeArea', id => removeArea(String(id)));
-  ht('open', url => { if (/^https?:/.test(String(url || ''))) x.openURL(String(url)); return true; });
+  ht('open', id => { const t = findLocal(String(id)); if (t && t.link) x.openURL(t.link.url, t.link.app); else if (/^https?:/.test(String(id || ''))) x.openURL(String(id)); return true; });
   ht('macgyver', () => { x.toggleMg(); return true; });
 
   /* ---------- ponte com a página da bolinha ---------- */
@@ -777,7 +793,7 @@ Páginas (o Zeus é um browser):
   h('change', (id, o) => changeTask(String(id), o || {}).then(() => ({ ok: true }), e => ({ ok: false, error: e.message })));
   h('remove', id => removeTask(String(id)).then(() => ({ ok: true }), e => ({ ok: false, error: e.message })));
   h('add', o => { try { const t = addTask(o || {}); return { ok: true, id: t.id }; } catch (e) { return { ok: false, error: e.message }; } });
-  h('open', id => { const t = uById(String(id)) || findLocal(String(id)); if (t && t.link) x.openURL(t.link.url); return true; });
+  h('open', id => { const t = uById(String(id)) || findLocal(String(id)); if (t && t.link) x.openURL(t.link.url, t.link.app); return true; });
   h('openNote', id => { x.openNote(String(id)); return true; });
   h('act', (a, action) => act(a, action).catch(e => ({ ok: false, error: e.message })));
   h('layout', (mode, height) => { x.layout(['orb', 'bubble', 'panel'].includes(mode) ? mode : 'orb', Math.max(0, Math.min(1200, height | 0))); return true; });

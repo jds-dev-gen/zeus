@@ -2145,14 +2145,14 @@ function mgPageLite() {
   const wc = mgPageView(); if (!wc) return null;
   const a = fullApp && appById(fullApp);
   if (a && a.internal) return { title: `${a.name} (app do Zeus)`, url: 'zeus://' + a.internal, app: a.name };
-  return { title: wc.getTitle(), url: wc.getURL(), app: a ? a.name : '' };
+  return { title: wc.getTitle(), url: wc.getURL(), app: a ? a.name : '', appId: a ? a.id : '' };
 }
 async function mgPage() {
   const wc = mgPageView(); if (!wc) return null;
   let r = {};
   try { r = await wc.executeJavaScriptInIsolatedWorld(1999, [{ code: `({ sel: String(getSelection() || '').slice(0, 4000), text: (document.body && document.body.innerText || '').slice(0, 60000) })` }]) || {}; } catch (e) { /* página sem acesso */ }
   const lite = mgPageLite() || {};
-  return { title: lite.title || wc.getTitle(), url: lite.url || wc.getURL(), app: lite.app || '', selection: r.sel || '', text: r.text || '' };
+  return { title: lite.title || wc.getTitle(), url: lite.url || wc.getURL(), app: lite.app || '', appId: lite.appId || '', selection: r.sel || '', text: r.text || '' };
 }
 // procurar ficheiros no Mac pelo nome (Spotlight); nos testes, sem Spotlight, procura nas pastas do utilizador
 function mgFindFiles(q, opts = {}) {
@@ -2316,7 +2316,17 @@ function setupMg() {
     currentPage: () => mgPage(),
     pageAct: (op, a) => mgPageAct(op, a),
     pageLite: () => mgPageLite(),
-    openURL: url => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); },
+    // abre um endereço guardado: na app de onde veio (ex.: o email na app Gmail certa, com a conta certa), senão num separador
+    openURL: (url, appId) => {
+      if (!/^https?:/.test(url)) return;
+      let a = appId && appById(appId);
+      if (!a || a.internal) {
+        const h = hostOf(url), u = (/\/u\/(\d+)\//.exec(url) || [])[1];
+        const same = S.apps.filter(z => z.url && !z.internal && hostOf(z.url) === h);
+        a = same.find(z => u != null && (/\/u\/(\d+)\//.exec(S.appLast[z.id] || z.url) || [])[1] === u) || (same.length === 1 ? same[0] : null);
+      }
+      if (a) openInApp(a, url); else newTab({ url, space: spaceForOpener() });
+    },
     openNote: id => { showApp('notas'); const go = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id }); }; setTimeout(go, notasWC && !notasWC.isLoading() ? 150 : 1500); },
     openNotas: () => showApp('notas'),
     dragStart: () => mgDragStart(),

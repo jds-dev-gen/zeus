@@ -73,7 +73,7 @@ function cardHTML(t) {
   const color = a ? `var(--c-${a.color})` : '';
   const bits = [];
   if (t.notes) bits.push('<span class="ic" title="Tem notas">📝</span>');
-  if (t.link) bits.push('<span class="ic" title="Página ligada">🔗</span>');
+  if (t.link) bits.push(t.link.kind === 'email' ? `<button class="chip lk" type="button" data-openlink title="Abrir o email">✉ email</button>` : `<button class="chip lk" type="button" data-openlink title="${esc(t.link.url)}">🔗 abrir</button>`);
   if (t.origin === 'google') bits.push('<span class="chip g" title="Do Google Tasks — arrasta para um tema para a arrumar aqui">Google</span>');
   if (t.due) bits.push(`<span class="chip ${t.overdue && !t.done ? 'late' : ''}" title="${t.overdue ? 'Atrasada' : 'Data'}">${t.overdue && !t.done ? 'atrasada · ' : ''}${esc(dueLabel(t))}</span>`);
   const cr = createdLabel(t); if (cr) bits.push(`<span>${cr}</span>`);
@@ -158,7 +158,7 @@ function renderDrawer() {
       <div class="f"><span>Prioridade</span><div class="pseg" id="dPrio">${['alta', 'media', 'baixa', ''].map(p => `<button type="button" data-p="${p}" class="${p || 'none'} ${(t.prio || '') === p ? 'on' : ''}">${p ? PRIO_LABEL[p] : '—'}</button>`).join('')}</div></div>
       <div class="f"><span>Data</span><div class="two"><input type="date" id="dDue" value="${esc(t.due)}"><input type="time" id="dTime" value="${esc(t.time)}" title="Com hora, o MacGyver avisa-te a essa hora" ${g ? 'disabled' : ''}></div></div>
       <textarea class="dnotes" id="dNotes" placeholder="Notas…" ${g ? 'disabled title="Arruma-a num tema para poderes escrever notas"' : ''}>${esc(t.notes)}</textarea>
-      ${t.link ? `<a class="dlink" href="#" data-dlink title="${esc(t.link.url)}">🔗 ${esc(t.link.title || t.link.url)}</a>` : ''}
+      ${t.link ? `<a class="dlink" href="#" data-dlink title="${esc(t.link.url)}">${t.link.kind === 'email' ? '✉' : '🔗'} ${esc(t.link.title || t.link.url)}</a>` : ''}
       <div class="dmeta">${[t.created ? 'Criada a ' + new Date(t.created).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long' }) : '', t.source ? 'Origem: ' + esc(t.source) : '', t.synced && !g ? 'Também no Google Tasks (telemóvel)' : '', g ? 'Do Google Tasks. Põe-na num tema ou dá-lhe prioridade para passar a ser arrumada aqui (continua ligada à do Google).' : ''].filter(Boolean).join('<br>')}</div>
     </div>
     <div class="dfoot"><button class="btn p" type="button" data-ddone>${t.done ? 'Voltar a pôr por fazer' : '✓ Feita'}</button><span class="spacer"></span><button class="btn del ${delSure ? 'sure' : ''}" type="button" data-ddel>${delSure ? 'Apagar mesmo?' : 'Apagar'}</button></div>`;
@@ -187,7 +187,7 @@ $('#drawer').addEventListener('click', async e => {
   const t = byId(openId); if (!t) return;
   if (e.target.closest('[data-dclose]')) { openId = null; renderDrawer(); return; }
   const p = e.target.closest('[data-p]'); if (p) { change(t.id, { prio: p.dataset.p }); return; }
-  if (e.target.closest('[data-dlink]')) { e.preventDefault(); TF.open(t.link.url); return; }
+  if (e.target.closest('[data-dlink]')) { e.preventDefault(); TF.open(t.id); return; }
   if (e.target.closest('[data-ddone]')) { await doneToggle(t); return; }
   if (e.target.closest('[data-ddel]')) {
     if (!delSure) { delSure = true; $('#drawer').dataset.id = ''; renderDrawer(); clearTimeout(delT); delT = setTimeout(() => { delSure = false; $('#drawer').dataset.id = ''; renderDrawer(); }, 4000); return; }
@@ -286,6 +286,7 @@ $('#stage').addEventListener('click', async e => {
   const el = t.closest('[data-id]'); if (!el) return;
   const task = byId(el.dataset.id); if (!task) return;
   if (t.closest('[data-ck]')) { await doneToggle(task); return; }
+  if (t.closest('[data-openlink]')) { TF.open(task.id); return; }
   openDrawer(task.id);
 });
 $('#stage').addEventListener('keydown', e => { const i = e.target.closest('[data-addin]'); if (i && e.key === 'Enter') { e.preventDefault(); addIn(i); } if (i && e.key === 'Escape') { i.value = ''; i.blur(); } });
