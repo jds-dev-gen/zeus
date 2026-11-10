@@ -295,6 +295,8 @@ function setupMacGyver(x) {
     { name: 'escrever', description: 'Escreve texto num campo da página aberta (id de elementos_da_pagina). Nunca palavras-passe nem dados de pagamento.', input_schema: { type: 'object', properties: { id: { type: 'integer' }, texto: { type: 'string' }, apagar_antes: { type: 'boolean', description: 'Substituir o que lá está.' }, enter: { type: 'boolean', description: 'Carregar em Enter no fim (ex.: numa pesquisa).' } }, required: ['id', 'texto'] } },
     { name: 'deslizar', description: 'Desliza a página aberta: para baixo, para cima, para o topo, para o fim, ou até um texto.', input_schema: { type: 'object', properties: { direcao: { type: 'string', enum: ['baixo', 'cima', 'topo', 'fim'] }, ate_texto: { type: 'string' } } } },
     { name: 'abrir_pagina', description: 'Abre um endereço (ou uma pesquisa na web) num separador novo do Zeus, que passa a ser a página aberta.', input_schema: { type: 'object', properties: { endereco: { type: 'string' } }, required: ['endereco'] } },
+    { name: 'abrir_app', description: 'Abre uma das apps da barra da esquerda do Zeus (ex.: Player, Radar, Notas, Tarefas, Disco, Editor, Zoom, Email, WhatsApp, Calendário, Apolo…), em página inteira. Usa o nome tal como aparece na barra.', input_schema: { type: 'object', properties: { nome: { type: 'string' } }, required: ['nome'] } },
+    { name: 'fechar_app', description: 'Fecha a app que está aberta em página inteira e volta ao separador (página) onde o João estava.', input_schema: { type: 'object', properties: {} } },
     { name: 'voltar_atras', description: 'Volta à página anterior no separador aberto.', input_schema: { type: 'object', properties: {} } }
   ];
   // cliques que mudam alguma coisa no mundo: o João confirma antes
@@ -324,6 +326,8 @@ Regras:
 - Não inventes compromissos nem tarefas.
 - As tarefas estão arrumadas por temas (como no Apolo). Ao criar, põe no tema que encaixa claramente (vê-os com ver_temas); na dúvida, sem tema. Prioridade só quando o João a diz ou é evidente ("urgente" = alta).
 - Para trazer tarefas do Diário do Apolo: o João abre o Apolo no Zeus; lês a página com pagina_aberta e crias cada tarefa com o tema e a prioridade que lá estão (cria os temas que faltarem com criar_tema). Não dupliques as que já existem.
+
+Apps do Zeus (barra da esquerda): ${x.apps().map(a => a.name).join(', ')}. Abre-as com abrir_app quando o João pede ("abre o Player", "mostra-me o Radar"); fechar_app volta à página.
 
 Páginas (o Zeus é um browser):
 - Para resumir a página aberta, usa pagina_aberta e responde com 3 a 6 pontos curtos começados por "• " (o essencial, números e nomes concretos), mais uma frase final se houver alguma coisa a fazer. Sem títulos.
@@ -419,6 +423,16 @@ Páginas (o Zeus é um browser):
       if (r.ok) ctx.steps.push(`Abri ${r.titulo || r.endereco}`);
       return r;
     }
+    if (name === 'abrir_app') {
+      const apps = x.apps();
+      const q = fold(inp.nome).replace(/^(a|o|as|os) /, '');
+      const a = apps.find(z => fold(z.name) === q) || apps.find(z => fold(z.id) === q) || apps.find(z => fold(z.name).startsWith(q) || q.startsWith(fold(z.name))) || apps.find(z => fold(z.name).includes(q));
+      if (!a) return { erro: 'Não encontrei essa app.', apps: apps.map(z => z.name) };
+      x.openApp(a.id); ctx.acted = true;
+      ctx.steps.push(`Abri ${a.name}`);
+      return { ok: true, app: a.name };
+    }
+    if (name === 'fechar_app') { x.closeApps(); ctx.acted = true; ctx.steps.push('Voltei à página'); return { ok: true }; }
     if (name === 'voltar_atras') { const r = await x.pageAct('back', {}); ctx.acted = true; if (r.ok) ctx.steps.push('Voltei à página anterior'); return r; }
     return { erro: 'Ferramenta desconhecida.' };
   }
