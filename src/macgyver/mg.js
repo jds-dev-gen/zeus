@@ -142,8 +142,10 @@ function renderPanel() {
   const p = pendingToday(), late = p.filter(t => t.overdue).length;
   $('#sub').innerHTML = p.length ? `${p.length} por fazer hoje${late ? ` · <span class="late">${late} atrasada${late > 1 ? 's' : ''}</span>` : ''}` : 'Nada por fazer hoje';
   if (settingsOpen) histOpen = false;
-  $('#main').hidden = settingsOpen || histOpen; $('#settings').hidden = !settingsOpen; $('#history').hidden = !histOpen;
-  $('#setBtn').classList.toggle('on', settingsOpen); $('#histBtn').classList.toggle('on', histOpen);
+  $('#main').hidden = settingsOpen; $('#settings').hidden = !settingsOpen; $('#history').hidden = !histOpen;
+  ['#list', '#chat', '.inp'].forEach(sel => { $(sel).hidden = histOpen; });
+  $('#setBtn').classList.toggle('on', settingsOpen);
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', histOpen ? b.dataset.tab === 'hist' : b.dataset.tab === tab));
   $('#newBtn').hidden = !(ST.chat || []).length || settingsOpen || histOpen;
   if (settingsOpen) { renderSettings(); return; }
   if (histOpen) { renderHistory(); return; }
@@ -267,7 +269,7 @@ async function renderHistory(reload = true) {
   $('#hlist').innerHTML = h;
 }
 $('#hq').addEventListener('input', () => renderHistory(false));
-$('#histBtn').addEventListener('click', () => { histOpen = !histOpen; settingsOpen = false; histDel = ''; $('#hq').value = ''; renderPanel(); if (histOpen) setTimeout(() => $('#hq').focus(), 30); });
+
 $('#newBtn').addEventListener('click', () => newConv());
 async function newConv() { await MG.clearChat(); panelAlerts.length = 0; await refresh(); renderPanel(); $('#q').focus(); }
 let delT = null;
@@ -323,7 +325,11 @@ $('#orb').addEventListener('click', async () => {
 });
 $('#closeBtn').addEventListener('click', () => { settingsOpen = false; setMode('orb'); });
 $('#setBtn').addEventListener('click', () => { settingsOpen = !settingsOpen; renderPanel(); });
-$('#tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; renderPanel(); } });
+$('#tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  if (b.dataset.tab === 'hist') { if (!histOpen) { histOpen = true; histDel = ''; $('#hq').value = ''; renderPanel(); setTimeout(() => $('#hq').focus(), 30); } return; }
+  histOpen = false; tab = b.dataset.tab; renderPanel();
+});
 $('#panel').addEventListener('click', async e => {
   const t = e.target;
   const row = t.closest('.task');

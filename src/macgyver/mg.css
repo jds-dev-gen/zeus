@@ -164,7 +164,7 @@ select, .key { font: inherit; font-size: 12.5px; color: var(--fg); background: v
 .convhead button:hover { background: var(--surface); color: var(--fg); }
 .chat .hello button.cont { background: none; border: 1px dashed var(--line2); }
 .chat .hello button.hlink { background: none; padding: 4px 0; color: var(--muted); text-decoration: underline; text-decoration-color: var(--line2); }
-.history { flex: 1; overflow-y: auto; padding: 10px 16px 16px; }
+.history { flex: 1; overflow-y: auto; padding: 8px 16px 16px; min-height: 0; }
 .hq { width: 100%; font: inherit; font-size: 13px; color: var(--fg); background: var(--surface); border: 1px solid var(--line2); border-radius: 9px; padding: 7px 10px; outline: none; }
 .hq:focus { border-color: var(--muted); }
 .conv { position: relative; padding: 9px 30px 9px 10px; margin: 0 -10px; border-radius: 10px; cursor: pointer; }
