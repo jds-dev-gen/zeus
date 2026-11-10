@@ -684,7 +684,7 @@ Páginas (o Zeus é um browser):
     await fetchGoogle(true).catch(() => {});
     const ts = unified().filter(t => t.due && t.due <= ymd());
     if (!ts.length) return;
-    alert({ kind: 'evening', title: ts.length === 1 ? 'Ficou uma tarefa por fazer hoje.' : `Ficaram ${ts.length} tarefas por fazer hoje.`, text: ts.slice(0, 3).map(t => '• ' + t.title).join('\n') + (ts.length > 3 ? `\n… e mais ${ts.length - 3}` : ''), actions: [{ id: 'roll', label: 'Passar para amanhã', primary: true }, { id: 'day', label: 'Ver a lista' }, { id: 'ok', label: 'Deixar' }] });
+    alert({ kind: 'evening', title: ts.length === 1 ? 'Ficou uma tarefa por fazer hoje.' : `Ficaram ${ts.length} tarefas por fazer hoje.`, text: ts.slice(0, 3).map(t => '• ' + t.title).join('\n') + (ts.length > 3 ? `\n… e mais ${ts.length - 3}` : ''), actions: [{ id: 'roll', label: 'Passar para amanhã', primary: true }, { id: 'day', label: 'Abrir as Tarefas' }, { id: 'ok', label: 'Deixar' }] });
   }
   let ticking = false;
   async function tick() {
@@ -855,6 +855,7 @@ Páginas (o Zeus é um browser):
   h('dragStart', () => x.dragStart());
   h('dragEnd', p => x.dragEnd(p));
   h('resetPos', () => x.resetPos());
+  h('openApp', id => { x.openApp(String(id)); return true; });
   h('scriptUpdate', () => x.scriptUpdate());
 
   return {

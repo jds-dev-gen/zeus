@@ -6,7 +6,7 @@ const md = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 
 let ST = null;              // estado vindo do processo principal
 let mode = 'orb';           // orb | bubble | panel
-let tab = 'today';
+let tab = 'chat';
 let settingsOpen = false;
 let histOpen = false;        // histórico das conversas
 let histDel = '';
@@ -144,43 +144,14 @@ function renderPanel() {
   $('#sub').innerHTML = p.length ? `${p.length} por fazer hoje${late ? ` · <span class="late">${late} atrasada${late > 1 ? 's' : ''}</span>` : ''}` : 'Nada por fazer hoje';
   if (settingsOpen) histOpen = false;
   $('#main').hidden = settingsOpen; $('#settings').hidden = !settingsOpen; $('#history').hidden = !histOpen;
-  ['#list', '#chat', '.inp'].forEach(sel => { $(sel).hidden = histOpen; });
+  ['#chat', '.inp'].forEach(sel => { $(sel).hidden = histOpen; });
   $('#setBtn').classList.toggle('on', settingsOpen);
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', histOpen ? b.dataset.tab === 'hist' : b.dataset.tab === tab));
   $('#newBtn').hidden = !(ST.chat || []).length || settingsOpen || histOpen;
   if (settingsOpen) { renderSettings(); return; }
   if (histOpen) { renderHistory(); return; }
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-  const tasks = ST.tasks;
-  let h = '';
-  const addRow = `<label class="add"><span class="plus">+</span><input id="addIn" placeholder="Nova tarefa para ${tab === 'next' ? 'amanhã' : 'hoje'}… (Enter)" maxlength="300"></label>`;
-  if (tab === 'today') {
-    const tt = tasks.filter(t => t.due && t.due <= ST.today);
-    const ag = agendaChips(ST.today);
-    if (ag) h += `<div class="sec"><span>Agenda</span></div>${ag}`;
-    h += `<div class="sec"><span>Por fazer</span></div>`;
-    h += tt.length ? tt.map(t => taskRow(t)).join('') : '<div class="empty">Nada para hoje. Pede-me o que precisares.</div>';
-    h += addRow;
-  } else if (tab === 'next') {
-    let any = false;
-    for (let i = 1; i <= 7; i++) {
-      const d = addDay(ST.today, i);
-      const tt = tasks.filter(t => t.due === d), ag = agendaChips(d);
-      if (!tt.length && !ag) continue;
-      any = true;
-      h += `<div class="sec"><span>${esc(dayName(d))}</span></div>${ag}${tt.map(t => taskRow(t)).join('')}`;
-    }
-    if (!any) h += '<div class="empty">Nada nos próximos 7 dias.</div>';
-    h += addRow;
-  } else {
-    const groups = [['Atrasadas', tasks.filter(t => t.due && t.due < ST.today)], ['Hoje', tasks.filter(t => t.due === ST.today)], ['Próximos dias', tasks.filter(t => t.due > ST.today)], ['Sem data', tasks.filter(t => !t.due)]];
-    for (const [name, tt] of groups) if (tt.length) h += `<div class="sec"><span>${name}</span><span>${tt.length}</span></div>${tt.map(t => taskRow(t, name === 'Próximos dias')).join('')}`;
-    if (!tasks.length) h += '<div class="empty">Não há tarefas por fazer.</div>';
-  }
-  if (ST.feeds.old.length && tab === 'today') h += `<p class="note">As tarefas que crio ainda ficam só no Mac. <button class="linkbtn" type="button" data-gosettings>Pôr também no telemóvel…</button></p>`;
-  if (!ST.feeds.count) h += '<p class="note">Para ver a agenda e as tarefas do Google, liga as contas na página principal do Zeus (Agenda e tarefas de hoje).</p>';
-  for (const e of ST.errors || []) h += `<p class="err">${esc(e.label)}: ${esc(e.error)}</p>`;
-  $('#list').innerHTML = h;
+  // a agenda e as tarefas ficam na app Tarefas; aqui só a conversa
+  $('#list').hidden = true;
   renderChat();
   renderCtx();
 }
@@ -365,6 +336,7 @@ $('#orb').addEventListener('click', async () => {
   histOpen = false; settingsOpen = false;
   await MG.fresh(); await refresh(); setMode('panel');
 });
+$('#sub').addEventListener('click', () => MG.openApp('tarefas'));
 $('#closeBtn').addEventListener('click', () => { settingsOpen = false; setMode('orb'); });
 $('#setBtn').addEventListener('click', () => { settingsOpen = !settingsOpen; renderPanel(); });
 $('#tabs').addEventListener('click', e => {
@@ -420,7 +392,7 @@ $('#panel').addEventListener('keydown', async e => {
 });
 function flashErr(msg) {
   if (!msg) return;
-  if (mode === 'panel') { const p = document.createElement('p'); p.className = 'err'; p.textContent = msg; $('#list').appendChild(p); setTimeout(() => p.remove(), 6000); }
+  if (mode === 'panel') { const p = document.createElement('p'); p.className = 'err'; p.textContent = msg; $('#chat').appendChild(p); $('#chat').scrollTop = $('#chat').scrollHeight; setTimeout(() => p.remove(), 6000); }
   else showInfo('Não consegui', msg);
 }
 
@@ -465,7 +437,7 @@ function closeBubble() {
 async function doAct(a, x) {
   if (!x) return;
   if (a.kind === 'confirm') { await MG.confirmReply(a.cid, x.id === 'yes'); return; }
-  if (x.id === 'day') { if (bubble === a) bubble = null; tab = 'today'; histOpen = false; await MG.fresh(); await refresh(true); setMode('panel'); return; }
+  if (x.id === 'day') { if (bubble === a) bubble = null; MG.openApp('tarefas'); return; }
   if (x.id === 'ok') return;
   const r = await MG.act({ kind: a.kind, task: a.task }, x);
   await refresh(true);

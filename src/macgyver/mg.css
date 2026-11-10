@@ -192,3 +192,5 @@ select, .key { font: inherit; font-size: 12.5px; color: var(--fg); background: v
 .orb { touch-action: none; cursor: grab; }
 .dragging .orb { position: fixed; right: auto; bottom: auto; cursor: grabbing; transition: none; transform: scale(1.08); box-shadow: 0 14px 34px rgba(108,75,255,.5), 0 4px 12px rgba(0,0,0,.3); }
 .dragging, .dragging * { cursor: grabbing !important; }
+#sub { cursor: pointer; } #sub:hover { color: var(--fg); text-decoration: underline; text-decoration-color: var(--line2); }
+.chat { border-top: 0; }
