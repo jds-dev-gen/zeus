@@ -73,6 +73,7 @@ async function refresh(force) {
   if (refreshing && !force) return refreshing;
   refreshing = MG.state(!!force).then(s => {
     ST = s; doneLocal = new Set();
+    if (s.anchor && !odrag) applyAnchor(s.anchor);
     document.documentElement.dataset.theme = s.dark ? 'dark' : 'light';
     renderBadge();
     if (mode === 'panel') renderPanel();
@@ -234,7 +235,8 @@ function renderSettings() {
 
     <h3>Claude</h3>
     ${ST.key ? '<p class="note">A conversa usa a chave da API da Anthropic guardada nas Notas.</p>' : '<p class="note">Para conversar, cola aqui a chave da API da Anthropic (fica guardada no Porta-chaves, a mesma das Notas).</p><input class="key" id="keyIn" type="password" placeholder="sk-ant-…" autocomplete="off"><div class="row"><button class="b p" type="button" data-savekey>Guardar a chave</button></div><p class="err" id="keyErr" hidden></p>'}
-    <div class="row" style="margin-top:18px"><button class="b" type="button" data-clear>Começar conversa nova</button><button class="b" type="button" data-hide>Esconder a bolinha</button></div>
+    <div class="row" style="margin-top:18px"><button class="b" type="button" data-clear>Começar conversa nova</button><button class="b" type="button" data-hide>Esconder a bolinha</button><button class="b" type="button" data-resetpos>Pôr a bolinha no canto</button></div>
+    <p class="note">Para mudar a bolinha de sítio, arrasta-a para onde quiseres.</p>
     <p class="note">Para voltar a mostrar a bolinha: menu Ver › MacGyver (⇧⌘M).</p>
     <p class="note" style="color:var(--faint)">Zeus ${esc(ST.version || '')}${f.count ? ` · ${f.count} conta${f.count > 1 ? 's' : ''} Google ligada${f.count > 1 ? 's' : ''}: ${f.all.map(x => esc(x.label) + ' (código v' + x.v + ')').join(', ')}` : ''}</p>`;
 }
@@ -314,7 +316,47 @@ $('#ctx').addEventListener('click', () => { ctxOn = !ctxOn; renderCtx(); });
 $('#sumBtn').addEventListener('click', () => { ctxOn = true; send('Resume esta página.'); });
 
 /* ---------- cliques no painel ---------- */
+/* ---------- arrastar a bola para outro sítio ---------- */
+let odrag = null, dragMoved = false;
+function applyAnchor(a) { if (!a) return; document.documentElement.classList.toggle('ax-l', !!a.left); document.documentElement.classList.toggle('ay-t', !!a.top); }
+MG.onAnchor(a => { applyAnchor(a); relayout(); });
+$('#orb').addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  odrag = { sx: e.screenX, sy: e.screenY, started: false, ready: false, x: 0, y: 0, id: e.pointerId };
+  try { $('#orb').setPointerCapture(e.pointerId); } catch (x) { /* ok */ }
+});
+$('#orb').addEventListener('pointermove', async e => {
+  if (!odrag) return;
+  if (!odrag.started) {
+    if (Math.hypot(e.screenX - odrag.sx, e.screenY - odrag.sy) < 6) return;
+    odrag.started = true;
+    if (mode !== 'orb') { settingsOpen = false; histOpen = false; mode = 'orb'; $('#panel').hidden = true; $('#bubble').hidden = true; }
+    const o = await MG.dragStart();
+    if (!odrag || !o) return;
+    Object.assign(odrag, { ox: o.x, oy: o.y, ready: true });
+    document.documentElement.classList.add('dragging');
+  }
+  if (!odrag.ready) return;
+  const W = innerWidth, H = innerHeight;
+  odrag.x = Math.max(18, Math.min(W - 58 - 18, odrag.ox + e.screenX - odrag.sx));
+  odrag.y = Math.max(18, Math.min(H - 58 - 18, odrag.oy + e.screenY - odrag.sy));
+  const o = $('#orb'); o.style.left = odrag.x + 'px'; o.style.top = odrag.y + 'px';
+});
+async function endDrag() {
+  const d = odrag; odrag = null;
+  if (!d || !d.started) return;
+  dragMoved = true; setTimeout(() => { dragMoved = false; }, 80);
+  if (!d.ready) { await new Promise(r => setTimeout(r, 120)); }
+  const a = await MG.dragEnd(d.ready ? { x: d.x, y: d.y } : null);
+  const o = $('#orb'); o.style.left = ''; o.style.top = '';
+  document.documentElement.classList.remove('dragging');
+  applyAnchor(a);
+  if (bubble) setMode('bubble');
+}
+$('#orb').addEventListener('pointerup', endDrag);
+$('#orb').addEventListener('pointercancel', endDrag);
 $('#orb').addEventListener('click', async () => {
+  if (dragMoved) return;
   if (listening) { listenStop(false); return; }
   if (mode === 'panel') { setMode(bubble ? 'bubble' : 'orb'); return; }
   // o aviso que estava no balão passa para o painel
@@ -354,6 +396,7 @@ $('#panel').addEventListener('click', async e => {
   if (t.closest('[data-script]')) { const r = await MG.scriptUpdate(); if (r && r.error) flashErr(r.error); return; }
   if (t.closest('[data-notas]')) { MG.openNotas(); return; }
   if (t.closest('[data-setup]')) { MG.openSetup(); return; }
+  if (t.closest('[data-resetpos]')) { const a = await MG.resetPos(); applyAnchor(a); return; }
   if (t.closest('[data-clear]')) { settingsOpen = false; await newConv(); return; }
   if (t.closest('[data-hide]')) { settingsOpen = false; mode = 'orb'; $('#panel').hidden = true; await MG.setting('hidden', true); return; }
   if (t.closest('[data-savekey]')) {

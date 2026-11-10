@@ -180,3 +180,15 @@ select, .key { font: inherit; font-size: 12.5px; color: var(--fg); background: v
 .tarea::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--dotc, #999); }
 .tarea.c-ouro { --dotc: #b8a46d; } .tarea.c-salva { --dotc: #7f9a7b; } .tarea.c-azul { --dotc: #7690b7; } .tarea.c-rosa { --dotc: #c08a95; }
 .tarea.c-lavanda { --dotc: #988bbf; } .tarea.c-terracota { --dotc: #c4896a; } .tarea.c-petroleo { --dotc: #5f979c; } .tarea.c-grafite { --dotc: #85858c; }
+
+/* bola noutro sítio: o balão e o painel abrem para o lado onde há espaço */
+.ax-l .orb { right: auto; left: 18px; }
+.ay-t .orb { bottom: auto; top: 18px; }
+.ax-l .bubble, .ax-l .panel { right: auto; left: 18px; }
+.ay-t .bubble { bottom: auto; top: 92px; }
+.ay-t .panel { top: 92px; bottom: 30px; }
+.ax-l .bubble::after { right: auto; left: 22px; }
+.ay-t .bubble::after { bottom: auto; top: -6px; }
+.orb { touch-action: none; cursor: grab; }
+.dragging .orb { position: fixed; right: auto; bottom: auto; cursor: grabbing; transition: none; transform: scale(1.08); box-shadow: 0 14px 34px rgba(108,75,255,.5), 0 4px 12px rgba(0,0,0,.3); }
+.dragging, .dragging * { cursor: grabbing !important; }

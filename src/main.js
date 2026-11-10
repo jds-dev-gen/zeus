@@ -2073,17 +2073,48 @@ function placeMg() {
   const r = L.page;
   const hide = !r || L.overlay || L.cover || fullscreenView || (mgApp && mgApp.hidden() && mgMode.mode === 'orb');
   if (hide) { if (mgView.getVisible()) mgView.setVisible(false); return; }
-  let w = 100, h = 100;
-  if (mgMode.mode === 'panel') { w = 470; h = Math.min(r.height - 8, 820); }
-  else if (mgMode.mode === 'bubble') { w = 460; h = Math.min(r.height - 8, Math.max(160, mgMode.h || 260)); }
-  // afastada 14 px da direita, para não tapar a barra de deslocamento da página
-  const b = { x: Math.round(r.x + r.width - w - 14), y: Math.round(r.y + r.height - h), width: w, height: h };
+  let b;
+  if (mgMode.mode === 'drag') b = { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };   // a arrastar: a vista ocupa a página toda
+  else {
+    const o = mgOrbRect(r), a = mgAnchorOf(r, o);
+    let w = 100, h = 100;
+    const room = a.top ? (r.y + r.height) - (o.y - MG_M) - 8 : (o.y + MG_ORB + MG_M) - r.y - 8;
+    if (mgMode.mode === 'panel') { w = 470; h = Math.min(room, 820); }
+    else if (mgMode.mode === 'bubble') { w = 460; h = Math.min(room, Math.max(160, mgMode.h || 260)); }
+    b = { x: Math.round(a.left ? o.x - MG_M : o.x + MG_ORB + MG_M - w), y: Math.round(a.top ? o.y - MG_M : o.y + MG_ORB + MG_M - h), width: w, height: Math.round(h) };
+    if (!mgAnchor || mgAnchor.left !== a.left || mgAnchor.top !== a.top) { mgAnchor = a; mgSend('anchor', a); }
+  }
   const cb = mgView.getBounds();
   if (cb.x !== b.x || cb.y !== b.y || cb.width !== b.width || cb.height !== b.height) mgView.setBounds(b);
   if (!mgView.getVisible()) mgView.setVisible(true);
   // sempre por cima das outras vistas
   const kids = win.contentView.children;
   if (kids[kids.length - 1] !== mgView) { win.contentView.removeChildView(mgView); win.contentView.addChildView(mgView); }
+}
+// onde está a bola: guardada como distância às margens direita e de baixo da página (acompanha o tamanho da janela)
+const MG_ORB = 58, MG_M = 18;
+let mgAnchor = null;
+function mgOrbRect(r) {
+  const p = S.settings.mgPos || { r: 32, b: 18 };   // por omissão: canto inferior direito, afastada da barra de deslocamento
+  const x = r.x + r.width - p.r - MG_ORB, y = r.y + r.height - p.b - MG_ORB;
+  return { x: Math.max(r.x + MG_M, Math.min(r.x + r.width - MG_ORB - MG_M, x)), y: Math.max(r.y + MG_M, Math.min(r.y + r.height - MG_ORB - MG_M, y)) };
+}
+// o balão e o painel abrem para o lado onde há espaço
+const mgAnchorOf = (r, o) => ({ left: o.x + MG_ORB / 2 < r.x + r.width / 2, top: o.y + MG_ORB / 2 < r.y + r.height / 2 });
+function mgDragStart() {
+  const r = L.page; if (!r) return null;
+  const o = mgOrbRect(r);
+  mgMode = { mode: 'drag', h: 0 }; placeMg();
+  return { x: o.x - r.x, y: o.y - r.y };
+}
+function mgDragEnd(p) {
+  const r = L.page;
+  if (r && p && isFinite(p.x) && isFinite(p.y)) {
+    S.settings.mgPos = { r: Math.round(Math.max(MG_M, r.width - p.x - MG_ORB)), b: Math.round(Math.max(MG_M, r.height - p.y - MG_ORB)) };
+    saveState();
+  }
+  mgMode = { mode: 'orb', h: 0 }; placeMg();
+  return mgAnchor;
 }
 // ⌥ Espaço: começa a ouvir (e envia quando o João se cala); outra vez: envia já
 function mgKey(e, input) {
@@ -2288,6 +2319,10 @@ function setupMg() {
     openURL: url => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); },
     openNote: id => { showApp('notas'); const go = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id }); }; setTimeout(go, notasWC && !notasWC.isLoading() ? 150 : 1500); },
     openNotas: () => showApp('notas'),
+    dragStart: () => mgDragStart(),
+    dragEnd: p => mgDragEnd(p),
+    resetPos: () => { delete S.settings.mgPos; saveState(); placeMg(); return mgAnchor; },
+    anchor: () => mgAnchor || { left: false, top: false },
     player: () => (orfeuApp ? orfeuApp.list() : []),
     playFiles: paths => orfeuOpenPaths(paths),
     editAudio: paths => { if (ecoApp) { ecoApp.openFiles(paths); showApp('eco'); } },
