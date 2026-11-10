@@ -154,3 +154,44 @@ input, textarea, select { font: inherit; color: inherit; }
 .chip.lk { color: inherit; font: inherit; font-size: 11.5px; cursor: pointer; border: 0; }
 .chip.lk:hover { background: rgba(255,255,255,.36); }
 .card.nocolor .chip.lk:hover { background: var(--surface2); }
+
+/* o visto: a tarefa sai logo */
+.card.leaving { transition: opacity .2s ease, transform .2s ease, height .22s ease, margin .22s ease, padding .22s ease; overflow: hidden; }
+.card.leaving.gone { opacity: 0; transform: scale(.96); height: 0 !important; padding-top: 0; padding-bottom: 0; margin-top: -9px; }
+.row.leaving { transition: opacity .2s; } .row.leaving.gone { opacity: 0; }
+
+/* calendário */
+.cal { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 18px; max-width: 1640px; margin: 0 auto; min-height: 100%; }
+.calmain { display: flex; flex-direction: column; min-width: 0; }
+.calhead { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.calhead h2 { font-size: 18px; font-weight: 600; text-transform: capitalize; min-width: 150px; text-align: center; }
+.calhead .ib { font-size: 20px; }
+.calhead small { color: var(--faint); font-size: 12px; }
+.calgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--line); gap: 1px; flex: 1; }
+.calgrid .wd { background: var(--panel); font: 500 11px var(--mono); letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); padding: 8px 10px; }
+.day { background: var(--panel); padding: 6px 6px 8px; min-width: 0; display: flex; flex-direction: column; gap: 4px; cursor: cell; }
+.day.out { background: var(--bg); }
+.day.out .dn { color: var(--faint); }
+.day.past:not(.today) .dn { color: var(--muted); }
+.day.today .dn { background: var(--inv-bg); color: var(--inv-fg); border-radius: 999px; padding: 0 7px; align-self: flex-start; }
+.day.drop, .nodate.drop { outline: 2px solid var(--fg); outline-offset: -2px; }
+.dn { font-size: 12.5px; font-weight: 500; line-height: 22px; padding-left: 4px; }
+.dl { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cev { font-size: 11px; color: var(--soft); background: var(--surface); border-radius: 5px; padding: 2px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cev b { font: 500 10.5px var(--mono); margin-right: 4px; }
+.cev.more { background: none; color: var(--muted); cursor: pointer; }
+.ct { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #fff; border-radius: 6px; padding: 3px 6px; cursor: grab; min-width: 0; position: relative; }
+.ct.nocolor { background: var(--surface2); color: var(--fg); }
+.ct .ck { width: 11px; height: 11px; border: 1.5px solid currentColor; border-radius: 50%; flex: none; opacity: .85; cursor: pointer; }
+.ct .ck:hover { background: rgba(255,255,255,.4); }
+.ct .cx { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.ct .cx b { font: 500 10.5px var(--mono); }
+.ct.done { opacity: .5; } .ct.done .cx { text-decoration: line-through; }
+.ct.late::after { content: ''; position: absolute; left: -1px; top: 3px; bottom: 3px; width: 3px; border-radius: 2px; background: var(--alta); }
+.ct .pa { width: 6px; height: 6px; border-radius: 50%; background: var(--alta); box-shadow: 0 0 0 1.5px rgba(255,255,255,.8); flex: none; }
+.cghost { position: fixed; z-index: 60; pointer-events: none; box-shadow: 0 10px 24px rgba(0,0,0,.25); }
+.qadd { border: 1px solid var(--line2); border-radius: 6px; padding: 3px 6px; font-size: 12px; outline: none; background: var(--surface); min-width: 0; }
+.nodate { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 12px; align-self: start; display: flex; flex-direction: column; gap: 5px; max-height: calc(100vh - 130px); overflow-y: auto; }
+.nodate h3 { font: 500 12px var(--mono); letter-spacing: 1.6px; text-transform: uppercase; display: flex; gap: 6px; }
+.nodate h3 span { color: var(--muted); }
+.nodate > p { font-size: 12px; color: var(--muted); margin-bottom: 4px; }

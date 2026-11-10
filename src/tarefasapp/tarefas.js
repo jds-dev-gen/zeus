@@ -59,7 +59,7 @@ function render() {
   $('#showDone').checked = showDone;
   $('#addArea').hidden = view !== 'board';
   if (!S.areas.length && !S.tasks.length && !S.done.length) { renderWelcome(); renderDrawer(); return; }
-  if (view === 'board') renderBoard(); else renderList();
+  if (view === 'board') renderBoard(); else if (view === 'cal') renderCal(); else renderList();
   renderDrawer();
 }
 function renderWelcome() {
@@ -107,6 +107,103 @@ function renderBoard() {
   fitCols();
   $('#stage').scrollTop = sy;
 }
+/* ---------- calendário (mês) ---------- */
+let calMonth = null;   // 'AAAA-MM'
+let calEvents = [], calEvKey = '';
+const WDS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const ymdOf = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function calGrid() {
+  const [y, m] = calMonth.split('-').map(Number);
+  const first = new Date(y, m - 1, 1, 12);
+  const start = new Date(first); start.setDate(1 - ((first.getDay() + 6) % 7));   // segunda-feira
+  const days = [];
+  for (let i = 0; i < 42; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d); }
+  while (days.length > 35 && days[days.length - 7].getMonth() !== m - 1) days.splice(days.length - 7, 7);
+  return { y, m, days };
+}
+async function loadCalEvents() {
+  const { days } = calGrid();
+  const from = ymdOf(days[0]), n = days.length, key = from + '/' + n;
+  if (key === calEvKey) return;
+  calEvKey = key; calEvents = [];
+  const ev = await TF.events(from, Math.min(31, n)).catch(() => []);
+  const ev2 = n > 31 ? await TF.events(ymdOf(days[31]), n - 31).catch(() => []) : [];
+  if (calEvKey !== key) return;
+  const seen = new Set();
+  calEvents = (ev || []).concat(ev2 || []).filter(e => { const k = e.id + '@' + e.start; if (seen.has(k)) return false; seen.add(k); return true; });
+  if (view === 'cal' && !dragging) renderCal();
+}
+function renderCal() {
+  if (!calMonth) calMonth = S.today.slice(0, 7);
+  const { y, m, days } = calGrid();
+  const tasks = S.tasks.filter(matches).concat(showDone ? S.done.filter(matches) : []);
+  const byDay = {};
+  for (const t of tasks) if (t.due) (byDay[t.due] = byDay[t.due] || []).push(t);
+  const evDay = {};
+  for (const e of calEvents) { const d = ymdOf(new Date(e.start)); (evDay[d] = evDay[d] || []).push(e); }
+  const nodate = S.tasks.filter(t => !t.due && matches(t));
+  let h = `<div class="cal"><div class="calmain">
+    <div class="calhead"><button class="ib" type="button" data-cal="-1" aria-label="Mês anterior">‹</button><h2>${MESES[m - 1]} ${y}</h2><button class="ib" type="button" data-cal="1" aria-label="Mês seguinte">›</button><button class="btn" type="button" data-cal="0">Hoje</button><span class="spacer"></span><small>Arrasta uma tarefa para outro dia para mudar a data · clica num dia para criar</small></div>
+    <div class="calgrid" style="grid-template-rows: auto repeat(${days.length / 7}, minmax(108px, 1fr))">${WDS.map(w => `<div class="wd">${w}</div>`).join('')}`;
+  for (const d of days) {
+    const k = ymdOf(d), inM = d.getMonth() === m - 1, tt = (byDay[k] || []).sort((a, b) => (a.done - b.done) || (a.time || '99').localeCompare(b.time || '99')), ee = evDay[k] || [];
+    const items = ee.slice(0, 2).map(e => `<div class="cev" title="${esc(e.title)} — ${esc(e.label)}">${e.allDay ? '' : `<b>${esc(new Date(e.start).toTimeString().slice(0, 5))}</b>`}${esc(e.title)}</div>`).join('') + (ee.length > 2 ? `<div class="cev more">+${ee.length - 2} na agenda</div>` : '')
+      + tt.slice(0, 5).map(t => { const a = areaById(t.area); return `<div class="ct ${t.done ? 'done' : ''} ${t.overdue && !t.done ? 'late' : ''} ${a ? '' : 'nocolor'}" data-id="${esc(t.id)}" style="${a ? `background:var(--c-${a.color})` : ''}" title="${esc(t.title)}"><span class="ck" data-ck></span><span class="cx">${t.time ? `<b>${esc(t.time)}</b> ` : ''}${esc(t.title)}</span>${t.prio === 'alta' ? '<i class="pa"></i>' : ''}</div>`; }).join('')
+      + (tt.length > 5 ? `<div class="cev more" data-daymore="${k}">+${tt.length - 5} tarefas</div>` : '');
+    h += `<div class="day ${inM ? '' : 'out'} ${k === S.today ? 'today' : ''} ${k < S.today ? 'past' : ''}" data-date="${k}"><div class="dn">${d.getDate() === 1 ? d.getDate() + ' ' + MES[d.getMonth()] : d.getDate()}</div><div class="dl">${items}</div></div>`;
+  }
+  h += `</div></div><aside class="nodate" data-date=""><h3>Sem data <span>${nodate.length}</span></h3><p>Arrasta para um dia do calendário.</p>${nodate.map(t => { const a = areaById(t.area); return `<div class="ct ${a ? '' : 'nocolor'}" data-id="${esc(t.id)}" style="${a ? `background:var(--c-${a.color})` : ''}"><span class="ck" data-ck></span><span class="cx">${esc(t.title)}</span></div>`; }).join('') || '<p class="empty-col">Todas as tarefas têm data.</p>'}</aside></div>`;
+  $('#stage').innerHTML = h;
+  loadCalEvents();
+}
+function calQuickAdd(dayEl) {
+  if (dayEl.querySelector('.qadd')) return;
+  const i = document.createElement('input'); i.className = 'qadd'; i.placeholder = 'Nova tarefa…'; i.maxLength = 300;
+  dayEl.querySelector('.dl').appendChild(i); i.focus();
+  i.addEventListener('keydown', async e => {
+    if (e.key === 'Escape') { i.remove(); return; }
+    if (e.key === 'Enter' && i.value.trim()) { const title = i.value.trim(); i.remove(); const r = await TF.add({ title, due: dayEl.dataset.date }); if (r && r.ok === false) toast(r.error); load(); }
+  });
+  i.addEventListener('blur', () => setTimeout(() => i.remove(), 150));
+}
+$('#stage').addEventListener('click', e => {
+  if (view !== 'cal' || dragJustEnded) return;
+  const nav = e.target.closest('[data-cal]');
+  if (nav) { const k = +nav.dataset.cal; if (!k) calMonth = S.today.slice(0, 7); else { const [y, m] = calMonth.split('-').map(Number); const d = new Date(y, m - 1 + k, 1, 12); calMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); } calEvKey = ''; renderCal(); return; }
+  const more = e.target.closest('[data-daymore]'); if (more) { view = 'list'; render(); return; }
+  if (e.target.closest('.ct') || e.target.closest('.qadd')) return;
+  const day = e.target.closest('.day'); if (day) calQuickAdd(day);
+}, true);
+// arrastar uma tarefa para outro dia (ou para "Sem data")
+$('#stage').addEventListener('pointerdown', e => {
+  if (view !== 'cal' || e.button !== 0) return;
+  const chip = e.target.closest('.ct'); if (!chip || e.target.closest('[data-ck]')) return;
+  const t = byId(chip.dataset.id); if (!t || t.done) return;
+  const sx = e.clientX, sy = e.clientY; let ghost = null, over = null;
+  const move = ev => {
+    if (!ghost) { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return; dragging = t.id; ghost = chip.cloneNode(true); ghost.classList.add('cghost'); ghost.style.width = chip.offsetWidth + 'px'; document.body.appendChild(ghost); chip.style.opacity = '.35'; document.body.style.cursor = 'grabbing'; }
+    ghost.style.left = (ev.clientX - 20) + 'px'; ghost.style.top = (ev.clientY - 12) + 'px';
+    const el = document.elementFromPoint(ev.clientX, ev.clientY); const tgt = el && el.closest('[data-date]');
+    if (over !== tgt) { if (over) over.classList.remove('drop'); over = tgt; if (over) over.classList.add('drop'); }
+  };
+  const up = async () => {
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+    if (!ghost) return;
+    ghost.remove(); document.body.style.cursor = ''; if (over) over.classList.remove('drop');
+    dragJustEnded = true; setTimeout(() => { dragJustEnded = false; }, 60);
+    dragging = null;
+    if (over && over.dataset.date !== (t.due || '')) {
+      const due = over.dataset.date;
+      t.due = due; render();
+      const r = await TF.change(t.id, { due }); if (r && r.ok === false) toast(r.error);
+      toast(due ? `Passou para ${due === S.today ? 'hoje' : due === S.tomorrow ? 'amanhã' : shortDate(due)}.` : 'Ficou sem data.');
+      load();
+    } else { chip.style.opacity = ''; }
+  };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+});
+
 // como os espaços: 4 temas por linha se couberem com pelo menos 300 px cada, senão 3 (menos num ecrã estreito)
 function fitCols() {
   const b = $('#board'); if (!b) return;
@@ -205,13 +302,24 @@ function toast(msg, undo) {
   el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; undoFn = null; }, 5000);
 }
 $('#toast').addEventListener('click', async e => { if (e.target.closest('[data-undo]') && undoFn) { const f = undoFn; undoFn = null; $('#toast').hidden = true; await f(); } });
+// o visto tira logo a tarefa (com uma pequena animação); o Zeus e o Google são atualizados por trás
 async function doneToggle(t) {
   const undo = !!t.done;
-  const r = await TF.done(t.id, undo);
-  if (r && r.ok === false) { toast(r.error); return; }
-  if (!undo) toast(`Feita: ${t.title}`, async () => { await TF.done(t.id, true); await load(); });
+  const el = document.querySelector(`[data-id="${CSS.escape(t.id)}"]`);
+  const snapshot = { tasks: S.tasks.slice(), done: S.done.slice() };
+  if (!undo) {
+    S.tasks = S.tasks.filter(x => x.id !== t.id);
+    S.done = [Object.assign({}, t, { done: true, doneAt: Date.now() })].concat(S.done);
+    if (el) { el.classList.add('leaving'); el.style.height = el.offsetHeight + 'px'; requestAnimationFrame(() => el.classList.add('gone')); }
+    toast(`Feita: ${t.title}`, async () => { S.done = S.done.filter(x => x.id !== t.id); S.tasks.push(Object.assign({}, t, { done: false })); render(); await TF.done(t.id, true); load(); });
+  } else {
+    S.done = S.done.filter(x => x.id !== t.id);
+    S.tasks.push(Object.assign({}, t, { done: false }));
+  }
   if (openId === t.id && !undo && !showDone) openId = null;
-  await load();
+  setTimeout(() => { if (!dragging) render(); }, el && !undo ? 260 : 0);
+  const r = await TF.done(t.id, undo);
+  if (r && r.ok === false) { S.tasks = snapshot.tasks; S.done = snapshot.done; render(); toast(r.error); return; }
 }
 async function addIn(input) {
   const title = input.value.trim(); if (!title) return;

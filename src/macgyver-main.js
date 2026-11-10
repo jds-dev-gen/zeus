@@ -92,8 +92,11 @@ function setupMacGyver(x) {
       let changed = false;
       for (const t of D.tasks) {
         if (t.done || !t.g || !t.due || t.due > upto || !out.ok.has(t.g.feed)) continue;
-        if (Date.now() - (t.gAt || 0) < 3 * 60 * 1000) continue;   // acabada de criar: o Google pode ainda não a mostrar
-        if (!out.tasks.some(g => g.id === t.g.id)) { t.done = true; t.doneAt = Date.now(); t.doneElsewhere = true; changed = true; }
+        const seen = out.tasks.some(g => g.id === t.g.id);
+        if (seen) { if (!t.gSeen) { t.gSeen = Date.now(); changed = true; } continue; }
+        // só conta como feita noutro sítio se o Google já a mostrava antes e não foi mexida há pouco (a mudança pode ainda não ter chegado)
+        if (!t.gSeen || Date.now() - (t.gAt || 0) < 3 * 60 * 1000) continue;
+        t.done = true; t.doneAt = Date.now(); t.doneElsewhere = true; changed = true;
       }
       if (changed) { save(); x.tasksChanged(); }
       G = out;
@@ -117,6 +120,8 @@ function setupMacGyver(x) {
   }
   function syncGoogle(t, what) {
     if (!t.g) return;
+    t.gAt = Date.now();
+    if (what === 'update') t.gSeen = 0;   // com outra data pode deixar de aparecer na lista do Google até a mudança chegar
     const p = what === 'done' ? { action: 'done', list: t.g.list, task: t.g.id }
       : what === 'delete' ? { action: 'delete', list: t.g.list, task: t.g.id }
         : what === 'undo' ? { action: 'update', list: t.g.list, task: t.g.id, status: 'needsAction' }
@@ -742,11 +747,25 @@ Páginas (o Zeus é um browser):
   const fromT = e => { const wc = x.getTarefasWC && x.getTarefasWC(); return wc && e.sender === wc && e.senderFrame === e.sender.mainFrame; };
   const ht = (name, fn) => ipcMain.handle('tarefas:' + name, async (e, ...a) => { if (!fromT(e)) throw new Error('origem não autorizada'); try { return await fn(...a); } catch (err) { return { ok: false, error: err.message }; } });
   ht('state', async force => {
-    if (force || Date.now() - G.t > 2 * 60 * 1000) await fetchGoogle(force).catch(() => {});
+    // responde logo com o que há; o Google atualiza-se por trás e a página é avisada quando chegar
+    if (force && !G.t) await fetchGoogle(true).catch(() => {});
+    else if (force || Date.now() - G.t > 2 * 60 * 1000) fetchGoogle(true).then(() => { const wc = x.getTarefasWC(); if (wc && !wc.isDestroyed()) wc.send('tarefas:changed', true); }, () => {});
     const today = ymd();
     return { today, tomorrow: addDays(today, 1), tasks: unified(today), done: doneRecent(), areas: areasSorted(), colors: AREA_COLORS, errors: G.errors, feeds: feedInfo(), dark: x.isDark() };
   });
   ht('add', o => { const t = addTask(o || {}); return { ok: true, id: t.id }; });
+  // agenda de um intervalo (vista de calendário): de todas as contas, guardada 5 minutos
+  const evCache = new Map();
+  ht('events', async (from, days) => {
+    from = okDate(from) || ymd(); days = Math.max(1, Math.min(31, days | 0 || 7));
+    const k = from + '/' + days, c = evCache.get(k);
+    if (c && Date.now() - c.t < 5 * 60 * 1000) return c.events;
+    const out = [];
+    await Promise.all(feeds().map(f => x.callFeed(f, { date: from, days }).then(d => { (d.events || []).forEach(e => out.push({ id: e.id, title: e.title, start: e.start, end: e.end, allDay: e.allDay, color: e.color, label: feedLabel(f) })); }, () => {})));
+    out.sort((a, b) => a.start.localeCompare(b.start));
+    evCache.set(k, { t: Date.now(), events: out });
+    return out;
+  });
   ht('change', async (id, o) => { await changeTask(String(id), o || {}); return { ok: true }; });
   ht('done', async (id, undo) => { await doneTask(String(id), !!undo); return { ok: true }; });
   ht('remove', async id => { await removeTask(String(id)); return { ok: true }; });
