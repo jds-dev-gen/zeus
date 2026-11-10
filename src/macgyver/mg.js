@@ -114,6 +114,7 @@ function taskRow(t, showDay) {
   const bits = [];
   if (t.overdue && t.due < ST.today) bits.push(esc('Era para ' + (t.due === addDay(ST.today, -1) ? 'ontem' : ddmm(t.due))));
   else if (showDay && t.due) bits.push(esc(dayName(t.due)));
+  { const ar = (ST.areas || []).find(x => x.id === t.area); if (ar) bits.push(`<span class="tarea c-${esc(ar.color)}">${esc(ar.name)}</span>`); }
   if (t.link) bits.push(`<a data-open="${esc(t.id)}" title="${esc(t.link.url)}">${esc(t.link.title || hostOf(t.link.url))}</a>`);
   if (t.source) bits.push(esc(t.source));
   else if (t.origin === 'mg' && t.synced) bits.push('também no Google Tasks');

@@ -176,3 +176,7 @@ select, .key { font: inherit; font-size: 12.5px; color: var(--fg); background: v
 .conv:hover .cx, .conv .cx.sure { display: block; }
 .conv .cx:hover { background: var(--surface2); color: var(--fg); }
 .conv .cx.sure { font-size: 11.5px; color: #fff; background: #d64545; }
+.tarea { display: inline-flex; align-items: center; gap: 4px; }
+.tarea::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--dotc, #999); }
+.tarea.c-ouro { --dotc: #b8a46d; } .tarea.c-salva { --dotc: #7f9a7b; } .tarea.c-azul { --dotc: #7690b7; } .tarea.c-rosa { --dotc: #c08a95; }
+.tarea.c-lavanda { --dotc: #988bbf; } .tarea.c-terracota { --dotc: #c4896a; } .tarea.c-petroleo { --dotc: #5f979c; } .tarea.c-grafite { --dotc: #85858c; }

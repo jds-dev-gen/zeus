@@ -37,6 +37,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 /* ------------------------------------------------------------------ */
 const DEFAULT_APPS = [
   { id: 'apolo', name: 'Apolo', url: '', mode: 'full', icon: 'apolo', preload: false, linksInTabs: true },
+  { id: 'tarefas', name: 'Tarefas', url: 'zeus://tarefas', mode: 'full', icon: 'tarefas', preload: false, internal: 'tarefas' },
   { id: 'radar', name: 'Radar', url: 'zeus://radar', mode: 'full', icon: 'radar', preload: false, internal: 'radar' },
   { id: 'zoom', name: 'Zoom', url: 'zeus://zoom', mode: 'full', icon: 'zoom', preload: false, internal: 'zoom' },
   { id: 'notas', name: 'Notas', url: 'zeus://notas', mode: 'full', icon: 'notas', preload: false, internal: 'notas' },
@@ -223,6 +224,11 @@ function loadState() {
     // 0.18.3: nomes mais diretos (Hermes → Disco, Orfeu → Player, Eco → Editor), só se o João não lhes tiver mudado o nome
     const RENAME = { hermes: ['Hermes', 'Disco'], orfeu: ['Orfeu', 'Player'], eco: ['Eco', 'Editor'] };
     S.apps.forEach(a => { const r = RENAME[a.id]; if (r && a.name === r[0]) a.name = r[1]; });
+    // 0.20.0: as Tarefas entram logo a seguir ao Apolo
+    if (!ids.has('tarefas')) {
+      const i = S.apps.findIndex(a => a.id === 'tarefas'), j = S.apps.findIndex(a => a.id === 'apolo');
+      if (i > -1) S.apps.splice(j > -1 ? j + 1 : 0, 0, ...S.apps.splice(i, 1));
+    }
     // 0.18.0: o Eco (editor de áudio) entra logo a seguir ao Hermes
     if (!ids.has('eco')) {
       const i = S.apps.findIndex(a => a.id === 'eco'), j = S.apps.findIndex(a => a.id === 'hermes');
@@ -1417,8 +1423,10 @@ const INTERNAL = {
   notas: { file: path.join(__dirname, 'notasapp', 'index.html'), preload: path.join(__dirname, 'notasapp', 'preload.js') },
   orfeu: { file: path.join(__dirname, 'orfeuapp', 'index.html'), preload: path.join(__dirname, 'orfeuapp', 'preload.js') },
   hermes: { file: path.join(__dirname, 'hermesapp', 'index.html'), preload: path.join(__dirname, 'hermesapp', 'preload.js') },
-  eco: { file: path.join(__dirname, 'ecoapp', 'index.html'), preload: path.join(__dirname, 'ecoapp', 'preload.js') }
+  eco: { file: path.join(__dirname, 'ecoapp', 'index.html'), preload: path.join(__dirname, 'ecoapp', 'preload.js') },
+  tarefas: { file: path.join(__dirname, 'tarefasapp', 'index.html'), preload: path.join(__dirname, 'tarefasapp', 'preload.js') }
 };
+let tarefasWC = null;
 let radarWC = null, futebolWC = null, zoomWC = null, notasWC = null, orfeuWC = null, hermesWC = null, ecoWC = null;
 let ecoApp = null;
 let orfeuApp = null;
@@ -1439,6 +1447,11 @@ function ensureInternalView(a) {
   if (a.internal === 'radar') radarWC = wc;
   if (a.internal === 'futebol') futebolWC = wc;
   if (a.internal === 'zoom') zoomWC = wc;
+  if (a.internal === 'tarefas') {
+    tarefasWC = wc;
+    wc.session.setPermissionRequestHandler((w, perm, cb) => cb(false));
+    wc.session.setPermissionCheckHandler(() => false);
+  }
   if (a.internal === 'eco') {
     ecoWC = wc;
     // o Eco não pede nada ao sistema (os ficheiros são lidos pelo processo principal)
@@ -1469,7 +1482,7 @@ function ensureInternalView(a) {
   wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); return { action: 'deny' }; });
   wc.on('before-input-event', (e, input) => { mgKey(e, input); });
   wc.on('render-process-gone', (e, d) => { if (d.reason !== 'clean-exit') setTimeout(() => { if (!wc.isDestroyed()) wc.reload(); }, 500); });
-  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; if (zoomWC === wc) zoomWC = null; if (notasWC === wc) notasWC = null; if (orfeuWC === wc) orfeuWC = null; if (hermesWC === wc) hermesWC = null; if (ecoWC === wc) ecoWC = null; });
+  wc.on('destroyed', () => { if (radarWC === wc) radarWC = null; if (futebolWC === wc) futebolWC = null; if (zoomWC === wc) zoomWC = null; if (notasWC === wc) notasWC = null; if (orfeuWC === wc) orfeuWC = null; if (hermesWC === wc) hermesWC = null; if (ecoWC === wc) ecoWC = null; if (tarefasWC === wc) tarefasWC = null; });
   wc.loadFile(def.file).catch(() => {});
   return view;
 }
@@ -2231,7 +2244,9 @@ function setupMg() {
     feeds: () => S.settings.homeFeeds || [],
     callFeed: (f, params) => callFeed(f, params),
     noteFeed,
-    tasksChanged: () => { mgSend('changed', true); todayCache.t = 0; if (ui && !ui.isDestroyed()) ui.send('ui-command', { cmd: 'today-refresh' }); },
+    getTarefasWC: () => tarefasWC,
+    toggleMg: () => mgToggle(),
+    tasksChanged: () => { mgSend('changed', true); if (tarefasWC && !tarefasWC.isDestroyed()) tarefasWC.send('tarefas:changed', true); todayCache.t = 0; if (ui && !ui.isDestroyed()) ui.send('ui-command', { cmd: 'today-refresh' }); },
     notas: () => notasApp && notasApp.notas,
     getKey: () => (notasApp ? notasApp.getKey() : ''),
     setKey: k => { if (notasApp) notasApp.setKey(k); },
@@ -2959,6 +2974,7 @@ function setupIPC() {
     if (clean.theme && hermesWC && !hermesWC.isDestroyed()) hermesWC.send('hermes:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && ecoWC && !ecoWC.isDestroyed()) ecoWC.send('eco:theme', isDark() ? 'dark' : 'light');
     if (clean.theme) mgSend('theme', isDark());
+    if (clean.theme && tarefasWC && !tarefasWC.isDestroyed()) tarefasWC.send('tarefas:theme', isDark());
     if (!isMac && clean.theme) updateOverlayColors();
     if ('updateRepo' in clean && updater) updater.check(true);
     if ('bigGames' in clean && scores) scores.setBig(clean.bigGames !== false);

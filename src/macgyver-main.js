@@ -30,11 +30,11 @@ function setupMacGyver(x) {
 
   /* ---------- estado guardado ---------- */
   const DEF_SET = { morning: true, meetings: true, meetingLead: 10, evening: true, eveningAt: '18:30', speak: true, hidden: false, feed: '' };
-  let D = { tasks: [], chat: [], chatId: '', convs: [], settings: Object.assign({}, DEF_SET), mem: { lastMorning: '', lastEvening: '', ev: {} } };
+  let D = { tasks: [], areas: [], chat: [], chatId: '', convs: [], settings: Object.assign({}, DEF_SET), mem: { lastMorning: '', lastEvening: '', ev: {} } };
   try {
     const j = JSON.parse(fs.readFileSync(FILE, 'utf8'));
     D = Object.assign(D, j); D.settings = Object.assign({}, DEF_SET, j.settings || {}); D.mem = Object.assign({ lastMorning: '', lastEvening: '', ev: {} }, j.mem || {});
-    if (!Array.isArray(D.tasks)) D.tasks = []; if (!Array.isArray(D.chat)) D.chat = []; if (!Array.isArray(D.convs)) D.convs = [];
+    if (!Array.isArray(D.tasks)) D.tasks = []; if (!Array.isArray(D.chat)) D.chat = []; if (!Array.isArray(D.convs)) D.convs = []; if (!Array.isArray(D.areas)) D.areas = [];
   } catch (e) { /* primeira vez */ }
   let saveT = null;
   function save() {
@@ -132,21 +132,60 @@ function setupMacGyver(x) {
     for (const t of D.tasks) {
       if (t.done) continue;
       if (t.g) mine.add(t.g.id);
-      out.push({ id: t.id, title: t.title, due: t.due || '', time: t.time || '', notes: t.notes || '', link: t.link || null, source: t.source || '', origin: 'mg', synced: !!t.g, overdue: !!t.due && (t.due < today || (t.due === today && t.time && t.time < hm(new Date()))) });
+      out.push({ id: t.id, title: t.title, due: t.due || '', time: t.time || '', notes: t.notes || '', link: t.link || null, source: t.source || '', origin: 'mg', synced: !!t.g, overdue: !!t.due && (t.due < today || (t.due === today && t.time && t.time < hm(new Date()))), area: areaOk(t.area), prio: t.prio || '', order: t.order || 0, created: t.created || 0 });
     }
     for (const g of G.tasks) {
       if (mine.has(g.id)) continue;
-      out.push({ id: 'g:' + g.feed + '|' + g.list + '|' + g.id, title: g.title, due: g.due, time: '', notes: g.notes || '', link: null, source: 'Google Tasks' + (feeds().length > 1 ? ' · ' + g.label : '') + (g.listName ? ' · ' + g.listName : ''), origin: 'google', synced: true, overdue: g.due < today, v: g.v });
+      out.push({ id: 'g:' + g.feed + '|' + g.list + '|' + g.id, title: g.title, due: g.due, time: '', notes: g.notes || '', link: null, source: 'Google Tasks' + (feeds().length > 1 ? ' · ' + g.label : '') + (g.listName ? ' · ' + g.listName : ''), origin: 'google', synced: true, overdue: g.due < today, v: g.v, area: '', prio: '', order: 1e12, created: 0 });
     }
     out.sort((a, b) => (a.due ? 0 : 1) - (b.due ? 0 : 1) || a.due.localeCompare(b.due) || (a.time || '99').localeCompare(b.time || '99') || a.title.localeCompare(b.title, 'pt'));
     return out;
   }
   const findLocal = id => D.tasks.find(t => t.id === id);
+
+  /* ---------- temas (áreas), como no Apolo ---------- */
+  const AREA_COLORS = ['ouro', 'salva', 'azul', 'rosa', 'lavanda', 'terracota', 'petroleo', 'grafite'];
+  const PRIOS = ['alta', 'media', 'baixa'];
+  const fold = v => String(v || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+  const areaOk = id => (id && D.areas.some(a => a.id === id) ? id : '');
+  const areaName = id => { const a = D.areas.find(z => z.id === id); return a ? a.name : ''; };
+  function findArea(v) { if (!v) return null; return D.areas.find(a => a.id === v) || D.areas.find(a => fold(a.name) === fold(v)) || null; }
+  function addArea(name, color) {
+    name = str(name, 60); if (!name) throw new Error('O tema precisa de um nome.');
+    const ex = findArea(name); if (ex) return ex;
+    const a = { id: 'a' + Date.now().toString(36) + crypto.randomBytes(2).toString('hex'), name, color: AREA_COLORS.includes(color) ? color : AREA_COLORS[D.areas.length % AREA_COLORS.length], order: D.areas.length };
+    D.areas.push(a); save(); x.tasksChanged();
+    return a;
+  }
+  function changeArea(id, o) {
+    const a = D.areas.find(z => z.id === id); if (!a) throw new Error('Tema não encontrado.');
+    if (o.name != null && str(o.name, 60)) a.name = str(o.name, 60);
+    if (o.color && AREA_COLORS.includes(o.color)) a.color = o.color;
+    if (o.move) { const list = D.areas.slice().sort((p, q) => p.order - q.order); const i = list.indexOf(a), j = i + (o.move < 0 ? -1 : 1); if (j >= 0 && j < list.length) { list.splice(i, 1); list.splice(j, 0, a); list.forEach((z, k) => { z.order = k; }); } }
+    save(); x.tasksChanged(); return a;
+  }
+  function removeArea(id) {
+    D.areas = D.areas.filter(a => a.id !== id);
+    D.tasks.forEach(t => { if (t.area === id) t.area = ''; });
+    save(); x.tasksChanged(); return true;
+  }
+  const areasSorted = () => D.areas.slice().sort((a, b) => a.order - b.order);
+  const nextOrder = area => 1 + Math.max(0, ...D.tasks.filter(t => (t.area || '') === (area || '') && !t.done).map(t => t.order || 0));
+  // uma tarefa do Google que se põe num tema passa a ser do Zeus (ligada à do Google, que continua igual)
+  function adopt(id) {
+    const g = parseG(id); if (!g) return null;
+    const gt = G.tasks.find(z => z.id === g.id); if (!gt) return null;
+    const t = { id: uid(), title: gt.title, due: gt.due || '', time: '', notes: gt.notes || '', link: null, source: 'Google Tasks' + (gt.listName ? ' · ' + gt.listName : ''), created: Date.now(), done: false, g: { feed: g.feed, list: g.list, id: g.id }, gAt: Date.now(), area: '', prio: '', order: 0 };
+    D.tasks.push(t);
+    return t;
+  }
   const parseG = id => { const m = /^g:([^|]+)\|([^|]+)\|(.+)$/.exec(String(id)); return m ? { feed: m[1], list: m[2], id: m[3] } : null; };
   function addTask(o) {
     const title = str(o.title, 300);
     if (!title) throw new Error('A tarefa precisa de um título.');
-    const t = { id: uid(), title, due: okDate(o.due), time: okTime(o.time), notes: String(o.notes || '').slice(0, 4000), link: o.link && /^https?:/.test(o.link.url || '') ? { url: String(o.link.url).slice(0, 2000), title: str(o.link.title, 200) } : null, source: str(o.source, 120), created: Date.now(), done: false };
+    let area = '';
+    if (o.area) { const a = findArea(o.area) || (o.newArea ? addArea(o.area) : null); area = a ? a.id : ''; }
+    const t = { id: uid(), title, due: okDate(o.due), time: okTime(o.time), notes: String(o.notes || '').slice(0, 4000), link: o.link && /^https?:/.test(o.link.url || '') ? { url: String(o.link.url).slice(0, 2000), title: str(o.link.title, 200) } : null, source: str(o.source, 120), created: Date.now(), done: false, area, prio: PRIOS.includes(o.prio) ? o.prio : '', order: nextOrder(area) };
     if (t.time && !t.due) t.due = ymd();
     D.tasks.push(t); save(); x.tasksChanged();
     pushToGoogle(t);
@@ -161,8 +200,13 @@ function setupMacGyver(x) {
     return true;
   }
   async function changeTask(id, o) {
-    const t = findLocal(id);
+    let t = findLocal(id);
+    if (!t && (o.area !== undefined || o.prio !== undefined || o.order !== undefined)) t = adopt(id);
     if (t) {
+      if (o.area !== undefined) { const a = o.area ? findArea(o.area) || (o.newArea ? addArea(o.area) : null) : null; const na = a ? a.id : ''; if (na !== (t.area || '')) { t.area = na; if (o.order === undefined) t.order = nextOrder(na); } }
+      if (o.prio !== undefined) t.prio = PRIOS.includes(o.prio) ? o.prio : '';
+      if (o.order !== undefined && isFinite(+o.order)) t.order = +o.order;
+      if (o.link !== undefined) t.link = o.link && /^https?:/.test(o.link.url || '') ? { url: String(o.link.url).slice(0, 2000), title: str(o.link.title, 200) } : null;
       if (o.title != null && str(o.title)) t.title = str(o.title, 300);
       if (o.due !== undefined) t.due = okDate(o.due);
       if (o.time !== undefined) { t.time = okTime(o.time); if (t.time && !t.due) t.due = ymd(); }
@@ -188,6 +232,12 @@ function setupMacGyver(x) {
     return true;
   }
   const uById = id => unified().find(t => t.id === id);
+  function reorder(area, ids) {
+    let n = 0;
+    for (const id of ids || []) { let t = findLocal(id) || adopt(id); if (!t) continue; t.area = areaOk(area); t.order = ++n; }
+    save(); x.tasksChanged(); return true;
+  }
+  const doneRecent = () => D.tasks.filter(t => t.done && (t.doneAt || 0) > Date.now() - 30 * DAY).sort((a, b) => b.doneAt - a.doneAt).map(t => ({ id: t.id, title: t.title, due: t.due || '', time: t.time || '', notes: t.notes || '', link: t.link || null, source: t.source || '', origin: 'mg', synced: !!t.g, done: true, doneAt: t.doneAt, area: areaOk(t.area), prio: t.prio || '', order: t.order || 0, created: t.created || 0 }));
 
   /* ---------- a página principal do Zeus mostra também as tarefas do MacGyver ---------- */
   function homeTasks(today = ymd()) {
@@ -229,8 +279,10 @@ function setupMacGyver(x) {
   /* ---------- Claude ---------- */
   const TOOLS = [
     { name: 'ver_tarefas', description: 'Lista as tarefas por fazer (as do MacGyver e as do Google Tasks), com id, título, data, hora, origem e se estão atrasadas. Por omissão até daqui a 7 dias, mais as que não têm data.', input_schema: { type: 'object', properties: { ate: { type: 'string', description: 'Até esta data (AAAA-MM-DD), inclusive.' } } } },
-    { name: 'criar_tarefa', description: 'Cria uma tarefa ou um lembrete. Com hora, o MacGyver avisa a essa hora. Usa ligar_pagina quando o pedido se refere à página aberta ("isto", "esta página", "este email").', input_schema: { type: 'object', properties: { titulo: { type: 'string', description: 'Curto e claro, começado por um verbo (ex.: "Responder ao Pedro sobre o orçamento").' }, data: { type: 'string', description: 'AAAA-MM-DD. Omitir se não houver data.' }, hora: { type: 'string', description: 'HH:MM, 24 h. Só se o utilizador indicou hora ou um momento claro.' }, notas: { type: 'string' }, ligar_pagina: { type: 'boolean', description: 'Guardar o endereço da página aberta na tarefa.' }, origem: { type: 'string', description: 'De onde veio (ex.: "Notas · Reunião de direção de 2 nov").' } }, required: ['titulo'] } },
-    { name: 'alterar_tarefa', description: 'Muda o título, a data ou a hora de uma tarefa (por id). Para tirar a hora, hora = "".', input_schema: { type: 'object', properties: { id: { type: 'string' }, titulo: { type: 'string' }, data: { type: 'string' }, hora: { type: 'string' } }, required: ['id'] } },
+    { name: 'ver_temas', description: 'Os temas (áreas) em que as tarefas do João estão arrumadas, com quantas tarefas por fazer tem cada um.', input_schema: { type: 'object', properties: {} } },
+    { name: 'criar_tema', description: 'Cria um tema novo. Só quando o João pede, ou ao trazer tarefas do Apolo com temas que ainda não existem.', input_schema: { type: 'object', properties: { nome: { type: 'string' } }, required: ['nome'] } },
+    { name: 'criar_tarefa', description: 'Cria uma tarefa ou um lembrete. Com hora, o MacGyver avisa a essa hora. Usa ligar_pagina quando o pedido se refere à página aberta ("isto", "esta página", "este email"). Põe-na no tema que encaixa (nome de ver_temas) e com prioridade quando for claro.', input_schema: { type: 'object', properties: { tema: { type: 'string', description: 'Nome de um tema existente.' }, prioridade: { type: 'string', enum: ['alta', 'media', 'baixa'] }, titulo: { type: 'string', description: 'Curto e claro, começado por um verbo (ex.: "Responder ao Pedro sobre o orçamento").' }, data: { type: 'string', description: 'AAAA-MM-DD. Omitir se não houver data.' }, hora: { type: 'string', description: 'HH:MM, 24 h. Só se o utilizador indicou hora ou um momento claro.' }, notas: { type: 'string' }, ligar_pagina: { type: 'boolean', description: 'Guardar o endereço da página aberta na tarefa.' }, origem: { type: 'string', description: 'De onde veio (ex.: "Notas · Reunião de direção de 2 nov").' } }, required: ['titulo'] } },
+    { name: 'alterar_tarefa', description: 'Muda o título, a data, a hora, o tema, a prioridade ou as notas de uma tarefa (por id). Para tirar a hora, hora = ""; para tirar do tema, tema = "".', input_schema: { type: 'object', properties: { id: { type: 'string' }, titulo: { type: 'string' }, data: { type: 'string' }, hora: { type: 'string' }, tema: { type: 'string' }, prioridade: { type: 'string', enum: ['alta', 'media', 'baixa', ''] }, notas: { type: 'string' } }, required: ['id'] } },
     { name: 'concluir_tarefa', description: 'Marca uma tarefa como feita (por id).', input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
     { name: 'apagar_tarefa', description: 'Apaga uma tarefa (por id). Só quando o utilizador pede para apagar ou desistir dela.', input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
     { name: 'ver_agenda', description: 'Compromissos do calendário (contas Google ligadas ao Zeus) a partir de uma data, até 8 dias.', input_schema: { type: 'object', properties: { data: { type: 'string', description: 'AAAA-MM-DD; por omissão hoje.' }, dias: { type: 'integer', minimum: 1, maximum: 8 } } } },
@@ -270,6 +322,8 @@ Regras:
 - Quando te pedem para tirar tarefas de uma reunião, procura a nota, lê-a e cria só as tarefas que são do João (ou sem responsável), com o prazo que lá estiver.
 - Se faltar informação essencial, pergunta numa frase. Se a API do Google falhar, diz isso claramente.
 - Não inventes compromissos nem tarefas.
+- As tarefas estão arrumadas por temas (como no Apolo). Ao criar, põe no tema que encaixa claramente (vê-os com ver_temas); na dúvida, sem tema. Prioridade só quando o João a diz ou é evidente ("urgente" = alta).
+- Para trazer tarefas do Diário do Apolo: o João abre o Apolo no Zeus; lês a página com pagina_aberta e crias cada tarefa com o tema e a prioridade que lá estão (cria os temas que faltarem com criar_tema). Não dupliques as que já existem.
 
 Páginas (o Zeus é um browser):
 - Para resumir a página aberta, usa pagina_aberta e responde com 3 a 6 pontos curtos começados por "• " (o essencial, números e nomes concretos), mais uma frase final se houver alguma coisa a fazer. Sem títulos.
@@ -283,21 +337,25 @@ Páginas (o Zeus é um browser):
     if (name === 'ver_tarefas') {
       await fetchGoogle();
       const ate = okDate(inp.ate) || addDays(ymd(), 7);
-      return unified().filter(t => !t.due || t.due <= ate).slice(0, 80).map(t => ({ id: t.id, titulo: t.title, data: t.due || null, hora: t.time || null, atrasada: t.overdue, origem: t.source || (t.origin === 'mg' ? 'MacGyver' : 'Google Tasks'), pagina: t.link ? t.link.title || t.link.url : undefined, notas: t.notes ? t.notes.slice(0, 200) : undefined }));
+      return unified().filter(t => !t.due || t.due <= ate).slice(0, 120).map(t => ({ id: t.id, titulo: t.title, tema: areaName(t.area) || null, prioridade: t.prio || null, data: t.due || null, hora: t.time || null, atrasada: t.overdue, origem: t.source || (t.origin === 'mg' ? 'MacGyver' : 'Google Tasks'), pagina: t.link ? t.link.title || t.link.url : undefined, notas: t.notes ? t.notes.slice(0, 200) : undefined }));
     }
     if (name === 'criar_tarefa') {
       let link = null;
       if (inp.ligar_pagina) { const p = ctx.page || await pageNow(); if (p && /^https?:/.test(p.url || '')) link = { url: p.url, title: p.title }; }
-      const t = addTask({ title: inp.titulo, due: inp.data, time: inp.hora, notes: inp.notas, link, source: inp.origem });
+      const t = addTask({ title: inp.titulo, due: inp.data, time: inp.hora, notes: inp.notas, link, source: inp.origem, area: inp.tema, prio: inp.prioridade });
+      if (inp.tema && !t.area) ctx.steps.push(`O tema “${str(inp.tema, 40)}” não existe; ficou sem tema`);
       ctx.made.push(t.id);
       return { ok: true, id: t.id, titulo: t.title, data: t.due || null, hora: t.time || null, pagina: link ? link.title : null, google: writeFeed() ? 'também no Google Tasks' : 'só no Mac (Google Tasks não ligado para escrita)' };
     }
     if (name === 'alterar_tarefa') {
       const o = {}; if (inp.titulo) o.title = inp.titulo; if (inp.data !== undefined) o.due = inp.data; if (inp.hora !== undefined) o.time = inp.hora;
+      if (inp.tema !== undefined) o.area = inp.tema; if (inp.prioridade !== undefined) o.prio = inp.prioridade; if (inp.notas !== undefined) o.notes = inp.notas;
       await fetchGoogle();
       await changeTask(inp.id, o); ctx.made.push(inp.id);
       return { ok: true };
     }
+    if (name === 'ver_temas') { await fetchGoogle(); const u = unified(); return areasSorted().map(a => ({ nome: a.name, por_fazer: u.filter(t => t.area === a.id).length })).concat([{ nome: '(sem tema)', por_fazer: u.filter(t => !t.area).length }]); }
+    if (name === 'criar_tema') { const a = addArea(inp.nome); ctx.steps.push(`Criei o tema «${a.name}»`); return { ok: true, nome: a.name }; }
     if (name === 'concluir_tarefa') { await fetchGoogle(); await doneTask(inp.id); ctx.done.push(inp.id); return { ok: true }; }
     if (name === 'apagar_tarefa') { await fetchGoogle(); await removeTask(inp.id); return { ok: true }; }
     if (name === 'ver_agenda') {
@@ -589,6 +647,25 @@ Páginas (o Zeus é um browser):
     return { ok: true };
   }
 
+  /* ---------- ponte com a página das Tarefas ---------- */
+  const fromT = e => { const wc = x.getTarefasWC && x.getTarefasWC(); return wc && e.sender === wc && e.senderFrame === e.sender.mainFrame; };
+  const ht = (name, fn) => ipcMain.handle('tarefas:' + name, async (e, ...a) => { if (!fromT(e)) throw new Error('origem não autorizada'); try { return await fn(...a); } catch (err) { return { ok: false, error: err.message }; } });
+  ht('state', async force => {
+    if (force || Date.now() - G.t > 2 * 60 * 1000) await fetchGoogle(force).catch(() => {});
+    const today = ymd();
+    return { today, tomorrow: addDays(today, 1), tasks: unified(today), done: doneRecent(), areas: areasSorted(), colors: AREA_COLORS, errors: G.errors, feeds: feedInfo(), dark: x.isDark() };
+  });
+  ht('add', o => { const t = addTask(o || {}); return { ok: true, id: t.id }; });
+  ht('change', async (id, o) => { await changeTask(String(id), o || {}); return { ok: true }; });
+  ht('done', async (id, undo) => { await doneTask(String(id), !!undo); return { ok: true }; });
+  ht('remove', async id => { await removeTask(String(id)); return { ok: true }; });
+  ht('reorder', (area, ids) => reorder(String(area || ''), (ids || []).map(String)));
+  ht('addArea', (name, color) => ({ ok: true, area: addArea(name, color) }));
+  ht('changeArea', (id, o) => ({ ok: true, area: changeArea(String(id), o || {}) }));
+  ht('removeArea', id => removeArea(String(id)));
+  ht('open', url => { if (/^https?:/.test(String(url || ''))) x.openURL(String(url)); return true; });
+  ht('macgyver', () => { x.toggleMg(); return true; });
+
   /* ---------- ponte com a página da bolinha ---------- */
   const from = e => { const wc = x.getWC(); return wc && e.sender === wc && e.senderFrame === e.sender.mainFrame; };
   const h = (name, fn) => ipcMain.handle('macgyver:' + name, (e, ...a) => { if (!from(e)) throw new Error('origem não autorizada'); return fn(...a); });
@@ -602,6 +679,7 @@ Páginas (o Zeus é um browser):
     return {
       today, todayLong: longDate(today), tomorrow: addDays(today, 1),
       tasks: unified(today),
+      areas: areasSorted(),
       events: G.events.filter(e => evDay(e) >= today && evDay(e) <= addDays(today, 7)).map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end, allDay: e.allDay, meet: e.meet || '', location: e.location || '', label: e.label })),
       errors: G.errors,
       chat: D.chat.slice(-40),
