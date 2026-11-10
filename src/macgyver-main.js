@@ -296,6 +296,14 @@ function setupMacGyver(x) {
     { name: 'deslizar', description: 'Desliza a página aberta: para baixo, para cima, para o topo, para o fim, ou até um texto.', input_schema: { type: 'object', properties: { direcao: { type: 'string', enum: ['baixo', 'cima', 'topo', 'fim'] }, ate_texto: { type: 'string' } } } },
     { name: 'abrir_pagina', description: 'Abre um endereço (ou uma pesquisa na web) num separador novo do Zeus, que passa a ser a página aberta.', input_schema: { type: 'object', properties: { endereco: { type: 'string' } }, required: ['endereco'] } },
     { name: 'abrir_app', description: 'Abre uma das apps da barra da esquerda do Zeus (ex.: Player, Radar, Notas, Tarefas, Disco, Editor, Zoom, Email, WhatsApp, Calendário, Apolo…), em página inteira. Usa o nome tal como aparece na barra.', input_schema: { type: 'object', properties: { nome: { type: 'string' } }, required: ['nome'] } },
+    { name: 'tocar', description: 'Toca um áudio ou vídeo no Player: procura pelo nome na biblioteca do Player e, se não estiver lá, nos ficheiros do Mac. Abre o Player e começa a tocar.', input_schema: { type: 'object', properties: { procurar: { type: 'string', description: 'Palavras do nome do ficheiro.' }, caminho: { type: 'string', description: 'Caminho exato, se já o souberes (de procurar_ficheiros).' } } } },
+    { name: 'biblioteca_player', description: 'O que está na biblioteca do Player (os ficheiros abertos recentemente), do mais recente para o mais antigo.', input_schema: { type: 'object', properties: { procurar: { type: 'string' } } } },
+    { name: 'procurar_ficheiros', description: 'Procura ficheiros no Mac pelo nome (como o Disco/Finder). Devolve caminho, pasta, data e tamanho.', input_schema: { type: 'object', properties: { texto: { type: 'string' }, so_audio_video: { type: 'boolean' } }, required: ['texto'] } },
+    { name: 'abrir_ficheiro', description: 'Abre um ficheiro (caminho de procurar_ficheiros): áudio e vídeo no Player, o resto na app habitual do Mac; ou mostra-o no Finder.', input_schema: { type: 'object', properties: { caminho: { type: 'string' }, mostrar_no_finder: { type: 'boolean' } }, required: ['caminho'] } },
+    { name: 'editar_audio', description: 'Abre um ou mais ficheiros de áudio (caminhos) no Editor do Zeus, num projeto novo.', input_schema: { type: 'object', properties: { caminhos: { type: 'array', items: { type: 'string' } } }, required: ['caminhos'] } },
+    { name: 'criar_nota', description: 'Cria uma nota nas Notas do Zeus e abre-a. O texto pode ter parágrafos (linha em branco), listas com "- " e títulos com "## ".', input_schema: { type: 'object', properties: { titulo: { type: 'string' }, texto: { type: 'string' } }, required: ['titulo'] } },
+    { name: 'guardar_no_zoom', description: 'Guarda a página aberta (um site) no Zoom, numa coleção se for dita.', input_schema: { type: 'object', properties: { colecao: { type: 'string' } } } },
+    { name: 'procurar_no_zoom', description: 'Procura nos artigos guardados no Zoom (títulos, notas, etiquetas e destaques).', input_schema: { type: 'object', properties: { texto: { type: 'string' } }, required: ['texto'] } },
     { name: 'fechar_app', description: 'Fecha a app que está aberta em página inteira e volta ao separador (página) onde o João estava.', input_schema: { type: 'object', properties: {} } },
     { name: 'voltar_atras', description: 'Volta à página anterior no separador aberto.', input_schema: { type: 'object', properties: {} } }
   ];
@@ -328,6 +336,9 @@ Regras:
 - Para trazer tarefas do Diário do Apolo: o João abre o Apolo no Zeus; lês a página com pagina_aberta e crias cada tarefa com o tema e a prioridade que lá estão (cria os temas que faltarem com criar_tema). Não dupliques as que já existem.
 
 Apps do Zeus (barra da esquerda): ${x.apps().map(a => a.name).join(', ')}. Abre-as com abrir_app quando o João pede ("abre o Player", "mostra-me o Radar"); fechar_app volta à página.
+Dentro das apps:
+- Player: tocar (procura na biblioteca e nos ficheiros do Mac), biblioteca_player. Disco: procurar_ficheiros, abrir_ficheiro (ou mostrar no Finder). Editor: editar_audio. Notas: criar_nota, procurar_notas, ler_nota. Zoom: guardar_no_zoom (a página aberta), procurar_no_zoom. Tarefas: as ferramentas das tarefas e dos temas.
+- Para o resto, abre a app (abrir_app) e mexe nela como numa página: pagina_aberta para ler o que lá está (ex.: as notícias do Radar, os jogos do Futebol hoje), elementos_da_pagina, clicar, escrever, deslizar. As apps web da barra (Email, WhatsApp, Calendário, Apolo…) são sites: mexe-se nelas da mesma forma.
 
 Páginas (o Zeus é um browser):
 - Para resumir a página aberta, usa pagina_aberta e responde com 3 a 6 pontos curtos começados por "• " (o essencial, números e nomes concretos), mais uma frase final se houver alguma coisa a fazer. Sem títulos.
@@ -392,7 +403,7 @@ Páginas (o Zeus é um browser):
     }
     if (name === 'pagina_aberta') {
       const p = ctx.acted ? await pageNow() : (ctx.page || await pageNow());
-      if (!p) return { erro: 'Não há nenhuma página aberta (o João está na página principal ou numa app do Zeus).' };
+      if (!p) return { erro: 'Não há nenhuma página aberta (o João está na página principal do Zeus).' };
       return { titulo: p.title, endereco: p.url, selecao: p.selection || undefined, texto: (p.text || '').slice(0, 40000) };
     }
     if (name === 'elementos_da_pagina') return x.pageAct('elements', { q: inp.procurar || '' });
@@ -432,6 +443,48 @@ Páginas (o Zeus é um browser):
       ctx.steps.push(`Abri ${a.name}`);
       return { ok: true, app: a.name };
     }
+    if (name === 'biblioteca_player' || name === 'tocar') {
+      const lib = x.player().filter(i => i.exists).sort((a, b) => b.last - a.last);
+      const w = fold(inp.procurar || '').split(/\s+/).filter(Boolean);
+      const hits = lib.filter(i => w.every(q => fold(i.name).includes(q)));
+      if (name === 'biblioteca_player') return hits.slice(0, 30).map(i => ({ nome: i.name, tipo: i.kind === 'audio' ? 'áudio' : 'vídeo', caminho: i.path }));
+      let p = inp.caminho && fs.existsSync(inp.caminho) ? inp.caminho : (hits[0] || {}).path;
+      if (!p && w.length) { const f = await x.findFiles(inp.procurar, { media: true, max: 5 }); if (f.length > 1 && !hits.length) return { varios: f, nota: 'Há vários ficheiros com esse nome; pergunta ao João qual, ou escolhe o mais provável e usa o caminho.' }; p = f[0] && f[0].caminho; }
+      if (!p) return { erro: 'Não encontrei nenhum áudio ou vídeo com esse nome.' };
+      if (!x.isMedia(p)) return { erro: 'Esse ficheiro não é áudio nem vídeo.' };
+      await x.playFiles([p]); ctx.acted = true; ctx.steps.push(`A tocar «${path.basename(p)}» no Player`);
+      return { ok: true, a_tocar: path.basename(p) };
+    }
+    if (name === 'procurar_ficheiros') { const r = await x.findFiles(inp.texto, { media: !!inp.so_audio_video }); return r.length ? r : { nada: true, nota: 'Nenhum ficheiro com esse nome na pasta do utilizador.' }; }
+    if (name === 'abrir_ficheiro') {
+      const p = String(inp.caminho || ''); if (!p || !fs.existsSync(p)) return { erro: 'Esse ficheiro não existe.' };
+      if (inp.mostrar_no_finder) { x.showInFinder(p); ctx.steps.push(`Mostrei «${path.basename(p)}» no Finder`); return { ok: true }; }
+      if (x.isMedia(p)) { await x.playFiles([p]); ctx.steps.push(`Abri «${path.basename(p)}» no Player`); }
+      else { const e = await x.openFile(p); if (e) return { erro: e }; ctx.steps.push(`Abri «${path.basename(p)}»`); }
+      ctx.acted = true; return { ok: true };
+    }
+    if (name === 'editar_audio') {
+      const ps = (inp.caminhos || []).map(String).filter(p => fs.existsSync(p)).slice(0, 10);
+      if (!ps.length) return { erro: 'Não encontrei esses ficheiros.' };
+      x.editAudio(ps); ctx.acted = true; ctx.steps.push(`Abri ${ps.length === 1 ? '«' + path.basename(ps[0]) + '»' : ps.length + ' ficheiros'} no Editor`);
+      return { ok: true };
+    }
+    if (name === 'criar_nota') {
+      const title = str(inp.titulo, 150) || 'Nota';
+      const e = t => String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+      const html = String(inp.texto || '').split(/\n{2,}/).map(b => {
+        b = b.trim(); if (!b) return '';
+        if (/^##\s/.test(b)) return `<h2>${e(b.replace(/^##\s+/, ''))}</h2>`;
+        const lines = b.split('\n');
+        if (lines.every(l => /^\s*[-•]\s/.test(l))) return `<ul>${lines.map(l => `<li>${e(l.replace(/^\s*[-•]\s+/, ''))}</li>`).join('')}</ul>`;
+        return `<p>${lines.map(e).join('<br>')}</p>`;
+      }).join('') || '<p></p>';
+      const id = await x.createNote(title, html);
+      x.openNote(id); ctx.acted = true; ctx.notes.push({ id, title }); ctx.steps.push(`Criei a nota «${title}»`);
+      return { ok: true, id };
+    }
+    if (name === 'guardar_no_zoom') { const r = await x.zoomSave(inp.colecao || ''); if (!r) return { erro: 'Só se guardam no Zoom páginas de sites (abre o artigo num separador).', colecoes: x.zoomCols() }; ctx.steps.push(`Guardei «${r.titulo}» no Zoom (${r.colecao})`); return Object.assign({ ok: true }, r); }
+    if (name === 'procurar_no_zoom') { const r = x.zoomFind(inp.texto || ''); return r.length ? r : { nada: true }; }
     if (name === 'fechar_app') { x.closeApps(); ctx.acted = true; ctx.steps.push('Voltei à página'); return { ok: true }; }
     if (name === 'voltar_atras') { const r = await x.pageAct('back', {}); ctx.acted = true; if (r.ok) ctx.steps.push('Voltei à página anterior'); return r; }
     return { erro: 'Ferramenta desconhecida.' };
@@ -471,7 +524,7 @@ Páginas (o Zeus é um browser):
       for (const m of D.chat.slice(-17, -1)) { if (m.err) continue; const role = m.role === 'me' ? 'user' : 'assistant'; if (hist.length && hist[hist.length - 1].role === role) hist[hist.length - 1].content += '\n' + m.text; else hist.push({ role, content: m.text }); }
       while (hist.length && hist[0].role !== 'user') hist.shift();
       if (hist.length && hist[hist.length - 1].role === 'user') hist.pop();
-      const pageHint = ctx.page ? `\n\n[Página aberta no Zeus: “${ctx.page.title || ''}” — ${ctx.page.url}${ctx.page.selection ? ` — texto selecionado: “${ctx.page.selection.slice(0, 600)}”` : ''}]` : '\n\n[Sem página aberta: o João está na página principal ou numa app do Zeus.]';
+      const pageHint = ctx.page && /^zeus:/.test(ctx.page.url) ? `\n\n[Aberta no Zeus: a app ${ctx.page.app || ctx.page.title}.]` : ctx.page ? `\n\n[Página aberta no Zeus: “${ctx.page.title || ''}” — ${ctx.page.url}${ctx.page.selection ? ` — texto selecionado: “${ctx.page.selection.slice(0, 600)}”` : ''}]` : '\n\n[Sem página aberta: o João está na página principal ou numa app do Zeus.]';
       const msgs = hist.concat([{ role: 'user', content: text + pageHint }]);
       let out = '';
       const sys = system();   // as mesmas instruções em todos os passos deste pedido

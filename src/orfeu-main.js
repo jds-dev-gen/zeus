@@ -362,7 +362,9 @@ function setupOrfeu(x) {
     save();
   }, 15000);
 
-  return { addPaths, isMedia, register };
+  // a biblioteca, para o MacGyver procurar o que tocar
+  const list = () => Object.values(D.items).map(it => ({ id: it.id, name: it.name, path: it.path, kind: it.kind || (AUDIO_EXT.includes(extOf(it.path)) ? 'audio' : 'video'), recent: !!it.recent, last: it.lastPlayed || it.added || 0, exists: fs.existsSync(it.path) }));
+  return { addPaths, isMedia, register, list };
 }
 
 module.exports = { setupOrfeu, isMedia: p => MEDIA_EXT.has(path.extname(String(p)).slice(1).toLowerCase()) };

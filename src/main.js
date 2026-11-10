@@ -16,6 +16,7 @@ const { setupEco } = require('./eco-main');
 const { setupVideoDL } = require('./video-dl');
 const path = require('path');
 const { execFile } = require('child_process');
+const os = require('os');
 const fs = require('fs');
 const { ElectronChromeExtensions } = require('electron-chrome-extensions');
 const { installChromeWebStore, uninstallExtension, loadAllExtensions } = require('electron-chrome-web-store');
@@ -2101,18 +2102,47 @@ function mgToggle() {
   mgSend('toggle', true);
 }
 // a página aberta (só sites; nunca as apps internas do Zeus)
+// a página aberta: um site num separador, uma app web da barra (Gmail, WhatsApp…) ou uma app do próprio Zeus (Player, Radar, Notas…)
 function mgPageView() {
   const view = fullApp ? appViews.get(fullApp) : (cur() && cur().url !== NEWTAB ? tabViews.get(S.currentId) : null);
-  if (!view || view.__internal) return null;
-  const wc = view.webContents; if (!wc || wc.isDestroyed() || !/^https?:/.test(wc.getURL())) return null;
+  if (!view || view === mgView) return null;
+  const wc = view.webContents; if (!wc || wc.isDestroyed()) return null;
+  if (!view.__internal && !/^https?:/.test(wc.getURL())) return null;
   return wc;
 }
-function mgPageLite() { const wc = mgPageView(); return wc ? { title: wc.getTitle(), url: wc.getURL() } : null; }
+function mgPageLite() {
+  const wc = mgPageView(); if (!wc) return null;
+  const a = fullApp && appById(fullApp);
+  if (a && a.internal) return { title: `${a.name} (app do Zeus)`, url: 'zeus://' + a.internal, app: a.name };
+  return { title: wc.getTitle(), url: wc.getURL(), app: a ? a.name : '' };
+}
 async function mgPage() {
   const wc = mgPageView(); if (!wc) return null;
   let r = {};
   try { r = await wc.executeJavaScriptInIsolatedWorld(1999, [{ code: `({ sel: String(getSelection() || '').slice(0, 4000), text: (document.body && document.body.innerText || '').slice(0, 60000) })` }]) || {}; } catch (e) { /* página sem acesso */ }
-  return { title: wc.getTitle(), url: wc.getURL(), selection: r.sel || '', text: r.text || '' };
+  const lite = mgPageLite() || {};
+  return { title: lite.title || wc.getTitle(), url: lite.url || wc.getURL(), app: lite.app || '', selection: r.sel || '', text: r.text || '' };
+}
+// procurar ficheiros no Mac pelo nome (Spotlight); nos testes, sem Spotlight, procura nas pastas do utilizador
+function mgFindFiles(q, opts = {}) {
+  q = String(q || '').trim().slice(0, 120); if (!q) return Promise.resolve([]);
+  const home = os.homedir(), max = opts.max || 25;
+  const words = q.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().split(/\s+/).filter(Boolean);
+  const okName = n => { const f = n.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase(); return words.every(w => f.includes(w)); };
+  const finish = paths => paths.filter(p => !/\/(\.|Library\/|node_modules\/)/.test(p.slice(home.length))).filter(p => okName(path.basename(p))).filter(p => !opts.media || isOrfeuMedia(p)).slice(0, max)
+    .map(p => { let st = null; try { st = fs.statSync(p); } catch (e) { /* ok */ } return { caminho: p, nome: path.basename(p), pasta: path.dirname(p).replace(home, '~'), alterado: st ? new Date(st.mtimeMs).toISOString().slice(0, 10) : '', tamanho_mb: st ? +(st.size / 1048576).toFixed(1) : null }; });
+  return new Promise(res => {
+    if (process.platform === 'darwin') {
+      const expr = words.map(w => `kMDItemFSName == "*${w.replace(/["\\*]/g, '')}*"cd`).join(' && ');
+      execFile('/usr/bin/mdfind', ['-onlyin', home, expr], { timeout: 6000, maxBuffer: 4 << 20 }, (e, out) => res(finish(String(out || '').split('\n').filter(Boolean))));
+      return;
+    }
+    const roots = (process.env.ZEUS_TEST_HERMES ? [process.env.ZEUS_TEST_HERMES] : [home]);
+    const out = [];
+    const walk = (d, depth) => { if (depth > 5 || out.length > 400) return; let ents = []; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch (e) { return; } for (const en of ents) { if (en.name.startsWith('.')) continue; const p = path.join(d, en.name); if (en.isDirectory()) walk(p, depth + 1); else if (okName(en.name)) out.push(p); } };
+    roots.forEach(r => walk(r, 0));
+    res(finish(out));
+  });
 }
 // O MacGyver a mexer na página aberta: ver os elementos, carregar, escrever, deslizar, abrir e voltar.
 // Os cliques e o texto chegam à página como se viessem do rato e do teclado (sendInputEvent / insertText).
@@ -2258,6 +2288,17 @@ function setupMg() {
     openURL: url => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); },
     openNote: id => { showApp('notas'); const go = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id }); }; setTimeout(go, notasWC && !notasWC.isLoading() ? 150 : 1500); },
     openNotas: () => showApp('notas'),
+    player: () => (orfeuApp ? orfeuApp.list() : []),
+    playFiles: paths => orfeuOpenPaths(paths),
+    editAudio: paths => { if (ecoApp) { ecoApp.openFiles(paths); showApp('eco'); } },
+    openFile: p => shell.openPath(p),
+    showInFinder: p => shell.showItemInFolder(p),
+    findFiles: (q, o) => mgFindFiles(q, o),
+    isMedia: p => isOrfeuMedia(p),
+    createNote: async (title, html) => { if (!notasApp) throw new Error('As Notas não estão disponíveis.'); const id = await notasApp.createNote(title, html); return id; },
+    zoomSave: async col => { const wc = mgPageView(); if (!wc || !/^https?:/.test(wc.getURL())) return null; const c = col ? zoom.d.cols.find(z => z.name.toLowerCase() === String(col).toLowerCase()) : null; const it = zoom.add(await pageMeta(wc), c ? { col: c.id } : {}); return it ? { titulo: it.title, colecao: c ? c.name : 'Sem coleção' } : null; },
+    zoomFind: q => { const f = t => String(t || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase(); const w = f(q).split(/\s+/).filter(Boolean); const cols = Object.fromEntries(zoom.d.cols.map(c => [c.id, c.name])); return zoom.d.items.filter(i => w.every(x => f([i.title, i.site, i.excerpt, i.note, (i.tags || []).join(' '), (i.highlights || []).map(h => h.text + ' ' + (h.note || '')).join(' ')].join(' ')).includes(x))).slice(0, 15).map(i => ({ titulo: i.title, site: i.site, endereco: i.url, colecao: cols[i.col] || 'Sem coleção', nota: i.note || undefined, destaques: (i.highlights || []).slice(0, 5).map(h => h.text.slice(0, 200)), guardado: new Date(i.createdAt).toISOString().slice(0, 10) })); },
+    zoomCols: () => zoom.d.cols.map(c => c.name),
     apps: () => S.apps.filter(a => !a.hidden || a.id === 'futebol').map(a => ({ id: a.id, name: a.id === 'futebol' ? 'Futebol hoje' : a.name })),
     openApp: id => { if (appById(id)) showApp(id); },
     closeApps: () => closeAppViews(),
