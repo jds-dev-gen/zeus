@@ -460,8 +460,16 @@ Páginas (o Zeus é um browser):
       const pageHint = ctx.page ? `\n\n[Página aberta no Zeus: “${ctx.page.title || ''}” — ${ctx.page.url}${ctx.page.selection ? ` — texto selecionado: “${ctx.page.selection.slice(0, 600)}”` : ''}]` : '\n\n[Sem página aberta: o João está na página principal ou numa app do Zeus.]';
       const msgs = hist.concat([{ role: 'user', content: text + pageHint }]);
       let out = '';
+      const sys = system();   // as mesmas instruções em todos os passos deste pedido
       for (let step = 0; step < 16; step++) {
-        const j = await api({ model: MODEL, max_tokens: 1600, system: system(), tools: TOOLS, messages: msgs }, key);
+        let j;
+        try { j = await api({ model: MODEL, max_tokens: 1600, system: sys, tools: TOOLS, messages: msgs }, key); }
+        catch (e) {
+          // blocos de "pensamento" de um passo anterior que a API já não aceita: tira-os e tenta outra vez
+          if (!/signature|thinking/i.test(e.message)) throw e;
+          for (const m of msgs) if (m.role === 'assistant' && Array.isArray(m.content)) m.content = m.content.filter(c => c.type !== 'thinking' && c.type !== 'redacted_thinking');
+          j = await api({ model: MODEL, max_tokens: 1600, system: sys, tools: TOOLS, messages: msgs }, key);
+        }
         const content = j.content || [];
         const txt = content.filter(c => c.type === 'text').map(c => c.text).join('').trim();
         const uses = content.filter(c => c.type === 'tool_use');
