@@ -2154,6 +2154,14 @@ async function mgPage() {
   const lite = mgPageLite() || {};
   return { title: lite.title || wc.getTitle(), url: lite.url || wc.getURL(), app: lite.app || '', appId: lite.appId || '', selection: r.sel || '', text: r.text || '' };
 }
+// endereço de um email do Gmail que funciona esteja ele onde estiver (caixa de entrada, arquivado, noutra etiqueta):
+// …/#inbox/<id> deixa de abrir o email quando ele sai da caixa de entrada — o Gmail mostra a caixa; …/#all/<id> abre sempre
+function gmailPermalink(url) {
+  const m = /^(https:\/\/mail\.google\.com\/mail\/(?:u\/\d+\/)?)(?:[^#]*)#(.+)$/.exec(String(url || ''));
+  if (!m) return url;
+  const id = m[2].split(/[/?]/).filter(Boolean).pop() || '';
+  return /^[A-Za-z0-9_-]{16,}$/.test(id) && m[2].includes('/') ? m[1] + '#all/' + id : url;
+}
 // procurar ficheiros no Mac pelo nome (Spotlight); nos testes, sem Spotlight, procura nas pastas do utilizador
 function mgFindFiles(q, opts = {}) {
   q = String(q || '').trim().slice(0, 120); if (!q) return Promise.resolve([]);
@@ -2319,6 +2327,7 @@ function setupMg() {
     // abre um endereço guardado: na app de onde veio (ex.: o email na app Gmail certa, com a conta certa), senão num separador
     openURL: (url, appId) => {
       if (!/^https?:/.test(url)) return;
+      url = gmailPermalink(url);
       let a = appId && appById(appId);
       if (!a || a.internal) {
         const h = hostOf(url), u = (/\/u\/(\d+)\//.exec(url) || [])[1];

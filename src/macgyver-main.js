@@ -283,11 +283,15 @@ function setupMacGyver(x) {
     const u = String(p.url || '');
     let subject = '';
     const gm = /^https:\/\/mail\.google\.com\//.test(u) || (!app.isPackaged && process.env.ZEUS_TEST_MAIL && u.startsWith(process.env.ZEUS_TEST_MAIL));   // nos testes, uma imitação do Gmail
-    if (gm && /#[^/]+\/[A-Za-z0-9_-]{12,}/.test(u)) subject = String(p.title || '').replace(/\s+-\s+[^-]+@[^-]+-\s+Gmail\s*$/i, '').replace(/\s+-\s+Gmail\s*$/i, '');
+    if (gm && /#[^?]*\/[A-Za-z0-9_-]{16,}(\?.*)?$/.test(u)) subject = String(p.title || '').replace(/\s+-\s+[^-]+@[^-]+-\s+Gmail\s*$/i, '').replace(/\s+-\s+Gmail\s*$/i, '');
     else if (/^https:\/\/mail\.proton\.me\//.test(u) && /\/[A-Za-z0-9_=-]{20,}(\?|#|$)/.test(u)) subject = String(p.title || '').replace(/\s*\|\s*Proton Mail\s*$/i, '').replace(/^.*?\s\|\s/, '');
     else if (/^https:\/\/outlook\.(live|office)\.com\//.test(u) && /\/id\//.test(u)) subject = String(p.title || '').replace(/\s+-\s+Outlook.*$/i, '');
     else return null;
-    return { url: u, title: 'Email: ' + (str(subject, 150) || 'abrir'), app: p.appId || '', kind: 'email' };
+    // no Gmail, o endereço "em todo o correio" (…/#all/<id>) abre o email mesmo depois de arquivado ou mudado de etiqueta
+    let link = u;
+    const g = /^(https?:\/\/[^#]+)#(.+)$/.exec(u);
+    if (gm && g) { const id = g[2].split(/[/?]/).filter(Boolean).pop() || ''; if (/^[A-Za-z0-9_-]{16,}$/.test(id)) link = g[1] + '#all/' + id; }
+    return { url: link, title: 'Email: ' + (str(subject, 150) || 'abrir'), app: p.appId || '', kind: 'email' };
   }
 
   /* ---------- a página aberta ---------- */
