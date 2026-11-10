@@ -2221,8 +2221,9 @@ async function mgPageAct(op, a = {}) {
   return { erro: 'Ação desconhecida.' };
 }
 function mgScriptUpdate() {
-  const f = (S.settings.homeFeeds || []).find(x => (x.v || 1) < 2);
-  if (!f) return { ok: true };
+  const all = S.settings.homeFeeds || [];
+  const f = all.find(x => (x.v || 1) < 2) || all.find(x => x.id === S.settings.mgFeed) || all[0];
+  if (!f) return { ok: false, error: 'Nenhuma conta Google ligada.' };
   const code = homeScriptCodeFor(f); if (!code) return { ok: false, error: 'Não encontrei o código.' };
   clipboard.writeText(code);
   const a = appById(f.appId); if (!a) return { ok: false, error: 'A app da conta já não existe.' };
@@ -2257,6 +2258,7 @@ function setupMg() {
     openURL: url => { if (/^https?:/.test(url)) newTab({ url, space: spaceForOpener() }); },
     openNote: id => { showApp('notas'); const go = () => { if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:cmd', { cmd: 'open', id }); }; setTimeout(go, notasWC && !notasWC.isLoading() ? 150 : 1500); },
     openNotas: () => showApp('notas'),
+    openSetup: () => { goHome(); setTimeout(() => { if (ui && !ui.isDestroyed()) ui.send('ui-command', { cmd: 'today-setup' }); }, 400); },
     scriptUpdate: () => mgScriptUpdate(),
     isDark,
     focused: () => !!(win && win.isFocused()),

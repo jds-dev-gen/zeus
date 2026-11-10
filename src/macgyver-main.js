@@ -691,6 +691,7 @@ Páginas (o Zeus é um browser):
       feeds: feedInfo(),
       dark: x.isDark(),
       page: x.pageLite ? x.pageLite() : null,
+      version: app.getVersion(),
       mac: process.platform === 'darwin'
     };
   }
@@ -739,6 +740,7 @@ Páginas (o Zeus é um browser):
   h('confirmReply', (id, ok) => { const f = confirms.get(String(id)); if (f) f(!!ok); return true; });
   h('speak', t => { speak(t); return true; });
   h('openNotas', () => { x.openNotas(); return true; });
+  h('openSetup', () => { x.openSetup(); return true; });
   h('scriptUpdate', () => x.scriptUpdate());
 
   return {

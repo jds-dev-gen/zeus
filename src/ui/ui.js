@@ -1296,6 +1296,7 @@ Z.on('ui-command', c => {
   if (c.cmd === 'downloads') modal === 'downloads' ? closeModal() : openDownloads();
   if (c.cmd === 'focus-ask' || c.cmd === 'home') goHomeUI();
   if (c.cmd === 'today-refresh') { if ($('#today')) loadToday(true); }
+  if (c.cmd === 'today-setup') openHomeSetup();
 });
 
 /* ------------------------------------------------------------------ */

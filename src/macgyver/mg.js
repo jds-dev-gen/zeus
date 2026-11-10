@@ -214,13 +214,14 @@ function renderSettings() {
   const s = ST.settings, f = ST.feeds;
   const sw = (k, on) => `<input class="sw" type="checkbox" data-set="${k}" ${on ? 'checked' : ''}>`;
   let google;
-  if (!f.count) google = '<p class="note">Nenhuma conta Google ligada. Liga-as na página principal do Zeus (Agenda e tarefas de hoje): o MacGyver passa a ver a agenda e as tarefas do Google.</p>';
+  if (!f.count) google = '<p class="note">Para as tarefas aparecerem no telemóvel, o Zeus usa o <b>Google Tasks</b>. Primeiro liga a tua conta Google à página principal do Zeus (Agenda e tarefas de hoje).</p><div class="row"><button class="b p" type="button" data-setup>Ligar a conta Google</button></div>';
   else if (f.write) google = `<p class="note">As tarefas que crio vão também para o <b>Google Tasks</b> de <b>${esc(f.write)}</b> — aparecem no telemóvel.</p>${f.all.filter(x => x.v >= 2).length > 1 ? `<div class="opt">Conta onde crio tarefas <select data-set="feed">${f.all.filter(x => x.v >= 2).map(x => `<option value="${esc(x.id)}" ${x.label === f.write ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>` : ''}`;
   else google = '';
+  if (f.count && !f.old.length) google += '<div class="row"><button class="b" type="button" data-script>Voltar a copiar o código do Apps Script</button></div>';
   if (f.old.length) google += `<p class="note">Para as minhas tarefas aparecerem também no telemóvel (Google Tasks), o código do Apps Script de <b>${esc(f.old.join(', '))}</b> tem de ser atualizado. Carrega no botão: copio o código novo e abro o Apps Script — cola-o por cima do antigo, guarda, e em <b>Implementar › Gerir implementações</b> edita a implementação com <b>Versão: Nova versão</b>.</p><div class="row"><button class="b p" type="button" data-script>Copiar o código e abrir o Apps Script</button></div>`;
   const v = ST.voice;
   $('#settings').innerHTML = `
-    ${f.old.length ? `<h3>Telemóvel</h3>${google}` : ''}
+    <h3>Telemóvel (Google Tasks)</h3>${google}
     <h3>Avisos</h3>
     <label class="opt"><span>Resumo da manhã<small>A primeira vez que abres o Zeus depois das 7h</small></span>${sw('morning', s.morning)}</label>
     <div class="opt"><span>Antes das reuniões<small>Com a agenda das contas Google</small></span><span style="display:flex;gap:8px;align-items:center"><select data-set="meetingLead">${[5, 10, 15].map(n => `<option value="${n}" ${s.meetingLead === n ? 'selected' : ''}>${n} min</option>`).join('')}</select>${sw('meetings', s.meetings)}</span></div>
@@ -228,11 +229,12 @@ function renderSettings() {
     <h3>Voz</h3>
     <label class="opt"><span>Responder em voz alta<small>Quando lhe falas (⌥ Espaço ou o micro)</small></span>${sw('speak', s.speak)}</label>
     ${v.ok ? '<p class="note">Carrega em <b>⌥ Espaço</b> e fala: envio quando parares (ou carrega outra vez). A voz é transcrita no próprio Mac.</p>' : `<p class="note">${esc(v.why)}</p>${v.model ? '<div class="row"><button class="b" type="button" data-notas>Abrir as Notas</button></div>' : ''}`}
-    ${f.old.length ? '' : `<h3>Google</h3>${google}`}
+
     <h3>Claude</h3>
     ${ST.key ? '<p class="note">A conversa usa a chave da API da Anthropic guardada nas Notas.</p>' : '<p class="note">Para conversar, cola aqui a chave da API da Anthropic (fica guardada no Porta-chaves, a mesma das Notas).</p><input class="key" id="keyIn" type="password" placeholder="sk-ant-…" autocomplete="off"><div class="row"><button class="b p" type="button" data-savekey>Guardar a chave</button></div><p class="err" id="keyErr" hidden></p>'}
     <div class="row" style="margin-top:18px"><button class="b" type="button" data-clear>Começar conversa nova</button><button class="b" type="button" data-hide>Esconder a bolinha</button></div>
-    <p class="note">Para voltar a mostrar a bolinha: menu Ver › MacGyver (⇧⌘M).</p>`;
+    <p class="note">Para voltar a mostrar a bolinha: menu Ver › MacGyver (⇧⌘M).</p>
+    <p class="note" style="color:var(--faint)">Zeus ${esc(ST.version || '')}${f.count ? ` · ${f.count} conta${f.count > 1 ? 's' : ''} Google ligada${f.count > 1 ? 's' : ''}: ${f.all.map(x => esc(x.label) + ' (código v' + x.v + ')').join(', ')}` : ''}</p>`;
 }
 
 /* ---------- histórico das conversas ---------- */
@@ -345,6 +347,7 @@ $('#panel').addEventListener('click', async e => {
   if (pa) { const [id, i] = pa.dataset.pact.split('|'); const a = panelAlerts.find(x => x.id === id); if (a) { panelAlerts.splice(panelAlerts.indexOf(a), 1); await doAct(a, a.actions[+i]); renderChat(); } return; }
   if (t.closest('[data-script]')) { const r = await MG.scriptUpdate(); if (r && r.error) flashErr(r.error); return; }
   if (t.closest('[data-notas]')) { MG.openNotas(); return; }
+  if (t.closest('[data-setup]')) { MG.openSetup(); return; }
   if (t.closest('[data-clear]')) { settingsOpen = false; await newConv(); return; }
   if (t.closest('[data-hide]')) { settingsOpen = false; mode = 'orb'; $('#panel').hidden = true; await MG.setting('hidden', true); return; }
   if (t.closest('[data-savekey]')) {
