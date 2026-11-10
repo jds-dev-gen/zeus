@@ -2,7 +2,7 @@
 // Ponte da bolinha do MacGyver: só estas funções chegam ao processo principal do Zeus.
 const { contextBridge, ipcRenderer } = require('electron');
 const NAMES = ['state', 'ask', 'done', 'change', 'remove', 'add', 'open', 'openNote', 'act', 'layout', 'setting', 'clearChat', 'setKey',
-  'micAccess', 'listenStart', 'listenStop', 'stopSpeaking', 'speak', 'confirmReply', 'openNotas', 'scriptUpdate'];
+  'micAccess', 'listenStart', 'listenStop', 'stopSpeaking', 'speak', 'confirmReply', 'fresh', 'history', 'openConv', 'deleteConv', 'openNotas', 'scriptUpdate'];
 const api = {};
 NAMES.forEach(n => { api[n] = (...a) => ipcRenderer.invoke('macgyver:' + n, ...a); });
 api.pcm = buf => ipcRenderer.send('macgyver:pcm', buf);

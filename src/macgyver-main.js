@@ -30,11 +30,11 @@ function setupMacGyver(x) {
 
   /* ---------- estado guardado ---------- */
   const DEF_SET = { morning: true, meetings: true, meetingLead: 10, evening: true, eveningAt: '18:30', speak: true, hidden: false, feed: '' };
-  let D = { tasks: [], chat: [], settings: Object.assign({}, DEF_SET), mem: { lastMorning: '', lastEvening: '', ev: {} } };
+  let D = { tasks: [], chat: [], chatId: '', convs: [], settings: Object.assign({}, DEF_SET), mem: { lastMorning: '', lastEvening: '', ev: {} } };
   try {
     const j = JSON.parse(fs.readFileSync(FILE, 'utf8'));
     D = Object.assign(D, j); D.settings = Object.assign({}, DEF_SET, j.settings || {}); D.mem = Object.assign({ lastMorning: '', lastEvening: '', ev: {} }, j.mem || {});
-    if (!Array.isArray(D.tasks)) D.tasks = []; if (!Array.isArray(D.chat)) D.chat = [];
+    if (!Array.isArray(D.tasks)) D.tasks = []; if (!Array.isArray(D.chat)) D.chat = []; if (!Array.isArray(D.convs)) D.convs = [];
   } catch (e) { /* primeira vez */ }
   let saveT = null;
   function save() {
@@ -43,7 +43,8 @@ function setupMacGyver(x) {
       // tarefas feitas há mais de 30 dias deixam de se guardar
       const old = Date.now() - 30 * DAY;
       D.tasks = D.tasks.filter(t => !t.done || (t.doneAt || 0) > old);
-      D.chat = D.chat.slice(-60);
+      D.chat = D.chat.slice(-80);
+      D.convs = D.convs.sort((a, b) => b.last - a.last).slice(0, 150);
       for (const k of Object.keys(D.mem.ev)) if (D.mem.ev[k] < Date.now() - 2 * DAY) delete D.mem.ev[k];
       try { const tmp = FILE + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(D)); fs.renameSync(tmp, FILE); } catch (e) { /* tenta na próxima */ }
     }, 300);
@@ -191,6 +192,35 @@ function setupMacGyver(x) {
   /* ---------- a página principal do Zeus mostra também as tarefas do MacGyver ---------- */
   function homeTasks(today = ymd()) {
     return D.tasks.filter(t => !t.done && t.due && t.due <= today).map(t => ({ id: t.id, list: 'mg', feed: 'mg', title: t.time ? `${t.time} · ${t.title}` : t.title, due: t.due, overdue: t.due < today, listName: 'MacGyver', label: 'MacGyver', g: t.g ? t.g.id : '' }));
+  }
+
+  /* ---------- conversas: a atual e o histórico ---------- */
+  const FRESH_AFTER = 5 * 60 * 1000;   // ao abrir o painel, conversa nova se a última mensagem tem mais de 5 minutos
+  function archive() {
+    if (D.chat.length) {
+      const first = D.chat.find(m => m.role === 'me') || D.chat[0];
+      const c = { id: D.chatId || uid(), title: str(first.text, 70), started: D.chat[0].at || Date.now(), last: D.chat[D.chat.length - 1].at || Date.now(), msgs: D.chat };
+      const i = D.convs.findIndex(z => z.id === c.id);
+      if (i > -1) D.convs[i] = c; else D.convs.unshift(c);
+    }
+    D.chat = []; D.chatId = uid(); save();
+  }
+  function fresh() {
+    const last = D.chat[D.chat.length - 1];
+    if (last && Date.now() - (last.at || 0) > FRESH_AFTER && !asking) archive();
+  }
+  function openConv(id) {
+    const c = D.convs.find(z => z.id === id); if (!c) return false;
+    if (D.chatId !== id) archive();
+    D.convs = D.convs.filter(z => z.id !== id);
+    D.chat = c.msgs || []; D.chatId = c.id; save();
+    return true;
+  }
+  function historyList() {
+    return D.convs.slice().sort((a, b) => b.last - a.last).map(c => {
+      const ai = [...(c.msgs || [])].reverse().find(m => m.role === 'ai' && !m.err);
+      return { id: c.id, title: c.title, started: c.started, last: c.last, n: (c.msgs || []).length, preview: ai ? str(ai.text.replace(/\*\*/g, ''), 110) : '', voice: (c.msgs || []).some(m => m.voice), text: (c.msgs || []).map(m => m.text).join(' ').slice(0, 3000) };
+    });
   }
 
   /* ---------- a página aberta ---------- */
@@ -575,6 +605,8 @@ Páginas (o Zeus é um browser):
       events: G.events.filter(e => evDay(e) >= today && evDay(e) <= addDays(today, 7)).map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end, allDay: e.allDay, meet: e.meet || '', location: e.location || '', label: e.label })),
       errors: G.errors,
       chat: D.chat.slice(-40),
+      lastConv: (() => { const c = D.convs.slice().sort((a, b) => b.last - a.last)[0]; return c && Date.now() - c.last < 3 * 3600 * 1000 ? { id: c.id, title: c.title, last: c.last } : null; })(),
+      convCount: D.convs.length,
       settings: D.settings,
       key: !!x.getKey(),
       voice: voiceState(),
@@ -604,7 +636,11 @@ Páginas (o Zeus é um browser):
     if (k === 'hidden') x.layout('orb', 0);
     return D.settings;
   });
-  h('clearChat', () => { D.chat = []; save(); return true; });
+  h('clearChat', () => { archive(); return true; });
+  h('fresh', () => { fresh(); return true; });
+  h('history', () => historyList());
+  h('openConv', id => openConv(String(id)));
+  h('deleteConv', id => { D.convs = D.convs.filter(z => z.id !== String(id)); save(); return true; });
   h('setKey', k => { k = String(k || '').trim(); if (!/^sk-ant-[\w-]{20,}$/.test(k)) return { ok: false, error: 'Isto não parece uma chave da API da Anthropic (começa por sk-ant-).' }; x.setKey(k); return { ok: true }; });
   h('micAccess', async () => {
     if (process.platform !== 'darwin') return 'granted';

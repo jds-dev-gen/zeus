@@ -8,6 +8,8 @@ let ST = null;              // estado vindo do processo principal
 let mode = 'orb';           // orb | bubble | panel
 let tab = 'today';
 let settingsOpen = false;
+let histOpen = false;        // histórico das conversas
+let histDel = '';
 let bubble = null;          // { type: alert | listen | voice | info, ... }
 const alertQ = [];          // avisos à espera de serem vistos
 const panelAlerts = [];     // avisos chegados com o painel aberto
@@ -138,8 +140,12 @@ function renderPanel() {
   if (!ST) return;
   const p = pendingToday(), late = p.filter(t => t.overdue).length;
   $('#sub').innerHTML = p.length ? `${p.length} por fazer hoje${late ? ` · <span class="late">${late} atrasada${late > 1 ? 's' : ''}</span>` : ''}` : 'Nada por fazer hoje';
-  $('#main').hidden = settingsOpen; $('#settings').hidden = !settingsOpen; $('#setBtn').classList.toggle('on', settingsOpen);
+  if (settingsOpen) histOpen = false;
+  $('#main').hidden = settingsOpen || histOpen; $('#settings').hidden = !settingsOpen; $('#history').hidden = !histOpen;
+  $('#setBtn').classList.toggle('on', settingsOpen); $('#histBtn').classList.toggle('on', histOpen);
+  $('#newBtn').hidden = !(ST.chat || []).length || settingsOpen || histOpen;
   if (settingsOpen) { renderSettings(); return; }
+  if (histOpen) { renderHistory(); return; }
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   const tasks = ST.tasks;
   let h = '';
@@ -183,7 +189,11 @@ function renderChat() {
       ${ST.page ? '<button type="button" data-say="Resume esta página.">Resume esta página</button>' : ''}
       <button type="button" data-say="O que tenho hoje?">O que tenho hoje?</button>
       <button type="button" data-say="Lembra-me de responder a isto amanhã às 10">Lembra-me de responder a isto amanhã às 10</button>
-      <button type="button" data-say="Que tarefas ficaram da última reunião?">Que tarefas ficaram da última reunião?</button></div>`;
+      <button type="button" data-say="Que tarefas ficaram da última reunião?">Que tarefas ficaram da última reunião?</button>
+      ${ST.lastConv ? `<button type="button" class="cont" data-conv="${esc(ST.lastConv.id)}">↩ Continuar a conversa “${esc(ST.lastConv.title)}”</button>` : ''}
+      ${ST.convCount ? `<button type="button" class="hlink" data-hist>Ver o histórico (${ST.convCount})</button>` : ''}</div>`;
+  } else {
+    h += `<div class="convhead"><span>${esc(whenLabel(msgs[0].at))}</span><button type="button" data-new>Conversa nova</button></div>`;
   }
   for (const m of msgs) {
     if (m.role === 'me') { h += `<div class="me">${m.voice ? '<span class="vo">🎙</span>' : ''}${esc(m.text)}</div>`; continue; }
@@ -224,6 +234,52 @@ function renderSettings() {
     <p class="note">Para voltar a mostrar a bolinha: menu Ver › MacGyver (⇧⌘M).</p>`;
 }
 
+/* ---------- histórico das conversas ---------- */
+function whenLabel(t) {
+  const d = new Date(t), now = new Date(), hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const day = x => x.getFullYear() + '-' + x.getMonth() + '-' + x.getDate();
+  const y = new Date(now); y.setDate(y.getDate() - 1);
+  if (day(d) === day(now)) return 'Hoje, ' + hm;
+  if (day(d) === day(y)) return 'Ontem, ' + hm;
+  return `${WD[d.getDay()]}, ${d.getDate()} ${MES[d.getMonth()]} · ${hm}`;
+}
+function dayGroup(t) {
+  const d = new Date(t), now = new Date();
+  const days = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  if (days <= 0) return 'Hoje'; if (days === 1) return 'Ontem'; if (days < 7) return 'Esta semana'; if (days < 31) return 'Este mês';
+  return `${['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'][d.getMonth()]} de ${d.getFullYear()}`;
+}
+let HL = [];
+async function renderHistory(reload = true) {
+  if (reload) HL = await MG.history();
+  const fold = t => String(t || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const qs = fold($('#hq').value).split(/\s+/).filter(Boolean);
+  const items = HL.filter(c => !qs.length || qs.every(w => fold(c.title + ' ' + c.text).includes(w)));
+  let h = '', g = '';
+  for (const c of items) {
+    const gg = dayGroup(c.last); if (gg !== g) { g = gg; h += `<div class="sec"><span>${esc(g)}</span></div>`; }
+    h += `<div class="conv" data-conv="${esc(c.id)}"><div class="ct">${c.voice ? '<span class="vo">🎙</span>' : ''}${esc(c.title)}</div><div class="meta">${esc(whenLabel(c.started))} · ${c.n} mensage${c.n === 1 ? 'm' : 'ns'}</div>${c.preview ? `<div class="pv">${esc(c.preview)}</div>` : ''}<button class="cx ${histDel === c.id ? 'sure' : ''}" type="button" data-cdel="${esc(c.id)}" title="Apagar esta conversa">${histDel === c.id ? 'Apagar?' : '×'}</button></div>`;
+  }
+  if (!items.length) h = `<p class="empty">${HL.length ? 'Nenhuma conversa com essas palavras.' : 'Ainda não há conversas guardadas. Cada vez que abres o MacGyver começa uma conversa nova; as anteriores ficam aqui.'}</p>`;
+  $('#hlist').innerHTML = h;
+}
+$('#hq').addEventListener('input', () => renderHistory(false));
+$('#histBtn').addEventListener('click', () => { histOpen = !histOpen; settingsOpen = false; histDel = ''; $('#hq').value = ''; renderPanel(); if (histOpen) setTimeout(() => $('#hq').focus(), 30); });
+$('#newBtn').addEventListener('click', () => newConv());
+async function newConv() { await MG.clearChat(); panelAlerts.length = 0; await refresh(); renderPanel(); $('#q').focus(); }
+let delT = null;
+$('#history').addEventListener('click', async e => {
+  const d = e.target.closest('[data-cdel]');
+  if (d) {
+    const id = d.dataset.cdel;
+    if (histDel === id) { histDel = ''; await MG.deleteConv(id); renderHistory(); }
+    else { histDel = id; renderHistory(false); clearTimeout(delT); delT = setTimeout(() => { histDel = ''; if (histOpen) renderHistory(false); }, 4000); }
+    return;
+  }
+  const c = e.target.closest('[data-conv]');
+  if (c) { await MG.openConv(c.dataset.conv); histOpen = false; await refresh(); renderPanel(); $('#q').focus(); }
+});
+
 /* ---------- conversa ---------- */
 async function send(text, opts = {}) {
   text = String(text || '').trim();
@@ -253,13 +309,14 @@ $('#ctx').addEventListener('click', () => { ctxOn = !ctxOn; renderCtx(); });
 $('#sumBtn').addEventListener('click', () => { ctxOn = true; send('Resume esta página.'); });
 
 /* ---------- cliques no painel ---------- */
-$('#orb').addEventListener('click', () => {
+$('#orb').addEventListener('click', async () => {
   if (listening) { listenStop(false); return; }
   if (mode === 'panel') { setMode(bubble ? 'bubble' : 'orb'); return; }
   // o aviso que estava no balão passa para o painel
   if (bubble && bubble.type === 'alert') { panelAlerts.push(bubble); alertQ.splice(0).forEach(a => panelAlerts.push(a)); bubble = null; }
   else if (bubble && bubble.type !== 'listen') bubble = null;
-  refresh(); setMode('panel');
+  histOpen = false; settingsOpen = false;
+  await MG.fresh(); await refresh(); setMode('panel');
 });
 $('#closeBtn').addEventListener('click', () => { settingsOpen = false; setMode('orb'); });
 $('#setBtn').addEventListener('click', () => { settingsOpen = !settingsOpen; renderPanel(); });
@@ -278,13 +335,16 @@ $('#panel').addEventListener('click', async e => {
   if (t.closest('[data-del]') && row) { row.style.opacity = '.4'; const r = await MG.remove(row.dataset.id); if (!r.ok) { row.style.opacity = ''; flashErr(r.error); } refresh(); return; }
   if (t.closest('[data-open]')) { MG.open(t.closest('[data-open]').dataset.open); return; }
   if (t.closest('[data-say]')) { send(t.closest('[data-say]').dataset.say); return; }
+  if (t.closest('#chat [data-conv]')) { await MG.openConv(t.closest('[data-conv]').dataset.conv); await refresh(); renderPanel(); $('#q').focus(); return; }
+  if (t.closest('[data-hist]')) { histOpen = true; renderPanel(); return; }
+  if (t.closest('#chat [data-new]')) { newConv(); return; }
   if (t.closest('[data-note]')) { MG.openNote(t.closest('[data-note]').dataset.note); return; }
   if (t.closest('[data-gokey]') || t.closest('[data-gosettings]')) { settingsOpen = true; renderPanel(); $('#settings').scrollTop = 0; return; }
   const pa = t.closest('[data-pact]');
   if (pa) { const [id, i] = pa.dataset.pact.split('|'); const a = panelAlerts.find(x => x.id === id); if (a) { panelAlerts.splice(panelAlerts.indexOf(a), 1); await doAct(a, a.actions[+i]); renderChat(); } return; }
   if (t.closest('[data-script]')) { const r = await MG.scriptUpdate(); if (r && r.error) flashErr(r.error); return; }
   if (t.closest('[data-notas]')) { MG.openNotas(); return; }
-  if (t.closest('[data-clear]')) { await MG.clearChat(); settingsOpen = false; await refresh(); renderPanel(); return; }
+  if (t.closest('[data-clear]')) { settingsOpen = false; await newConv(); return; }
   if (t.closest('[data-hide]')) { settingsOpen = false; mode = 'orb'; $('#panel').hidden = true; await MG.setting('hidden', true); return; }
   if (t.closest('[data-savekey]')) {
     const r = await MG.setKey($('#keyIn').value);
@@ -352,7 +412,7 @@ function closeBubble() {
 async function doAct(a, x) {
   if (!x) return;
   if (a.kind === 'confirm') { await MG.confirmReply(a.cid, x.id === 'yes'); return; }
-  if (x.id === 'day') { if (bubble === a) bubble = null; tab = 'today'; await refresh(true); setMode('panel'); return; }
+  if (x.id === 'day') { if (bubble === a) bubble = null; tab = 'today'; histOpen = false; await MG.fresh(); await refresh(true); setMode('panel'); return; }
   if (x.id === 'ok') return;
   const r = await MG.act({ kind: a.kind, task: a.task }, x);
   await refresh(true);
@@ -390,7 +450,8 @@ MG.onAlert(async a => {
 });
 MG.onToggle(async () => {
   if (mode === 'panel') { setMode(bubble ? 'bubble' : 'orb'); return; }
-  await refresh(); setMode('panel');
+  histOpen = false; settingsOpen = false;
+  await MG.fresh(); await refresh(); setMode('panel');
 });
 
 /* ---------- voz ---------- */
@@ -468,14 +529,14 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     if (listening) { listenStop(true); return; }
     if (speaking) MG.stopSpeaking();
-    if (mode === 'panel') { if (settingsOpen) { settingsOpen = false; renderPanel(); return; } setMode(bubble ? 'bubble' : 'orb'); return; }
+    if (mode === 'panel') { if (settingsOpen || histOpen) { settingsOpen = false; histOpen = false; renderPanel(); return; } setMode(bubble ? 'bubble' : 'orb'); return; }
     if (bubble) closeBubble();
   }
 });
 // com o painel aberto, clicar fora (na página) fecha-o — a não ser que esteja a meio de alguma coisa
 window.addEventListener('blur', () => {
   setTimeout(() => {
-    if (document.hasFocus() || mode !== 'panel' || listening || thinking || q.value.trim() || settingsOpen || panelAlerts.length) return;
+    if (document.hasFocus() || mode !== 'panel' || listening || thinking || q.value.trim() || settingsOpen || histOpen || panelAlerts.length) return;
     setMode(bubble ? 'bubble' : 'orb');
   }, 120);
 });
