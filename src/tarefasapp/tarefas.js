@@ -76,7 +76,6 @@ function cardHTML(t) {
   if (t.link) bits.push(t.link.kind === 'email' ? `<button class="chip lk" type="button" data-openlink title="Abrir o email">✉ email</button>` : `<button class="chip lk" type="button" data-openlink title="${esc(t.link.url)}">🔗 abrir</button>`);
   if (t.origin === 'google') bits.push('<span class="chip g" title="Do Google Tasks — arrasta para um tema para a arrumar aqui">Google</span>');
   if (t.due) bits.push(`<span class="chip ${t.overdue && !t.done ? 'late' : ''}" title="${t.overdue ? 'Atrasada' : 'Data'}">${t.overdue && !t.done ? 'atrasada · ' : ''}${esc(dueLabel(t))}</span>`);
-  const cr = createdLabel(t); if (cr) bits.push(`<span>${cr}</span>`);
   return `<div class="card ${a ? '' : 'nocolor'} ${t.done ? 'done' : ''}" data-id="${esc(t.id)}" ${color ? `style="background:${color}"` : ''}>
     <button class="ck" type="button" data-ck title="${t.done ? 'Voltar a pôr por fazer' : 'Feita'}" aria-label="Feita"></button>
     <div class="tt">${esc(t.title)}</div>
