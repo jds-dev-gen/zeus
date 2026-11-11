@@ -634,13 +634,14 @@ function renderToday(noFeeds) {
   if (noFeeds === undefined) noFeeds = !(S.settings.homeFeeds || []).length;
   const multi = (S.settings.homeFeeds || []).length > 1;
   const now = Date.now();
-  const tag = x => multi ? `<em class="acc">${esc(x.label)}</em>` : '';
+  const tag = x => multi && x.label ? `<em class="acc">${esc(x.label)}</em>` : '';
   const ev = todayData.events.map(e => {
     const st = new Date(e.start).getTime(), en = new Date(e.end).getTime();
     const state = e.allDay ? '' : en < now ? 'past' : st <= now ? 'now' : '';
     return `<li class="ev ${state}"><span class="when">${e.allDay ? 'Todo o dia' : hhmm(e.start) + '<small>' + hhmm(e.end) + '</small>'}</span><span class="dot" style="background:${esc(e.color || 'var(--fg)')}"></span><span class="what"><b>${esc(e.title)}</b>${e.location ? `<small>${esc(e.location)}</small>` : ''}${tag(e)}</span>${e.meet ? `<button class="tbtn" type="button" data-go="${esc(e.meet)}">Meet</button>` : ''}</li>`;
   }).join('');
-  const tk = todayData.tasks.map(t => `<li class="tk ${t.overdue ? 'late' : ''}"><button class="chk" type="button" data-taskdone="${esc(t.feed)}|${esc(t.list)}|${esc(t.id)}" aria-label="Marcar “${esc(t.title)}” como feita"></button><span class="what"><b>${esc(t.title)}</b><small>${t.overdue ? 'Atrasada · ' + esc(t.due.split('-').reverse().slice(0, 2).join('/')) + ' · ' : ''}${esc(t.listName || '')}</small>${tag(t)}</span></li>`).join('');
+  let lateHead = false;
+  const tk = todayData.tasks.map(t => (t.overdue && !lateHead && (lateHead = true) ? '<li class="tkh">Atrasadas</li>' : '') + `<li class="tk ${t.overdue ? 'late' : ''}"><button class="chk" type="button" data-taskdone="${esc(t.feed)}|${esc(t.list)}|${esc(t.id)}" aria-label="Marcar “${esc(t.title)}” como feita"></button><span class="what"><b>${esc(t.title)}</b>${(() => { const bits = [t.overdue ? 'Era para ' + t.due.split('-').reverse().slice(0, 2).join('/') : '', t.listName || ''].filter(Boolean); return bits.length ? `<small>${esc(bits.join(' · '))}</small>` : ''; })()}${tag(t)}</span></li>`).join('');
   const errs = (todayData.errors || []).map(e => `<p class="err">${esc(e.label)}: ${esc(e.error)}</p>`).join('');
   box.innerHTML = `<div class="today-grid">
     <section><span class="lbl-mono">Agenda de hoje ${noFeeds ? '' : '<button class="linkbtn" type="button" data-todayreload title="Atualizar">↻</button>'}</span>${noFeeds ? '<p class="hint">Liga as contas Google para ver a agenda. <button class="linkbtn" type="button" data-todaysetup>Ligar contas</button></p>' : ev ? `<ul class="today-list">${ev}</ul>` : '<p class="hint">Nada marcado para hoje.</p>'}</section>

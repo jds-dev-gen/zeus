@@ -195,3 +195,13 @@ input, textarea, select { font: inherit; color: inherit; }
 .nodate h3 { font: 500 12px var(--mono); letter-spacing: 1.6px; text-transform: uppercase; display: flex; gap: 6px; }
 .nodate h3 span { color: var(--muted); }
 .nodate > p { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+
+/* data ao criar uma tarefa no tema */
+.add .adue { flex: none; border: 0; background: var(--chip, rgba(127,127,127,.12)); color: var(--muted); font: inherit; font-size: 12px; border-radius: 8px; padding: 3px 6px; cursor: pointer; max-width: 92px; }
+.add .adue:hover { color: var(--fg); }
+.add .apick { flex: none; width: 128px; font-size: 12px; border: 0; background: none; color: var(--fg); }
+/* atalhos de data no painel da tarefa */
+.f .qd { display: flex; gap: 6px; flex-wrap: wrap; }
+.f .qd button { border: 1px solid var(--line2); background: none; color: var(--muted); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.f .qd button:hover { color: var(--fg); border-color: var(--muted); }
+.f .qd button.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }

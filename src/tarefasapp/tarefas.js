@@ -98,7 +98,7 @@ function renderBoard() {
     h += `<section class="col" data-area="${esc(c.id)}">
       <div class="ch"><span class="cd" style="background:${c.color ? `var(--c-${c.color})` : 'var(--line2)'}"></span><h2 title="${esc(c.name)}">${esc(c.name)}</h2><span class="n">${n}</span>${c.id ? `<button class="more" type="button" data-amenu="${esc(c.id)}" title="Opções do tema" aria-label="Opções do tema">⋯</button>` : ''}</div>
       <div class="cards">${tt.map(cardHTML).join('') || `<div class="empty-col">${$('#q').value ? 'Nada com essas palavras.' : 'Sem tarefas.'}</div>`}</div>
-      <label class="add"><span>+</span><input data-addin="${esc(c.id)}" placeholder="Tarefa neste tema" maxlength="300"></label>
+      <label class="add"><span>+</span><input data-addin="${esc(c.id)}" placeholder="Tarefa neste tema" maxlength="300"><select class="adue" data-adue title="Data da tarefa" aria-label="Data da tarefa"><option value="">Sem data</option><option value="today">Hoje</option><option value="tomorrow">Amanhã</option><option value="pick">Outro dia…</option></select><input class="apick" type="date" data-apick hidden></label>
     </section>`;
   }
   h += `<div class="newcol" id="newcol"><button type="button" data-newarea>+ Tema novo</button></div></div>`;
@@ -254,6 +254,7 @@ function renderDrawer() {
       <div class="f"><span>Tema</span><select id="dArea"><option value="">Sem tema</option>${S.areas.map(x => `<option value="${esc(x.id)}" ${x.id === t.area ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
       <div class="f"><span>Prioridade</span><div class="pseg" id="dPrio">${['alta', 'media', 'baixa', ''].map(p => `<button type="button" data-p="${p}" class="${p || 'none'} ${(t.prio || '') === p ? 'on' : ''}">${p ? PRIO_LABEL[p] : '—'}</button>`).join('')}</div></div>
       <div class="f"><span>Data</span><div class="two"><input type="date" id="dDue" value="${esc(t.due)}"><input type="time" id="dTime" value="${esc(t.time)}" title="Com hora, o MacGyver avisa-te a essa hora" ${g ? 'disabled' : ''}></div></div>
+      <div class="f"><span></span><div class="qd">${[['', 'Sem data'], [S.today, 'Hoje'], [S.tomorrow, 'Amanhã']].map(([v, l]) => `<button type="button" data-qd="${v}" class="${(t.due || '') === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
       <textarea class="dnotes" id="dNotes" placeholder="Notas…" ${g ? 'disabled title="Arruma-a num tema para poderes escrever notas"' : ''}>${esc(t.notes)}</textarea>
       ${t.link ? `<a class="dlink" href="#" data-dlink title="${esc(t.link.url)}">${t.link.kind === 'email' ? '✉' : '🔗'} ${esc(t.link.title || t.link.url)}</a>` : ''}
       <div class="dmeta">${[t.created ? 'Criada a ' + new Date(t.created).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long' }) : '', t.source ? 'Origem: ' + esc(t.source) : '', t.synced && !g ? 'Também no Google Tasks (telemóvel)' : '', g ? 'Do Google Tasks. Põe-na num tema ou dá-lhe prioridade para passar a ser arrumada aqui (continua ligada à do Google).' : ''].filter(Boolean).join('<br>')}</div>
@@ -270,7 +271,7 @@ async function change(id, o) {
 $('#drawer').addEventListener('change', e => {
   const t = byId(openId); if (!t) return;
   if (e.target.id === 'dArea') change(t.id, { area: e.target.value });
-  if (e.target.id === 'dDue') change(t.id, { due: e.target.value });
+  if (e.target.id === 'dDue') change(t.id, e.target.value ? { due: e.target.value } : { due: '', time: '' });
   if (e.target.id === 'dTime') change(t.id, { time: e.target.value });
 });
 $('#drawer').addEventListener('focusout', e => {
@@ -284,6 +285,7 @@ $('#drawer').addEventListener('click', async e => {
   const t = byId(openId); if (!t) return;
   if (e.target.closest('[data-dclose]')) { openId = null; renderDrawer(); return; }
   const p = e.target.closest('[data-p]'); if (p) { change(t.id, { prio: p.dataset.p }); return; }
+  const qd = e.target.closest('[data-qd]'); if (qd) { const due = qd.dataset.qd; change(t.id, due ? { due } : { due: '', time: '' }); $('#drawer').dataset.id = ''; return; }
   if (e.target.closest('[data-dlink]')) { e.preventDefault(); TF.open(t.id); return; }
   if (e.target.closest('[data-ddone]')) { await doneToggle(t); return; }
   if (e.target.closest('[data-ddel]')) {
@@ -321,14 +323,19 @@ async function doneToggle(t) {
   const r = await TF.done(t.id, undo);
   if (r && r.ok === false) { S.tasks = snapshot.tasks; S.done = snapshot.done; render(); toast(r.error); return; }
 }
+const addDue = {};
 async function addIn(input) {
   const title = input.value.trim(); if (!title) return;
   const area = input.dataset.addin;
+  const row = input.closest('.add'), sel = row && row.querySelector('[data-adue]'), pick = row && row.querySelector('[data-apick]');
+  const due = !sel ? '' : sel.value === 'today' ? S.today : sel.value === 'tomorrow' ? S.tomorrow : sel.value === 'pick' ? (pick.value || '') : '';
   input.value = '';
-  const r = await TF.add({ title, area });
+  const r = await TF.add({ title, area, due });
   if (r && r.ok === false) { toast(r.error); return; }
+  addDue[area] = sel ? { v: sel.value, d: pick ? pick.value : '' } : null;
   await load();
   const again = document.querySelector(`[data-addin="${CSS.escape(area)}"]`);
+  if (again && addDue[area]) { const r2 = again.closest('.add'); r2.querySelector('[data-adue]').value = addDue[area].v; const pk = r2.querySelector('[data-apick]'); pk.value = addDue[area].d; pk.hidden = addDue[area].v !== 'pick'; }
   if (again) { again.focus(); const c = again.closest('.col').querySelector('.cards'); c.scrollTop = c.scrollHeight; }
 }
 async function newArea(name) {
@@ -396,6 +403,13 @@ $('#stage').addEventListener('click', async e => {
   if (t.closest('[data-ck]')) { await doneToggle(task); return; }
   if (t.closest('[data-openlink]')) { TF.open(task.id); return; }
   openDrawer(task.id);
+});
+$('#stage').addEventListener('change', e => {
+  const sel = e.target.closest('[data-adue]'); if (!sel) return;
+  const pk = sel.parentElement.querySelector('[data-apick]');
+  pk.hidden = sel.value !== 'pick';
+  if (sel.value === 'pick') { if (!pk.value) pk.value = S.tomorrow; try { pk.showPicker(); } catch (x) { pk.focus(); } }
+  else sel.parentElement.querySelector('[data-addin]').focus();
 });
 $('#stage').addEventListener('keydown', e => { const i = e.target.closest('[data-addin]'); if (i && e.key === 'Enter') { e.preventDefault(); addIn(i); } if (i && e.key === 'Escape') { i.value = ''; i.blur(); } });
 

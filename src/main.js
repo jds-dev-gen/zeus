@@ -1023,7 +1023,7 @@ function withMg(data) {
   const mine = mgApp.homeTasks(localDate());
   const ids = new Set(mine.map(t => t.g).filter(Boolean));
   const tasks = data.tasks.filter(t => !ids.has(t.id)).concat(mine);
-  tasks.sort((a, b) => (b.overdue - a.overdue) || a.due.localeCompare(b.due) || a.title.localeCompare(b.title));
+  tasks.sort((a, b) => (a.overdue - b.overdue) || (a.overdue ? b.due.localeCompare(a.due) : 0) || a.title.localeCompare(b.title));   // hoje primeiro, as atrasadas em baixo
   return Object.assign({}, data, { tasks });
 }
 function noteFeed(f, d) { const v = (d && d.v) || 1; if (f.v !== v) { f.v = v; saveState(); } }
@@ -1045,7 +1045,7 @@ async function homeTodayGoogle(force) {
     if (d.tasksError) errors.push({ feed: f.id, label, error: d.tasksError });
   }
   events.sort((a, b) => (b.allDay - a.allDay) || a.start.localeCompare(b.start));
-  tasks.sort((a, b) => (b.overdue - a.overdue) || a.due.localeCompare(b.due) || a.title.localeCompare(b.title));
+  tasks.sort((a, b) => (a.overdue - b.overdue) || (a.overdue ? b.due.localeCompare(a.due) : 0) || a.title.localeCompare(b.title));   // hoje primeiro, as atrasadas em baixo
   const data = { feeds: feeds.length, events, tasks, errors, at: Date.now() };
   todayCache = { t: Date.now(), date, data };
   return data;

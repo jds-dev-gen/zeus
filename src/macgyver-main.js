@@ -125,7 +125,7 @@ function setupMacGyver(x) {
     const p = what === 'done' ? { action: 'done', list: t.g.list, task: t.g.id }
       : what === 'delete' ? { action: 'delete', list: t.g.list, task: t.g.id }
         : what === 'undo' ? { action: 'update', list: t.g.list, task: t.g.id, status: 'needsAction' }
-          : { action: 'update', list: t.g.list, task: t.g.id, title: t.title, due: t.due || '', notes: gNotes(t) };
+          : { action: 'update', list: t.g.list, task: t.g.id, title: t.title, due: t.due || 'none', notes: gNotes(t) };
     gCall(t.g.feed, p).catch(() => {});
     G.t = 0;
   }
@@ -246,7 +246,7 @@ function setupMacGyver(x) {
 
   /* ---------- a página principal do Zeus mostra também as tarefas do MacGyver ---------- */
   function homeTasks(today = ymd()) {
-    return D.tasks.filter(t => !t.done && t.due && t.due <= today).map(t => ({ id: t.id, list: 'mg', feed: 'mg', title: t.time ? `${t.time} · ${t.title}` : t.title, due: t.due, overdue: t.due < today, listName: 'MacGyver', label: 'MacGyver', g: t.g ? t.g.id : '' }));
+    return D.tasks.filter(t => !t.done && t.due && t.due <= today).map(t => ({ id: t.id, list: 'mg', feed: 'mg', title: t.time ? `${t.time} · ${t.title}` : t.title, due: t.due, overdue: t.due < today, listName: '', label: '', mg: true, g: t.g ? t.g.id : '' }));
   }
 
   /* ---------- conversas: a atual e o histórico ---------- */
@@ -348,7 +348,7 @@ Agora: ${longDate(ymd(now))} de ${now.getFullYear()}, ${hm(now)} (hora de Lisboa
 Regras:
 - Escreves em português europeu, curto e direto, como um bom assistente. Uma a três frases, salvo se pedir mais. Sem listas longas nem títulos.
 - Para mexer em tarefas usa as ferramentas; nunca digas que fizeste algo que não fizeste. Antes de mudar ou fechar uma tarefa existente, vê o id com ver_tarefas.
-- Datas relativas ("amanhã", "sexta", "para a semana") convertem-se a partir de hoje. "De manhã" sem hora = 10:00; "à tarde" = 15:00; "ao fim do dia" = 18:00. Se não houver momento nenhum, cria sem hora.
+- Datas relativas ("amanhã", "sexta", "para a semana") convertem-se a partir de hoje. "De manhã" sem hora = 10:00; "à tarde" = 15:00; "ao fim do dia" = 18:00. Se não houver momento nenhum, cria sem hora. Se o João não disser quando, a tarefa fica sem data — nunca ponhas hoje por defeito.
 - "Isto", "esta página", "este email", "este artigo" referem-se à página aberta: usa ligar_pagina e, se precisares de perceber o que é, pagina_aberta.
 - Quando passas um email a tarefa, o email fica ligado à tarefa (o João chega lá com um clique): lê-o com pagina_aberta, título com o que há a fazer e notas curtas com quem enviou e o essencial.
 - Quando te pedem para tirar tarefas de uma reunião, procura a nota, lê-a e cria só as tarefas que são do João (ou sem responsável), com o prazo que lá estiver.

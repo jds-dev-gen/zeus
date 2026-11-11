@@ -40,6 +40,13 @@ function doGet(e) {
       if (p.notes != null && p.notes !== '') patch.notes = String(p.notes).slice(0, 4000);
       if (/^\d{4}-\d{2}-\d{2}$/.test(p.due || '')) patch.due = p.due + 'T00:00:00.000Z';
       if (p.status === 'needsAction' || p.status === 'completed') patch.status = p.status;
+      if (p.due === 'none') {   // tirar a data: o patch não apaga campos, por isso atualiza-se a tarefa inteira sem a data
+        var cur = Tasks.Tasks.get(p.list, p.task);
+        for (var k in patch) cur[k] = patch[k];
+        delete cur.due;
+        Tasks.Tasks.update(cur, p.list, p.task);
+        return out_({ ok: true, v: 2 });
+      }
       Tasks.Tasks.patch(patch, p.list, p.task);
       return out_({ ok: true, v: 2 });
     }
