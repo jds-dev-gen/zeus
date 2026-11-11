@@ -453,7 +453,7 @@ $('#stage').addEventListener('pointerdown', e => {
     document.body.style.cursor = '';
     document.querySelectorAll('.col.drop').forEach(c => c.classList.remove('drop'));
     const col = slot.closest('.col');
-    const ids = col ? [...col.querySelectorAll('.cards > .card:not(.done), .cards > .slot')].map(el => el === slot ? t.id : el.dataset.id).filter(id => id) : null;
+    const ids = col ? [...col.querySelectorAll('.cards > .card:not(.done), .cards > .slot')].filter(el => el !== card).map(el => el === slot ? t.id : el.dataset.id).filter(id => id) : null;
     ghost.remove(); ghost = null;
     dragJustEnded = true; setTimeout(() => { dragJustEnded = false; }, 50);
     if (ids && col) {

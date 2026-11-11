@@ -51,7 +51,7 @@ const DEFAULT_APPS = [
   { id: 'mail', name: 'Email', url: 'https://mail.google.com/', mode: 'full', icon: 'mail', preload: true, linksInTabs: true },
   { id: 'cal', name: 'Calendário', url: 'https://calendar.google.com/', mode: 'full', icon: 'cal', preload: false },
   { id: 'notion', name: 'Notion', url: 'https://www.notion.so/', mode: 'full', icon: 'notion', preload: false },
-  { id: 'pmail', name: 'Proton Mail', url: 'https://mail.proton.me/', mode: 'full', icon: 'pmail', preload: true },
+  { id: 'pmail', name: 'Proton Mail', url: 'https://mail.proton.me/', mode: 'full', icon: 'pmail', preload: true, linksInTabs: true },
   { id: 'pluto', name: 'Pluto', url: '', mode: 'full', icon: 'pluto', preload: false },
   { id: 'spotify', name: 'Spotify', url: 'https://open.spotify.com/', mode: 'full', icon: 'music', preload: false }
 ];
@@ -270,6 +270,8 @@ function loadState() {
     if (!saved.rightWideV) S.settings.rightWide = true;
     if (!saved.driveLinks) { S.apps.forEach(a => { if (hostOf(a.url || '') === 'drive.google.com' && !a.linksInTabs) a.linksInTabs = 'external'; }); }
     if (!saved.gmailLinks) { S.apps.forEach(a => { if (hostOf(a.url || '') === 'mail.google.com') a.linksInTabs = true; }); }
+    // 0.20.12: o Proton Mail também abre os links em separadores, como o Gmail
+    if (!saved.protonLinks) { S.apps.forEach(a => { if (hostOf(a.url || '') === 'mail.proton.me') a.linksInTabs = true; }); }
   } catch (e) { /* primeiro arranque */ }
   if (!S.settings.updateRepo && PKG.zeus && PKG.zeus.updateRepo) S.settings.updateRepo = PKG.zeus.updateRepo;
   S.tabs = (S.tabs || []).filter(t => t && t.url);
@@ -308,7 +310,7 @@ function saveNow() {
       tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space, partition: t.partition || null, sessionLabel: t.sessionLabel || null })),
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
-      pendingKey: S.pendingKey || null, apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, driveLinks: true, newestFirst: true, rightWideV: true, settings: S.settings, permissions: S.permissions,
+      pendingKey: S.pendingKey || null, apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, protonLinks: true, driveLinks: true, newestFirst: true, rightWideV: true, settings: S.settings, permissions: S.permissions,
       siteZoom: S.siteZoom || {}, downloads: (S.downloads || []).slice(0, DL_MAX).map(d => d.state === 'progressing' ? { ...d, state: 'interrupted', paused: false } : d), visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
@@ -397,6 +399,7 @@ function createWindow() {
     width: b.width || 1440, height: b.height || 900, x: b.x, y: b.y,
     minWidth: 900, minHeight: 600,
     title: 'Zeus',
+    acceptFirstMouse: true,   // macOS: o primeiro clique (com o Zeus em segundo plano) também conta — ex.: abrir o MacGyver
     backgroundColor: '#0b0b0c',
     show: false,
     titleBarStyle: 'hidden',
@@ -646,7 +649,7 @@ function wireWeb(wc, kind, ctx = {}) {
         const op = appById(r.ctx.appId);
         if (url && /^https?:/.test(url)) {
           if (linkTarget(op, wc, url) === 'app') wc.loadURL(url).catch(() => {});
-          else newTab({ url, activate: r.disposition !== 'background-tab', space: spaceForOpener(), partition: op && op.isolated ? appPartition(op.id) : null, sessionLabel: op && op.isolated ? op.name : null });
+          else newTab({ url, activate: r.disposition !== 'background-tab', space: spaceForOpener('app'), partition: op && op.isolated ? appPartition(op.id) : null, sessionLabel: op && op.isolated ? op.name : null });
         }
         setImmediate(() => { try { if (!child.isDestroyed()) child.close(); } catch (e) { /* ok */ } });
       };
@@ -662,7 +665,7 @@ function wireWeb(wc, kind, ctx = {}) {
     }
     cw.setWindowOpenHandler(({ url }) => {
       const op = kind === 'app' ? appById(ctx.appId) : null;
-      if (/^https?:/.test(url)) { if (op && linkTarget(op, wc, url) === 'app' && !wc.isDestroyed()) wc.loadURL(url).catch(() => {}); else newTab({ url }); }
+      if (/^https?:/.test(url)) { if (op && linkTarget(op, wc, url) === 'app' && !wc.isDestroyed()) wc.loadURL(url).catch(() => {}); else newTab({ url, space: spaceForOpener(kind) }); }
       return { action: 'deny' };
     });
     cw.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(cw, d.url); });
@@ -703,7 +706,8 @@ function linkTarget(app, wc, url) {
   return app.linksInTabs ? 'tab' : 'app';
 }
 let lastAltWC = null;  // página onde se carregou no Option pela última vez
-function spaceForOpener() { const t = cur(); return t ? t.space : S.spaces[0].id; }
+// separadores abertos a partir de uma app da barra vão para "Recentes" (como os da casinha); os outros ficam no espaço atual
+function spaceForOpener(kind) { if (kind === 'app') return recentSpace(); const t = cur(); return t ? t.space : S.spaces[0].id; }
 
 function contextMenu(wc, p, kind) {
   const inApp = kind === 'app';

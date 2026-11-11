@@ -788,7 +788,9 @@ Páginas (o Zeus é um browser):
     return { count: fs_.length, write: writeFeed() ? feedLabel(writeFeed()) : '', old: fs_.filter(f => (f.v || 1) < 2).map(feedLabel), all: fs_.map(f => ({ id: f.id, label: feedLabel(f), v: f.v || 1 })) };
   }
   async function snapshot(force) {
-    if (force || Date.now() - G.t > 2 * 60 * 1000) await fetchGoogle(force).catch(() => {});
+    // não espera pelo Google (podia demorar segundos a abrir o painel): responde já e avisa quando chegar
+    if (!G.t) await Promise.race([fetchGoogle(true).catch(() => {}), new Promise(r => setTimeout(r, 1500))]);
+    else if (force || Date.now() - G.t > 2 * 60 * 1000) fetchGoogle(true).then(() => x.send('changed', true), () => {});
     const today = ymd();
     return {
       today, todayLong: longDate(today), tomorrow: addDays(today, 1),

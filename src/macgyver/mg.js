@@ -287,6 +287,12 @@ $('#ctx').addEventListener('click', () => { ctxOn = !ctxOn; renderCtx(); });
 $('#sumBtn').addEventListener('click', () => { ctxOn = true; send('Resume esta página.'); });
 
 /* ---------- cliques no painel ---------- */
+// abre o painel logo, com o que já se sabe; a conversa nova e os dados frescos chegam a seguir
+function openPanelNow() {
+  if (ST && (ST.chat || []).length) { const last = ST.chat[ST.chat.length - 1]; if (Date.now() - (last.at || 0) > 5 * 60 * 1000 && !thinking) ST.chat = []; }
+  setMode('panel');
+  MG.fresh().then(() => refresh()).then(() => { if (mode === 'panel') renderPanel(); });
+}
 /* ---------- arrastar a bola para outro sítio ---------- */
 let odrag = null, dragMoved = false;
 function applyAnchor(a) { if (!a) return; document.documentElement.classList.toggle('ax-l', !!a.left); document.documentElement.classList.toggle('ay-t', !!a.top); }
@@ -334,7 +340,7 @@ $('#orb').addEventListener('click', async () => {
   if (bubble && bubble.type === 'alert') { panelAlerts.push(bubble); alertQ.splice(0).forEach(a => panelAlerts.push(a)); bubble = null; }
   else if (bubble && bubble.type !== 'listen') bubble = null;
   histOpen = false; settingsOpen = false;
-  await MG.fresh(); await refresh(); setMode('panel');
+  openPanelNow();
 });
 $('#sub').addEventListener('click', () => MG.openApp('tarefas'));
 $('#closeBtn').addEventListener('click', () => { settingsOpen = false; setMode('orb'); });
@@ -476,7 +482,7 @@ MG.onAlert(async a => {
 MG.onToggle(async () => {
   if (mode === 'panel') { setMode(bubble ? 'bubble' : 'orb'); return; }
   histOpen = false; settingsOpen = false;
-  await MG.fresh(); await refresh(); setMode('panel');
+  openPanelNow();
 });
 
 /* ---------- voz ---------- */
