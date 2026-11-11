@@ -361,15 +361,23 @@ function setupNotas(x) {
 
   /* ---------- Claude (resumos) ---------- */
   const KEYF = path.join(UD, 'anthropic-chave.bin');
+  // a chave lida fica em memória: o Porta-chaves do Mac só é consultado uma vez por sessão
+  // (depois de uma atualização o Mac pode voltar a perguntar; se a pessoa recusar, a leitura falha)
+  let keyCache = '', keyErr = '';
   function getKey() {
+    if (keyCache) return keyCache;
+    let b;
+    try { b = fs.readFileSync(KEYF); } catch (e) { keyErr = ''; return ''; }
     try {
-      const b = fs.readFileSync(KEYF);
-      if (b.subarray(0, 4).toString() === 'TXT:') return b.subarray(4).toString();
-      return safeStorage.decryptString(b);
-    } catch (e) { return ''; }
+      keyCache = b.subarray(0, 4).toString() === 'TXT:' ? b.subarray(4).toString() : safeStorage.decryptString(b);
+      keyErr = ''; return keyCache;
+    } catch (e) { keyErr = 'locked'; return ''; }
   }
+  const keyState = () => { if (getKey()) return 'ok'; return keyErr === 'locked' ? 'locked' : 'none'; };
   function setKey(k) {
+    keyCache = ''; keyErr = '';
     if (!k) { try { fs.unlinkSync(KEYF); } catch (e) { /* ok */ } return; }
+    keyCache = k;
     const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(k) : Buffer.concat([Buffer.from('TXT:'), Buffer.from(k)]);
     fs.writeFileSync(KEYF, data, { mode: 0o600 });
   }
@@ -423,7 +431,7 @@ function setupNotas(x) {
   // para o Orfeu: criar uma nota (com o ficheiro de áudio/vídeo original ligado) e transcrever um WAV para ela
   async function createNote(title, html, audioAbs) { const id = await serial(() => notas.create('', title, html, audioAbs || '')); send('changed'); return id; }
   function transcribeInto(id, wav, secs) { addJob({ id, wav, secs, stage: 'transcrever', pct: 0, at: Date.now() }); }
-  return { notas, isRecording: () => !!rec, quitCheck, createNote, transcribeInto, modelState, getKey, setKey, whisper: () => ({ bin: binPath(), model: modelPath() }) };
+  return { notas, isRecording: () => !!rec, quitCheck, createNote, transcribeInto, modelState, getKey, keyState, setKey, whisper: () => ({ bin: binPath(), model: modelPath() }) };
 }
 
 module.exports = { setupNotas, toText };

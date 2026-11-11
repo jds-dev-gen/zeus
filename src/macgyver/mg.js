@@ -205,7 +205,7 @@ function renderSettings() {
     ${v.ok ? '<p class="note">Carrega em <b>⌥ Espaço</b> e fala: envio quando parares (ou carrega outra vez). A voz é transcrita no próprio Mac.</p>' : `<p class="note">${esc(v.why)}</p>${v.model ? '<div class="row"><button class="b" type="button" data-notas>Abrir as Notas</button></div>' : ''}`}
 
     <h3>Claude</h3>
-    ${ST.key ? '<p class="note">A conversa usa a chave da API da Anthropic guardada nas Notas.</p>' : '<p class="note">Para conversar, cola aqui a chave da API da Anthropic (fica guardada no Porta-chaves, a mesma das Notas).</p><input class="key" id="keyIn" type="password" placeholder="sk-ant-…" autocomplete="off"><div class="row"><button class="b p" type="button" data-savekey>Guardar a chave</button></div><p class="err" id="keyErr" hidden></p>'}
+    ${ST.key ? '<p class="note">A conversa usa a chave da API da Anthropic guardada nas Notas.</p>' : (ST.keyState === 'locked' ? '<p class="note err">O Mac não deixou o Zeus ler a chave guardada no Porta-chaves (acontece às vezes depois de uma atualização). Cola-a outra vez aqui.</p>' : '') + '<p class="note">Para conversar, cola aqui a chave da API da Anthropic (fica guardada no Porta-chaves, a mesma das Notas).</p><input class="key" id="keyIn" type="password" placeholder="sk-ant-…" autocomplete="off"><div class="row"><button class="b p" type="button" data-savekey>Guardar a chave</button></div><p class="err" id="keyErr" hidden></p>'}
     <div class="row" style="margin-top:18px"><button class="b" type="button" data-clear>Começar conversa nova</button><button class="b" type="button" data-hide>Esconder a bolinha</button><button class="b" type="button" data-resetpos>Pôr a bolinha no canto</button></div>
     <p class="note">Para mudar a bolinha de sítio, arrasta-a para onde quiseres.</p>
     <p class="note">Para voltar a mostrar a bolinha: menu Ver › MacGyver (⇧⌘M).</p>
@@ -262,7 +262,15 @@ $('#history').addEventListener('click', async e => {
 async function send(text, opts = {}) {
   text = String(text || '').trim();
   if (!text || thinking) return;
-  if (!ST.key) { settingsOpen = true; if (mode !== 'panel') setMode('panel'); else renderPanel(); return; }
+  if (!ST.key) await refresh(true);   // pode ter sido lida entretanto
+  if (!ST.key) {
+    // sem chave: explica na conversa (em vez de saltar para as definições) e guarda o pedido na caixa
+    if (mode !== 'panel') setMode('panel');
+    panelAlerts.splice(0, panelAlerts.length, ...panelAlerts.filter(a => a.kind !== 'nokey'));
+    panelAlerts.push({ id: 'k' + Date.now(), kind: 'nokey', title: ST.keyState === 'locked' ? 'Não consegui ler a chave da API' : 'Falta a chave da API', actions: [{ id: 'key', label: 'Pôr a chave', primary: true }], text: ST.keyState === 'locked' ? 'O Mac não me deixou ler a chave da API guardada no Porta-chaves — costuma acontecer depois de uma atualização, se o pedido do Mac for recusado ou fechado. Volta a colar a chave e envia outra vez (deixei o teu pedido na caixa).' : 'Para conversar preciso da chave da API da Anthropic (a mesma das Notas). Põe-na e envia outra vez — deixei o teu pedido na caixa.' });
+    renderPanel(); q.value = text; grow();
+    return;
+  }
   ST.chat.push({ role: 'me', text, voice: !!opts.voice, at: Date.now() });
   thinking = true; startLoop();
   if (mode === 'panel') renderChat();
@@ -380,7 +388,7 @@ $('#panel').addEventListener('click', async e => {
   if (t.closest('[data-savekey]')) {
     const r = await MG.setKey($('#keyIn').value);
     if (!r.ok) { const er = $('#keyErr'); er.textContent = r.error; er.hidden = false; return; }
-    settingsOpen = false; await refresh(); renderPanel(); return;
+    settingsOpen = false; for (let i = panelAlerts.length - 1; i >= 0; i--) if (panelAlerts[i].kind === 'nokey') panelAlerts.splice(i, 1); await refresh(); renderPanel(); $('#q').focus(); return;
   }
 });
 $('#panel').addEventListener('change', async e => {
@@ -443,6 +451,7 @@ function closeBubble() {
 async function doAct(a, x) {
   if (!x) return;
   if (a.kind === 'confirm') { await MG.confirmReply(a.cid, x.id === 'yes'); return; }
+  if (x.id === 'key') { settingsOpen = true; renderPanel(); $('#settings').scrollTop = 0; setTimeout(() => { const k = $('#keyIn'); if (k) k.focus(); }, 40); return; }
   if (x.id === 'day') { if (bubble === a) bubble = null; MG.openApp('tarefas'); return; }
   if (x.id === 'ok') return;
   const r = await MG.act({ kind: a.kind, task: a.task }, x);

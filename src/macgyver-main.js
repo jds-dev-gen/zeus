@@ -537,7 +537,7 @@ Páginas (o Zeus é um browser):
     text = String(text || '').trim().slice(0, 4000);
     if (!text) return { ok: false };
     const key = x.getKey();
-    if (!key) return { ok: false, needKey: true, error: 'Para conversar, o MacGyver precisa da chave da API da Anthropic (a mesma das Notas).' };
+    if (!key) return { ok: false, needKey: true, error: x.keyState && x.keyState() === 'locked' ? 'O Mac não me deixou ler a chave da API guardada no Porta-chaves (costuma acontecer depois de uma atualização, se o pedido do Mac for recusado ou fechado). Volta a colar a chave nas definições e fica resolvido.' : 'Para conversar, o MacGyver precisa da chave da API da Anthropic (a mesma das Notas).' };
     if (asking) return { ok: false, error: 'Ainda estou a responder à pergunta anterior.' };
     asking = true; x.send('state', { thinking: true });
     const ctx = { made: [], done: [], notes: [], steps: [], acted: false, page: opts.page === false ? null : await pageNow() };
@@ -803,6 +803,7 @@ Páginas (o Zeus é um browser):
       convCount: D.convs.length,
       settings: D.settings,
       key: !!x.getKey(),
+      keyState: x.keyState ? x.keyState() : '',
       voice: voiceState(),
       feeds: feedInfo(),
       dark: x.isDark(),

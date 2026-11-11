@@ -2323,6 +2323,7 @@ function setupMg() {
     tasksChanged: () => { mgSend('changed', true); if (tarefasWC && !tarefasWC.isDestroyed()) tarefasWC.send('tarefas:changed', true); todayCache.t = 0; if (ui && !ui.isDestroyed()) ui.send('ui-command', { cmd: 'today-refresh' }); },
     notas: () => notasApp && notasApp.notas,
     getKey: () => (notasApp ? notasApp.getKey() : ''),
+    keyState: () => (notasApp && notasApp.keyState ? notasApp.keyState() : 'none'),
     setKey: k => { if (notasApp) notasApp.setKey(k); },
     whisper: () => (notasApp ? notasApp.whisper() : null),
     currentPage: () => mgPage(),
