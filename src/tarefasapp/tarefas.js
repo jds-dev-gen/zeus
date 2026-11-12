@@ -485,6 +485,77 @@ $('#stage').addEventListener('pointerdown', e => {
   window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('keydown', esc_);
 });
 
+/* ---------- arrastar os temas (colunas) para mudar a ordem ---------- */
+$('#stage').addEventListener('pointerdown', e => {
+  if (view !== 'board' || e.button !== 0) return;
+  const head = e.target.closest('.ch'); if (!head || e.target.closest('button, input')) return;
+  const col = head.closest('.col'); if (!col || !col.dataset.area) return;   // "Sem tema" fica sempre no fim
+  e.preventDefault();   // sem seleção de texto ao arrastar
+  const id = col.dataset.area, start = { x: e.clientX, y: e.clientY };
+  const r = col.getBoundingClientRect(), off = { x: e.clientX - r.left, y: e.clientY - r.top };
+  let ghost = null, slot = null, raf = 0, last = e;
+  const board = $('#board');
+  function place(x, y) {
+    let best = null, bd = 1e9;
+    for (const c of board.querySelectorAll('.col')) {
+      if (c === col || !c.dataset.area) continue;
+      const b = c.getBoundingClientRect();
+      const dx = x < b.left ? b.left - x : x > b.right ? x - b.right : 0, dy = y < b.top ? b.top - y : y > b.bottom ? y - b.bottom : 0;
+      if (dx + dy < bd) { bd = dx + dy; best = c; }
+    }
+    if (!best) return;
+    const b = best.getBoundingClientRect(), after = x > b.left + b.width / 2;
+    const ref = after ? best.nextElementSibling : best;
+    if (ref === slot || (after && best.nextElementSibling === slot) || (!after && best.previousElementSibling === slot)) return;
+    board.insertBefore(slot, ref);
+  }
+  function autoScroll() {
+    raf = 0; if (!ghost) return;
+    const st = $('#stage'), b = st.getBoundingClientRect(), y = last.clientY;
+    if (y > b.bottom - 60) st.scrollTop += Math.ceil((y - (b.bottom - 60)) / 3); else if (y < b.top + 60) st.scrollTop -= Math.ceil(((b.top + 60) - y) / 3);
+    place(last.clientX, last.clientY);
+    raf = requestAnimationFrame(autoScroll);
+  }
+  const move = ev => {
+    last = ev;
+    if (!ghost) {
+      if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 6) return;
+      dragging = 'area:' + id;
+      ghost = col.cloneNode(true); ghost.classList.add('colghost'); ghost.style.width = r.width + 'px'; ghost.style.height = Math.min(r.height, 420) + 'px';
+      document.body.appendChild(ghost);
+      slot = document.createElement('div'); slot.className = 'colslot'; slot.style.height = Math.min(r.height, 420) + 'px';
+      col.after(slot); col.style.display = 'none';
+      document.body.style.cursor = 'grabbing';
+      if (!raf) raf = requestAnimationFrame(autoScroll);
+    }
+    ghost.style.left = (ev.clientX - off.x) + 'px'; ghost.style.top = (ev.clientY - off.y) + 'px';
+    place(ev.clientX, ev.clientY);
+  };
+  const finish = async ok => {
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('keydown', key);
+    if (!ghost) return;
+    cancelAnimationFrame(raf); raf = 0;
+    ghost.remove(); ghost = null; document.body.style.cursor = '';
+    dragJustEnded = true; setTimeout(() => { dragJustEnded = false; }, 50);
+    const order = [...board.children].filter(el => el === slot || (el.classList.contains('col') && el.dataset.area && el !== col)).map(el => el === slot ? id : el.dataset.area);
+    const position = order.indexOf(id);
+    slot.replaceWith(col); col.style.display = '';
+    dragging = null;
+    if (!ok) { render(); return; }
+    const before = S.areas.slice().sort((a, b) => a.order - b.order).map(a => a.id);
+    if (before.join('|') === order.join('|')) { render(); return; }
+    order.forEach((aid, i) => { const a = areaById(aid); if (a) a.order = i; });
+    S.areas.sort((a, b) => a.order - b.order);
+    render();
+    const res = await TF.changeArea(id, { position });
+    if (res && res.ok === false) toast(res.error);
+    load();
+  };
+  const up = () => finish(true);
+  const key = ev => { if (ev.key === 'Escape') finish(false); };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('keydown', key);
+});
+
 /* ---------- cabeçalho e teclado ---------- */
 $('#views').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (!b) return; view = b.dataset.view; try { localStorage.setItem('tarefas.view', view); } catch (x) { /* ok */ } render(); });
 $('#showDone').addEventListener('change', e => { showDone = e.target.checked; try { localStorage.setItem('tarefas.done', showDone ? '1' : '0'); } catch (x) { /* ok */ } render(); });

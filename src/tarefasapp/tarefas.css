@@ -205,3 +205,9 @@ input, textarea, select { font: inherit; color: inherit; }
 .f .qd button { border: 1px solid var(--line2); background: none; color: var(--muted); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
 .f .qd button:hover { color: var(--fg); border-color: var(--muted); }
 .f .qd button.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+/* arrastar temas */
+.col[data-area]:not([data-area=""]) .ch { cursor: grab; user-select: none; }
+#addArea { white-space: nowrap; }
+.colghost { position: fixed; z-index: 60; pointer-events: none; overflow: hidden; opacity: .94; transform: rotate(1.2deg); box-shadow: 0 18px 50px rgba(0,0,0,.18); }
+.colslot { border: 2px dashed var(--line2); border-radius: 22px; min-height: 120px; }

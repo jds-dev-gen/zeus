@@ -166,6 +166,7 @@ function setupMacGyver(x) {
     const a = D.areas.find(z => z.id === id); if (!a) throw new Error('Tema não encontrado.');
     if (o.name != null && str(o.name, 60)) a.name = str(o.name, 60);
     if (o.color && AREA_COLORS.includes(o.color)) a.color = o.color;
+    if (Number.isInteger(o.position)) { const list = D.areas.slice().sort((p, q) => p.order - q.order).filter(z => z !== a); list.splice(Math.max(0, Math.min(list.length, o.position)), 0, a); list.forEach((z, k) => { z.order = k; }); }
     if (o.move) { const list = D.areas.slice().sort((p, q) => p.order - q.order); const i = list.indexOf(a), j = i + (o.move < 0 ? -1 : 1); if (j >= 0 && j < list.length) { list.splice(i, 1); list.splice(j, 0, a); list.forEach((z, k) => { z.order = k; }); } }
     save(); x.tasksChanged(); return a;
   }
