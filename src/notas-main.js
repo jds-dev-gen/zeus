@@ -136,6 +136,10 @@ function setupNotas(x) {
   /* ---------- gravar reuniões ---------- */
   const REC = path.join(UD, 'gravacoes');
   let rec = null;   // { id, pcm, aud, ext, started }
+  // estado para a barra das apps: a gravar (vermelho) ou a transcrever/resumir (amarelo)
+  let lastStatus = '';
+  function status() { if (rec) return 'rec'; return (typeof jobs !== 'undefined' && jobs.some(j => /^(transcrever|resumir|espera-modelo|preparar)$/.test(j.stage))) ? 'busy' : ''; }
+  function pushStatus() { const st = status(); if (st !== lastStatus) { lastStatus = st; if (x.onStatus) x.onStatus(st); } }
   h('micAccess', async () => {
     if (process.platform !== 'darwin') return 'granted';
     let st = systemPreferences.getMediaAccessStatus('microphone');
@@ -151,6 +155,7 @@ function setupNotas(x) {
     const stamp = Date.now();
     rec = { id, ext, started: stamp, pcmPath: path.join(REC, `${id}-${stamp}.pcm`), audPath: path.join(REC, `${id}-${stamp}.${ext}`) };
     rec.pcm = fs.createWriteStream(rec.pcmPath); rec.aud = fs.createWriteStream(rec.audPath);
+    pushStatus();
     return { ok: true };
   });
   ipcMain.on('notas:recPcm', (e, buf) => { if (from(e) && rec && buf && buf.byteLength) rec.pcm.write(Buffer.from(buf)); });
@@ -158,7 +163,7 @@ function setupNotas(x) {
   const closeStream = s => new Promise(r => s.end(r));
   h('recCancel', async () => {
     if (!rec) return true;
-    const r = rec; rec = null;
+    const r = rec; rec = null; pushStatus();
     await closeStream(r.pcm); await closeStream(r.aud);
     for (const f of [r.pcmPath, r.audPath]) fsp.unlink(f).catch(() => {});
     return true;
@@ -166,7 +171,7 @@ function setupNotas(x) {
   h('recStop', () => stopRecording());
   async function stopRecording() {
     if (!rec) return null;
-    const r = rec; rec = null;
+    const r = rec; rec = null; pushStatus();
     await closeStream(r.pcm); await closeStream(r.aud);
     // áudio comprimido vai para a pasta da nota (fica no Drive); o WAV é só para o Whisper e apaga-se no fim
     const wav = r.pcmPath.replace(/\.pcm$/, '.wav');
@@ -258,7 +263,7 @@ function setupNotas(x) {
   jobs.forEach(j => { if (j.stage === 'transcrever' || j.stage === 'resumir') j.pct = 0; });
   const saveJobs = () => { try { fs.writeFileSync(JOBS, JSON.stringify(jobs)); } catch (e) { /* ok */ } };
   const pub = () => jobs.map(j => ({ id: j.id, stage: j.stage, pct: j.pct || 0, error: j.error || '', secs: j.secs || 0 }));
-  const emit = () => { saveJobs(); send('jobs', pub()); };
+  const emit = () => { saveJobs(); send('jobs', pub()); pushStatus(); };
   function addJob(j) { jobs.push(j); emit(); runJobs(); }
   h('jobs', () => pub());
   // a página vai buscar os resultados prontos e põe-nos na nota (é ela que tem a nota aberta)
@@ -431,7 +436,8 @@ function setupNotas(x) {
   // para o Orfeu: criar uma nota (com o ficheiro de áudio/vídeo original ligado) e transcrever um WAV para ela
   async function createNote(title, html, audioAbs) { const id = await serial(() => notas.create('', title, html, audioAbs || '')); send('changed'); return id; }
   function transcribeInto(id, wav, secs) { addJob({ id, wav, secs, stage: 'transcrever', pct: 0, at: Date.now() }); }
-  return { notas, isRecording: () => !!rec, quitCheck, createNote, transcribeInto, modelState, getKey, keyState, setKey, whisper: () => ({ bin: binPath(), model: modelPath() }) };
+  setTimeout(pushStatus, 1500);
+  return { notas, isRecording: () => !!rec, status, quitCheck, createNote, transcribeInto, modelState, getKey, keyState, setKey, whisper: () => ({ bin: binPath(), model: modelPath() }) };
 }
 
 module.exports = { setupNotas, toText };

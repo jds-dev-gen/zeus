@@ -541,3 +541,11 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .rt-ghost.lift { box-shadow: 0 12px 28px rgba(0,0,0,.22), 0 0 0 1px var(--line2); --s: 1.03; }
 .rt-ghost.land { transition: transform .15s cubic-bezier(.2,.8,.2,1), box-shadow .15s; }
 .rt-ghost .x { display: none !important; }
+
+/* Notas: a gravar (vermelho, a pulsar) ou a transcrever (amarelo) — visível em qualquer parte do Zeus */
+.app-item.st-rec .app-btn { background: #d9473d; border-color: #d9473d; color: #fff; animation: zrec 1.6s ease-in-out infinite; }
+.app-item.st-busy .app-btn { background: #f2c230; border-color: #f2c230; color: #2b2200; }
+.app-item.st-rec .lbl { color: #d9473d; font-weight: 600; }
+.app-item.st-busy .lbl { color: #b8860b; font-weight: 600; }
+@keyframes zrec { 0%, 100% { box-shadow: 0 0 0 0 rgba(217,71,61,.55); } 50% { box-shadow: 0 0 0 7px rgba(217,71,61,0); } }
+@media (prefers-reduced-motion: reduce) { .app-item.st-rec .app-btn { animation: none; } }

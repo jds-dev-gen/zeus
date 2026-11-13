@@ -568,6 +568,7 @@ function pushState(now) {
       videoHere: !!(videoDL && !fullApp && wc && /^https?:/.test(wc.getURL()) && (videoDL.isVideoSite(wc.getURL()) || (cur() && (cur().hasVideo || cur().media)))),
       spaces: S.spaces, later: S.later, closed: S.closed, pickSpace,
       apps: S.apps.map(a => Object.assign({}, a, { badge: badges[a.id] || 0, loaded: appViews.has(a.id), error: appErrors[a.id] || null })),
+      notasStatus: notasApp && notasApp.status ? notasApp.status() : '',
       openPanel, fullApp, fullAppURL: fullApp && wc ? wc.getURL() : '', claudeOpen: S.claudeOpen,
       settings: S.settings,
       topSites: topSites(),
@@ -2905,7 +2906,8 @@ function setupIPC() {
   notasApp = setupNotas({
     app, ipcMain, dialog, shell, Menu, BrowserWindow, net, safeStorage, Notification, systemPreferences,
     getWC: () => notasWC, getUi: () => ui, getWin: () => win, getView: () => appViews.get('notas'),
-    getZoom: () => zoom, isDark, openTab: url => newTab({ url, space: spaceForOpener() })
+    getZoom: () => zoom, isDark, openTab: url => newTab({ url, space: spaceForOpener() }),
+    onStatus: () => pushState(true)
   });
   orfeuApp = setupOrfeu({
     app, ipcMain, dialog, shell,

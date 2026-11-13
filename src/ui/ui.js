@@ -164,7 +164,7 @@ Z.on('state', st => {
 
 let railKey = '';
 function renderRail() {
-  const key = JSON.stringify([S.apps, S.openPanel, S.fullApp]);
+  const key = JSON.stringify([S.apps, S.openPanel, S.fullApp, S.notasStatus]);
   if (key === railKey) return;
   railKey = key;
   // em cima: hora e data (fixas); no meio: as apps (fazem scroll); em baixo: definições
@@ -176,8 +176,9 @@ function renderRail() {
     let inner = a.icon === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>'
       : (ICON[a.icon] && typeof ICON[a.icon] === 'string' ? ICON[a.icon] : `<span class="letter">${esc((a.name || '?').charAt(0).toUpperCase())}</span>`);
     const tag = '';
-    const label = `${a.name}${a.badge ? ', ' + a.badge + ' por ler' : ''}${a.mode === 'full' ? ', abre em página inteira' : ''}`;
-    h += `<div class="app-item ${a.id === 'apolo' ? 'apolo' : ''} ${on ? 'on' : ''}" data-appid="${esc(a.id)}"><button class="app-btn" type="button" data-app="${esc(a.id)}" aria-label="${esc(label)}" title="${esc(a.name)} — clique direito para opções">${inner}${tag}</button>${a.badge ? `<span class="badge">${a.badge > 99 ? '99+' : a.badge}</span>` : ''}<span class="lbl">${esc(a.name)}</span></div>`;
+    const label = `${a.name}${a.id === 'notas' && S.notasStatus === 'rec' ? ', a gravar' : a.id === 'notas' && S.notasStatus === 'busy' ? ', a transcrever' : ''}${a.badge ? ', ' + a.badge + ' por ler' : ''}${a.mode === 'full' ? ', abre em página inteira' : ''}`;
+    const nst = a.id === 'notas' ? (S.notasStatus === 'rec' ? 'st-rec' : S.notasStatus === 'busy' ? 'st-busy' : '') : '';
+    h += `<div class="app-item ${a.id === 'apolo' ? 'apolo' : ''} ${on ? 'on' : ''} ${nst}" data-appid="${esc(a.id)}"><button class="app-btn" type="button" data-app="${esc(a.id)}" aria-label="${esc(label)}" title="${esc(a.name)} — clique direito para opções">${inner}${tag}</button>${a.badge ? `<span class="badge">${a.badge > 99 ? '99+' : a.badge}</span>` : ''}<span class="lbl">${esc(a.name)}</span></div>`;
     if (i === 0) h += '<span class="rail-sep" aria-hidden="true"></span>';
   });
   h += `<div class="app-item"><button class="app-btn add" type="button" data-add-app aria-label="Juntar site como app ou extensão" title="Juntar">${ICON.plus}</button><span class="lbl">Juntar</span></div>`;
