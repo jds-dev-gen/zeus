@@ -45,7 +45,7 @@ async function buildDocx(title, blocks) {
   for (const b of blocks || []) {
     const t = b.t;
     if (t === 'h1' || t === 'h2' || t === 'h3') {
-      const size = t === 'h1' ? 26 : t === 'h2' ? 21 : 18;
+      const size = t === 'h1' ? 29 : t === 'h2' ? 22.5 : 18;
       children.push(new Paragraph({ heading: t === 'h1' ? HeadingLevel.HEADING_1 : t === 'h2' ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3, spacing: { before: 280, after: 100 }, children: runs(b.runs, { bold: true, size: halfPt(size), color: '1A1A1A' }) }));
     } else if (t === 'li') {
       const lvl = Math.max(0, Math.min(5, b.level | 0));

@@ -517,7 +517,7 @@ function syncTools() {
     const c = b.dataset.cmd;
     let on = false;
     if (['bold', 'italic', 'underline', 'strikeThrough'].includes(c)) on = st(c);
-    else if (c === 'h1' || c === 'h2') on = !!closestIn(s.anchorNode, c);
+    else if (c === 'h1' || c === 'h2' || c === 'h3') on = !!closestIn(s.anchorNode, c);
     else if (c === 'ul') on = !!closestIn(s.anchorNode, 'ul:not(.todo)');
     else if (c === 'ol') on = !!closestIn(s.anchorNode, 'ol');
     else if (c === 'todo') on = !!closestIn(s.anchorNode, 'ul.todo');
@@ -540,7 +540,7 @@ $('#tools').addEventListener('click', e => {
   const c = b.dataset.cmd; if (!c) return;
   restoreRange();
   if (['bold', 'italic', 'underline', 'strikeThrough'].includes(c)) { css(false); exec(c); }
-  else if (c === 'h1' || c === 'h2') { const blk = closestIn(getSelection().anchorNode, c); exec('formatBlock', blk ? 'p' : c); }
+  else if (c === 'h1' || c === 'h2' || c === 'h3') { const blk = closestIn(getSelection().anchorNode, c); exec('formatBlock', blk ? 'p' : c); }
   else if (c === 'quote') { const blk = closestIn(getSelection().anchorNode, 'blockquote'); exec('formatBlock', blk ? 'p' : 'blockquote'); }
   else if (c === 'ul' || c === 'ol' || c === 'todo') {
     const a = getSelection().anchorNode, s0 = getSelection();
@@ -707,20 +707,20 @@ doc.addEventListener('paste', e => {
 });
 doc.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) e.preventDefault(); });
 
-/* atalhos ao escrever: "# ", "## ", "- ", "1. ", "[] ", "> " no início de uma linha */
+/* atalhos ao escrever: "# ", "## ", "### ", "- ", "1. ", "[] ", "> " no início de uma linha */
 doc.addEventListener('keydown', e => {
   if (e.key === ' ' && !e.metaKey && !e.ctrlKey) {
     const s = getSelection(); if (!s.isCollapsed) return;
     const blk = blockOf(s.anchorNode); if (!blk || blk.tagName !== 'P') return;
     const r = document.createRange(); r.setStart(blk, 0); r.setEnd(s.anchorNode, s.anchorOffset);
     const before = r.toString();
-    const map = { '#': 'h1', '##': 'h2', '-': 'ul', '*': 'ul', '1.': 'ol', '[]': 'todo', '>': 'quote' };
+    const map = { '#': 'h1', '##': 'h2', '###': 'h3', '-': 'ul', '*': 'ul', '1.': 'ol', '[]': 'todo', '>': 'quote' };
     const c = map[before]; if (!c) return;
     e.preventDefault();
     r.deleteContents();
     if (!blk.textContent) blk.innerHTML = '<br>';
     const rr = document.createRange(); rr.setStart(blk, 0); rr.collapse(true); s.removeAllRanges(); s.addRange(rr);
-    if (c === 'h1' || c === 'h2') exec('formatBlock', c);
+    if (c === 'h1' || c === 'h2' || c === 'h3') exec('formatBlock', c);
     else if (c === 'quote') exec('formatBlock', 'blockquote');
     else blockToList(blk, c);
     touch(); syncTools();

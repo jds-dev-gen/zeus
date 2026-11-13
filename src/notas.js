@@ -15,7 +15,7 @@ const crypto = require('crypto');
 
 const START = '<!--zeus:inicio-->', END = '<!--zeus:fim-->';
 const FILE_CSS = `body{font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1a1a1a;max-width:760px;margin:40px auto;padding:0 24px}
-h1{font-size:30px;line-height:1.2;margin:0 0 18px}h2{font-size:21px;margin:26px 0 8px}h3{font-size:18px;margin:20px 0 6px}
+h1{font-size:30px;line-height:1.2;margin:0 0 18px}h2{font-size:22.5px;margin:26px 0 8px}h3{font-size:18px;margin:20px 0 6px}
 blockquote{margin:16px 0;padding:10px 16px;border-left:3px solid #d8b400;background:#f6f6f4;border-radius:0 8px 8px 0}
 ul.todo{list-style:none;padding-left:4px}ul.todo li::before{content:"☐  "}ul.todo li[data-done]::before{content:"☑  "}ul.todo li[data-done]{color:#888;text-decoration:line-through}
 .ts{font-family:Menlo,monospace;font-size:12px;color:#777;margin-right:6px}.src{font-size:13px;color:#666}a{color:#1a5fb4}`;
