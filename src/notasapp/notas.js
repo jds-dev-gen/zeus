@@ -235,7 +235,7 @@ $('#side').addEventListener('click', async e => {
     await Z.removeFolder(del.dataset.delf); if (view === 'f:' + del.dataset.delf) view = 'all';
     return load();
   }
-  const v = t.closest('[data-view]'); if (v) { view = v.dataset.view; renderSide(); renderList(); }
+  const v = t.closest('[data-view]'); if (v) { const changed = view !== v.dataset.view; view = v.dataset.view; renderSide(); renderList(); const first = filtered()[0]; if (changed && first && (!cur || cur.id !== first.id)) openNote(first.id); }   // ao mudar de pasta, mostra a nota mais recente dessa pasta
 });
 $('#side').addEventListener('keydown', async e => {
   if (e.target.id === 'newF') {
@@ -274,7 +274,7 @@ function renderList() {
     return `<button class="n ${cur && cur.id === n.id ? 'on' : ''}" type="button" data-id="${esc(n.id)}" draggable="true">
       <h3>${n.fav ? '★ ' : ''}${esc(n.title)}</h3>
       ${n.excerpt ? `<p>${esc(n.excerpt)}</p>` : ''}
-      <small>${when(n.updated)}${n.folder && !view.startsWith('f:') ? ` · <span class="tag">${esc(n.folder)}</span>` : ''}${n.audio ? ' · 🎙' : ''}${jb}</small></button>`;
+      <small>${when(Date.parse(n.created) || n.updated)}${n.folder && !view.startsWith('f:') ? ` · <span class="tag">${esc(n.folder)}</span>` : ''}${n.audio ? ' · 🎙' : ''}${jb}</small></button>`;
   }).join('');
 }
 $('#list').addEventListener('click', e => { const c = e.target.closest('[data-id]'); if (c && (!cur || c.dataset.id !== cur.id)) openNote(c.dataset.id); });

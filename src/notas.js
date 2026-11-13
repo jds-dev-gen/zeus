@@ -133,7 +133,8 @@ class Notas {
     return this.list();
   }
   list() {
-    const notes = [...this.index.values()].sort((a, b) => b.updated - a.updated)
+    const ct = n => Date.parse(n.created) || n.updated || 0;
+    const notes = [...this.index.values()].sort((a, b) => ct(b) - ct(a) || b.updated - a.updated)   // a criada mais recentemente em cima
       .map(n => ({ id: n.id, title: n.title, folder: n.folder, fav: n.fav, created: n.created, updated: n.updated, excerpt: n.excerpt, audio: !!n.audio, words: n.words }));
     const folders = (this.folderList || []).map(name => ({ name, count: notes.filter(n => n.folder === name).length }));
     return { where: this.where(), folders, notes };
