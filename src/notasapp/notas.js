@@ -188,6 +188,7 @@ async function load(keepCur = true) {
   if (!keepCur && !cur && filtered().length) openNote(filtered()[0].id);
 }
 function filtered() {
+  if (view === 'trash') return [];
   let ns = L.notes;
   if (view === 'fav') ns = ns.filter(n => n.fav);
   else if (view === 'recent') ns = ns.filter(n => Date.now() - n.updated < 7 * 864e5);
@@ -216,7 +217,8 @@ function renderSide() {
     `<div class="lbl">Pastas</div>` +
     L.folders.map(f => item('f:' + f.name, FOLDER_SVG, f.name, f.count, true)).join('') +
     (rootN && L.folders.length ? item('root', FOLDER_SVG.replace('stroke-linejoin', 'stroke-dasharray="2 2" stroke-linejoin'), 'Sem pasta', rootN) : '') +
-    (addingFolder ? `<div class="newf"><input id="newF" placeholder="Nome da pasta" maxlength="80"></div>` : `<button class="addf" type="button" id="addF">+ Nova pasta</button>`) +
+    `<div class="f trash ${view === 'trash' ? 'on' : ''}" role="button" tabindex="0" data-view="trash"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span class="n">Lixo</span><span class="c">${TR.length || ''}</span></div>` +
+        (addingFolder ? `<div class="newf"><input id="newF" placeholder="Nome da pasta" maxlength="80"></div>` : `<button class="addf" type="button" id="addF">+ Nova pasta</button>`) +
     `<div class="foot"><div><b>Pasta das notas</b>${esc(L.where.nice || '')}${L.where.wordCopy ? '<br>Com cópia em Word de cada nota' : ''}</div><button class="ico" type="button" id="settings" title="Definições das Notas">⚙</button></div>`;
   const nf = $('#newF'); if (nf) nf.focus();
   const rf = $('#renF'); if (rf) { rf.focus(); rf.select(); }
@@ -235,7 +237,8 @@ $('#side').addEventListener('click', async e => {
     await Z.removeFolder(del.dataset.delf); if (view === 'f:' + del.dataset.delf) view = 'all';
     return load();
   }
-  const v = t.closest('[data-view]'); if (v) { const changed = view !== v.dataset.view; view = v.dataset.view; renderSide(); renderList(); const first = filtered()[0]; if (changed && first && (!cur || cur.id !== first.id)) openNote(first.id); }   // ao mudar de pasta, mostra a nota mais recente dessa pasta
+  const v0 = t.closest('[data-view="trash"]'); if (v0) { await openTrash(); return; }
+  const v = t.closest('[data-view]'); if (v) { if (view === 'trash') leaveTrash(); const changed = view !== v.dataset.view; view = v.dataset.view; renderSide(); renderList(); const first = filtered()[0]; if (changed && first && (!cur || cur.id !== first.id)) openNote(first.id); }   // ao mudar de pasta, mostra a nota mais recente dessa pasta
 });
 $('#side').addEventListener('keydown', async e => {
   if (e.target.id === 'newF') {
@@ -262,6 +265,7 @@ $('#side').addEventListener('drop', async e => {
 });
 
 function renderList() {
+  if (view === 'trash') return renderTrashList();
   const ns = filtered();
   const busy = new Map(jobs.map(j => [j.id, j]));
   if (!ns.length) {
@@ -277,7 +281,12 @@ function renderList() {
       <small>${when(Date.parse(n.created) || n.updated)}${n.folder && !view.startsWith('f:') ? ` · <span class="tag">${esc(n.folder)}</span>` : ''}${n.audio ? ' · 🎙' : ''}${jb}</small></button>`;
   }).join('');
 }
-$('#list').addEventListener('click', e => { const c = e.target.closest('[data-id]'); if (c && (!cur || c.dataset.id !== cur.id)) openNote(c.dataset.id); });
+$('#list').addEventListener('click', e => {
+  if (view !== 'trash') return;
+  if (e.target.closest('[data-empty-trash]')) { emptyTrash(e.target.closest('[data-empty-trash]')); return; }
+  const k = e.target.closest('[data-tkey]'); if (k) showTrashed(k.dataset.tkey);
+});
+$('#list').addEventListener('click', e => { if (view === 'trash') return; const c = e.target.closest('[data-id]'); if (c && (!cur || c.dataset.id !== cur.id)) openNote(c.dataset.id); });
 $('#list').addEventListener('dragstart', e => { const c = e.target.closest('[data-id]'); if (c) { e.dataTransfer.setData('text/zeus-nota', c.dataset.id); e.dataTransfer.effectAllowed = 'move'; } });
 $('#list').addEventListener('contextmenu', e => { const c = e.target.closest('[data-id]'); if (c) { e.preventDefault(); Z.noteMenu(c.dataset.id, { x: e.clientX, y: e.clientY }); } });
 
@@ -286,6 +295,70 @@ function renderSync() {
   $('#sync').innerHTML = w.drive ? `<i></i>${esc(w.drive)}` : `<i style="background:var(--muted)"></i>No Mac`;
   $('#sync').title = w.root || '';
 }
+
+/* ================================================================== */
+/* Lixo: notas apagadas (30 dias), recuperar ou apagar de vez           */
+/* ================================================================== */
+let TR = [], trKey = null, trSure = '', trT = null;
+async function loadTrash() { try { TR = (await Z.trashList()) || []; } catch (e) { TR = []; } }
+const dayLong = ms => new Date(ms).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long' });
+const leftDays = ms => Math.max(0, 30 - Math.floor((Date.now() - ms) / 864e5));
+async function openTrash() {
+  await flush();
+  view = 'trash'; cur = null; dirty = false;
+  await loadTrash();
+  renderSide(); renderList();
+  if (TR.length) showTrashed(TR[0].key); else showTrashEmpty();
+}
+function leaveTrash() { trKey = null; $('#trashv').hidden = true; $('#tools').classList.remove('off'); }
+function renderTrashList() {
+  if (!TR.length) { $('#list').innerHTML = '<div class="none">O Lixo está vazio.<br>As notas apagadas ficam aqui 30 dias, para as poderes recuperar.</div>'; return; }
+  $('#list').innerHTML = `<div class="trhead"><span>Ficam aqui 30 dias</span><button class="btn small ${trSure === '*' ? 'danger' : ''}" type="button" data-empty-trash>${trSure === '*' ? 'Apagar todas?' : 'Esvaziar o Lixo'}</button></div>` + TR.map(t => `<button class="n tr ${trKey === t.key ? 'on' : ''}" type="button" data-tkey="${esc(t.key)}">
+      <h3>${esc(t.title)}</h3>${t.excerpt ? `<p>${esc(t.excerpt)}</p>` : ''}
+      <small>apagada ${when(t.deletedAt)} · ${esc(t.folder || 'Sem pasta')}${t.audio ? ' · 🎙' : ''}</small></button>`).join('');
+}
+function showTrashEmpty() {
+  trKey = null; showNote(null);
+  const tv = $('#trashv'); tv.hidden = false; $('#tools').classList.add('off');
+  tv.innerHTML = '<div class="trnone"><b>Nada no Lixo</b>Quando apagas uma nota, ela fica aqui 30 dias.</div>';
+}
+async function showTrashed(key) {
+  const t = TR.find(x => x.key === key); if (!t) return;
+  trKey = key; trSure = '';
+  renderTrashList();
+  const n = await Z.trashRead(key); if (trKey !== key) return;
+  showNote(null);
+  const tv = $('#trashv'); tv.hidden = false; $('#tools').classList.add('off');
+  const where = t.folder ? (t.folderExists ? `volta para a pasta <b>${esc(t.folder)}</b>` : `a pasta <b>${esc(t.folder)}</b> já não existe — volta para <b>Sem pasta</b>`) : 'volta para <b>Sem pasta</b>';
+  tv.innerHTML = `<div class="trbar"><div><b>Esta nota está no Lixo.</b> Apagada a ${esc(dayLong(t.deletedAt))}; apaga-se de vez daqui a ${leftDays(t.deletedAt)} dia${leftDays(t.deletedAt) === 1 ? '' : 's'}. Se a recuperares, ${where}.</div>
+      <div class="trbtns"><button class="btn primary" type="button" data-restore>↩ Recuperar</button><button class="btn ${trSure === key ? 'danger' : ''}" type="button" data-purge>${trSure === key ? 'Apagar mesmo?' : 'Apagar de vez'}</button></div></div>
+    <div class="docwrap ro"><h1 class="trtitle">${esc(n ? n.title : t.title)}</h1><div class="doc">${n ? sanitize(n.html) : '<p>Não consegui abrir esta nota.</p>'}</div></div>`;
+}
+async function emptyTrash(btn) {
+  if (trSure !== '*') { trSure = '*'; renderTrashList(); clearTimeout(trT); trT = setTimeout(() => { trSure = ''; if (view === 'trash') renderTrashList(); }, 4000); return; }
+  trSure = ''; await Z.purge('*'); await loadTrash(); renderSide(); renderList(); showTrashEmpty();
+}
+$('#trashv').addEventListener('click', async e => {
+  if (!trKey) return;
+  const key = trKey, t = TR.find(x => x.key === key);
+  if (e.target.closest('[data-restore]')) {
+    const r = await Z.restore(key);
+    if (!r) return;
+    leaveTrash();
+    view = r.folder ? 'f:' + r.folder : (L.folders.length ? 'root' : 'all');
+    await load(); await loadTrash(); renderSide(); renderList();
+    const n = L.notes.find(x => x.id === r.id) || L.notes.find(x => x.title === r.title);
+    if (n) openNote(n.id);
+    flashSaved(`Recuperada${r.folder ? ' para “' + r.folder + '”' : ''}: ${t ? t.title : ''}`);
+    return;
+  }
+  if (e.target.closest('[data-purge]')) {
+    if (trSure !== key) { trSure = key; showTrashed(key).then(() => { trSure = key; const b = $('#trashv [data-purge]'); if (b) { b.classList.add('danger'); b.textContent = 'Apagar mesmo?'; } }); clearTimeout(trT); trT = setTimeout(() => { if (trKey === key && trSure === key) { trSure = ''; showTrashed(key); } }, 4000); return; }
+    trSure = ''; await Z.purge(key); await loadTrash(); renderSide(); renderList();
+    if (TR.length) showTrashed(TR[0].key); else showTrashEmpty();
+  }
+});
+function flashSaved(msg) { const el = $('#saved'); if (!el) return; el.textContent = '✓ ' + msg; }
 
 /* ================================================================== */
 /* Abrir, editar e gravar uma nota                                      */
@@ -364,7 +437,8 @@ async function newNote(title, html) {
   await flush();
   const folder = view.startsWith('f:') ? view.slice(2) : '';
   const id = await Z.create(folder, title || '', html || '');
-  if (view === 'fav' || view === 'recent') view = 'all';
+  if (view === 'trash') leaveTrash();
+  if (view === 'fav' || view === 'recent' || view === 'trash') view = 'all';
   await load();
   await openNote(id);
   if (!title) { titleEl.select(); titleEl.focus(); }
@@ -680,10 +754,10 @@ function setFocusMode(on) {
 /* Menu da nota (vem do processo principal)                             */
 /* ================================================================== */
 Z.onCmd(async ({ cmd, id, arg }) => {
-  if (cmd === 'open') { await load(); view = 'all'; renderSide(); return openNote(id); }
+  if (cmd === 'open') { if (view === 'trash') leaveTrash(); await load(); view = 'all'; renderSide(); return openNote(id); }
   if (cmd === 'fav') return setFav(id, !!arg);
   if (cmd === 'move') return moveNote(id, arg || '');
-  if (cmd === 'removed') { if (cur && cur.id === id) { cur = null; dirty = false; showNote(null); } return load(); }
+  if (cmd === 'removed') { if (cur && cur.id === id) { cur = null; dirty = false; showNote(null); } await loadTrash(); await load(); const f = filtered()[0]; if (f && !cur) openNote(f.id); return; }
   if (cmd === 'exportWord') { await flushIf(id); return Z.exportWord(id, await blocksFor(id)); }
   if (cmd === 'exportPdf') { await flushIf(id); return Z.exportPdf(id); }
   if (cmd === 'summarize') return summarizeNote(id);
@@ -951,6 +1025,7 @@ Z.onChanged(() => { clearTimeout(window.__lt); window.__lt = setTimeout(() => lo
   try { if (localStorage.getItem('notas.focus')) setFocusMode(true); } catch (e) { /* ok */ }
   jobs = await Z.jobs() || [];
   model = await Z.modelState() || model;
+  await loadTrash();
   await load(false);
   if (!cur) showNote(null);
   applyResults();

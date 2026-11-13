@@ -239,13 +239,81 @@ ${END}
     const i = this.info(id);
     return i ? { id, title: i.title, folder: i.folder, fav: i.fav, updated: i.updated, path: i.path } : null;
   }
+  /* ---------- Lixo das Notas ----------
+     Apagar uma nota leva-a (com a cópia em Word e a gravação) para a pasta escondida ".lixo" dentro da pasta das notas,
+     numa subpasta só dela; fica lá 30 dias e depois vai para o Lixo do Mac. Pode ser recuperada para a pasta onde estava. */
+  trashDir() { return path.join(this.root(), '.lixo'); }
+  async trashIndex() { try { return JSON.parse(await fsp.readFile(path.join(this.trashDir(), 'lixo.json'), 'utf8')); } catch (e) { return []; } }
+  async trashSave(list) { await fsp.mkdir(this.trashDir(), { recursive: true }); await this.writeAtomic(path.join(this.trashDir(), 'lixo.json'), JSON.stringify(list, null, 1)); }
   async remove(id, trash) {
     const n = this.info(id); if (!n) return false;
-    for (const f of [n.path, ...this.companions(n.path, n.audio)]) {
-      if (!fs.existsSync(f)) continue;
-      try { await trash(f); } catch (e) { try { await fsp.unlink(f); } catch (e2) { /* ok */ } }
+    const key = n.id.replace(/[^\w-]/g, '') + '-' + Date.now().toString(36);
+    const dir = path.join(this.trashDir(), key);
+    const files = [];
+    try {
+      await fsp.mkdir(dir, { recursive: true });
+      for (const f of [n.path, ...this.companions(n.path, n.audio)]) {
+        if (!fs.existsSync(f)) continue;
+        const dst = path.join(dir, path.basename(f));
+        try { await fsp.rename(f, dst); } catch (e) { await fsp.copyFile(f, dst); await fsp.unlink(f); }
+        files.push(path.basename(f));
+      }
+      const list = await this.trashIndex();
+      list.unshift({ key, id: n.id, title: n.title, folder: n.folder || '', created: n.created, deletedAt: Date.now(), main: path.basename(n.path), files, excerpt: n.excerpt || '', words: n.words || 0, audio: !!n.audio });
+      await this.trashSave(list);
+    } catch (e) {
+      // sem conseguir usar o Lixo das Notas: como antes, vai para o Lixo do Mac
+      for (const f of [n.path, ...this.companions(n.path, n.audio)]) { if (!fs.existsSync(f)) continue; try { await trash(f); } catch (e2) { try { await fsp.unlink(f); } catch (e3) { /* ok */ } } }
     }
     await this.scan(); this.onChange(); return true;
+  }
+  async trashList(trash) {
+    let list = await this.trashIndex();
+    const old = list.filter(t => Date.now() - t.deletedAt > 30 * 864e5);
+    if (old.length) {
+      for (const t of old) { const d = path.join(this.trashDir(), t.key); try { await trash(d); } catch (e) { try { await fsp.rm(d, { recursive: true, force: true }); } catch (e2) { /* ok */ } } }
+      list = list.filter(t => !old.includes(t)); await this.trashSave(list);
+    }
+    return list.filter(t => fs.existsSync(path.join(this.trashDir(), t.key, t.main)))
+      .map(t => ({ key: t.key, title: t.title, folder: t.folder, created: t.created, deletedAt: t.deletedAt, excerpt: t.excerpt, words: t.words, audio: t.audio, folderExists: !t.folder || (this.folderList || []).includes(t.folder) }));
+  }
+  async trashRead(key) {
+    const t = (await this.trashIndex()).find(x => x.key === key); if (!t) return null;
+    let txt; try { txt = await fsp.readFile(path.join(this.trashDir(), t.key, t.main), 'utf8'); } catch (e) { return null; }
+    const p = this.parse(txt);
+    return { key: t.key, title: p.title || t.title, html: p.html, folder: t.folder, deletedAt: t.deletedAt, created: t.created };
+  }
+  async restore(key) {
+    const list = await this.trashIndex(); const t = list.find(x => x.key === key); if (!t) return null;
+    this.ensureRoot();
+    const folder = t.folder && (this.folderList || []).includes(t.folder) ? t.folder : '';
+    const dstDir = folder ? path.join(this.root(), folder) : this.root();
+    const src = path.join(this.trashDir(), t.key);
+    // a nota principal pode ter de mudar de nome (se entretanto houver outra igual); a gravação e a cópia em Word acompanham
+    const base = t.main.replace(/\.html?$/i, '');
+    const mainDst = this.freeName(dstDir, base, '.html');
+    const newBase = path.basename(mainDst).replace(/\.html?$/i, '');
+    for (const f of t.files) {
+      const from = path.join(src, f);
+      let to = f === t.main ? mainDst : path.join(dstDir, f.startsWith(base) && newBase !== base ? newBase + f.slice(base.length) : f);
+      if (f !== t.main && fs.existsSync(to)) { const ext = (/\.[^.]+$/.exec(f) || [''])[0]; to = this.freeName(dstDir, path.basename(to, ext), ext); }
+      try { await fsp.rename(from, to); } catch (e) { try { await fsp.copyFile(from, to); await fsp.unlink(from); } catch (e2) { /* ok */ } }
+      // se a gravação mudou de nome, a nota tem de apontar para o nome novo
+      if (f !== t.main && path.basename(to) !== f && fs.existsSync(mainDst)) {
+        try { const html = await fsp.readFile(mainDst, 'utf8'); await this.writeAtomic(mainDst, html.split(`content="${f.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`).join(`content="${path.basename(to).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`)); } catch (e) { /* ok */ }
+      }
+    }
+    try { await fsp.rm(src, { recursive: true, force: true }); } catch (e) { /* ok */ }
+    await this.trashSave(list.filter(x => x !== t));
+    await this.scan(); this.onChange();
+    return { id: t.id, folder, title: t.title, folderGone: !!t.folder && !folder };
+  }
+  async purge(key, trash) {
+    const list = await this.trashIndex();
+    const keys = key === '*' ? list.map(t => t.key) : [key];
+    for (const k of keys) { const d = path.join(this.trashDir(), k); if (!fs.existsSync(d)) continue; try { await trash(d); } catch (e) { try { await fsp.rm(d, { recursive: true, force: true }); } catch (e2) { /* ok */ } } }
+    await this.trashSave(list.filter(t => !keys.includes(t.key)));
+    this.onChange(); return true;
   }
   async addFolder(name) {
     const n = okFolder(name); if (!n) return null;

@@ -63,6 +63,10 @@ function setupNotas(x) {
     await fsp.writeFile(tmp, buf); await fsp.rename(tmp, p);
   }
   h('remove', id => serial(() => notas.remove(str(id, 40), trash)));
+  h('trashList', () => serial(() => notas.trashList(trash)));
+  h('trashRead', key => notas.trashRead(str(key, 80)));
+  h('restore', key => serial(() => notas.restore(str(key, 80))));
+  h('purge', key => serial(() => notas.purge(str(key, 80), trash)));
   h('addFolder', name => serial(() => notas.addFolder(str(name, 100))));
   h('renameFolder', (a, b) => serial(() => notas.renameFolder(str(a, 100), str(b, 100))));
   h('removeFolder', name => serial(() => notas.removeFolder(str(name, 100), trash)));
@@ -116,7 +120,7 @@ function setupNotas(x) {
       { label: 'Resumir com o Claude', click: cmd('summarize') },
       { type: 'separator' },
       { label: 'Apagar nota…', click: async () => {
-        const r = await dialog.showMessageBox(x.getWin(), { type: 'warning', buttons: ['Apagar', 'Cancelar'], defaultId: 1, cancelId: 1, message: `Apagar "${n.title}"?`, detail: 'A nota, a cópia em Word e a gravação (se houver) vão para o Lixo do Mac.' });
+        const r = await dialog.showMessageBox(x.getWin(), { type: 'warning', buttons: ['Apagar', 'Cancelar'], defaultId: 1, cancelId: 1, message: `Apagar "${n.title}"?`, detail: 'Vai para o Lixo das Notas (com a cópia em Word e a gravação, se houver), onde fica 30 dias e pode ser recuperada.' });
         if (r.response === 0) { await serial(() => notas.remove(n.id, trash)); send('cmd', { cmd: 'removed', id: n.id }); }
       } }
     ]);

@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const call = (n, ...a) => ipcRenderer.invoke('notas:' + n, ...a);
 const NAMES = ['theme', 'list', 'search', 'read', 'create', 'save', 'remove', 'addFolder', 'renameFolder', 'removeFolder', 'where', 'chooseRoot', 'resetRoot',
   'setWordCopy', 'reveal', 'openLink', 'exportWord', 'exportPdf', 'noteMenu', 'zoomHighlights', 'micAccess', 'recStart', 'recStop', 'recCancel',
-  'modelState', 'modelDownload', 'modelCancel', 'modelRemove', 'jobs', 'takeResults', 'retryJob', 'dismissJob', 'hasKey', 'setKey', 'summarize'];
+  'modelState', 'modelDownload', 'modelCancel', 'modelRemove', 'jobs', 'takeResults', 'retryJob', 'dismissJob', 'hasKey', 'setKey', 'summarize', 'trashList', 'trashRead', 'restore', 'purge'];
 const api = {};
 NAMES.forEach(n => { api[n] = (...a) => call(n, ...a); });
 api.recPcm = buf => ipcRenderer.send('notas:recPcm', buf);

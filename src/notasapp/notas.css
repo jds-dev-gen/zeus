@@ -216,3 +216,18 @@ body.focus .docwrap { max-width: 760px; padding-top: 56px; }
 /* transcrição sem resumo: botão para o fazer */
 .sumbtn { margin-left: 10px; height: 24px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line2); background: var(--surface); color: var(--fg); font: 500 12px var(--font); cursor: pointer; vertical-align: middle; }
 .sumbtn:hover { border-color: var(--muted); }
+
+/* Lixo */
+.side .f.trash { margin-top: 10px; }
+.tools.off { visibility: hidden; }
+.trashv { position: absolute; inset: 0; overflow-y: auto; background: var(--bg); z-index: 2; }
+.trashv .trbar { position: sticky; top: 0; z-index: 1; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 16px 24px 0; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, #f2c230 18%, var(--bg)); border: 1px solid color-mix(in srgb, #f2c230 45%, var(--line)); font-size: 13px; line-height: 1.5; }
+.trashv .trbar > div:first-child { flex: 1 1 300px; }
+.trashv .trbtns { display: flex; gap: 8px; flex: none; }
+.ed.off .trashv .docwrap.ro { visibility: visible; }
+.trashv .docwrap.ro { opacity: .78; pointer-events: auto; user-select: text; }
+.trashv .trtitle { font-size: 30px; line-height: 1.2; margin: 18px 0 14px; }
+.trashv .trnone { height: 100%; display: grid; place-content: center; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.trashv .trnone b { display: block; color: var(--fg); }
+.list .trhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px 10px; color: var(--muted); font-size: 12px; }
+.btn.danger { color: var(--danger); border-color: var(--danger); }
