@@ -9,9 +9,9 @@
  *  4. Autoriza o acesso e copia o URL da aplicação Web para o Zeus.
  *
  * Lê a agenda e as tarefas desta conta. As únicas alterações possíveis são nas tarefas (Google Tasks):
- * marcar como feita, criar e mudar o título ou a data — é assim que as tarefas do MacGyver aparecem também
+ * marcar como feita, criar, mudar o título ou a data, mudar de lista e criar ou mudar o nome das listas (uma por tema) — é assim que as tarefas do MacGyver aparecem também
  * no telemóvel. Só responde a quem tiver a chave abaixo, que só o Zeus conhece.
- * Versão 2 (com o MacGyver).
+ * Versão 3: cada tema das Tarefas do Zeus tem a sua lista no Google Tasks.
  */
 var ZEUS_KEY = '';
 var TASKS_MISSING = 'Falta o serviço Google Tasks API: no editor, Serviços (+) › Google Tasks API › Adicionar, e depois uma versão nova da implementação.';
@@ -31,7 +31,7 @@ function doGet(e) {
       var t = { title: String(p.title).slice(0, 500), notes: p.notes ? String(p.notes).slice(0, 4000) : '' };
       if (/^\d{4}-\d{2}-\d{2}$/.test(p.due || '')) t.due = p.due + 'T00:00:00.000Z';
       var made = Tasks.Tasks.insert(t, list);
-      return out_({ ok: true, v: 2, id: made.id, list: list === '@default' ? defaultList_() : list });
+      return out_({ ok: true, v: 3, id: made.id, list: list === '@default' ? defaultList_() : list });
     }
     if (p.action === 'update' && p.list && p.task) {
       if (typeof Tasks === 'undefined') return out_({ ok: false, error: TASKS_MISSING });
@@ -45,17 +45,41 @@ function doGet(e) {
         for (var k in patch) cur[k] = patch[k];
         delete cur.due;
         Tasks.Tasks.update(cur, p.list, p.task);
-        return out_({ ok: true, v: 2 });
+        return out_({ ok: true, v: 3 });
       }
       Tasks.Tasks.patch(patch, p.list, p.task);
-      return out_({ ok: true, v: 2 });
+      return out_({ ok: true, v: 3 });
+    }
+    // a lista de um tema (procura pelo nome; cria-a se não existir). Sem nome: a lista principal.
+    if (p.action === 'list') {
+      if (typeof Tasks === 'undefined') return out_({ ok: false, error: TASKS_MISSING });
+      if (!p.title) return out_({ ok: true, v: 3, id: defaultList_() });
+      var name = String(p.title).slice(0, 100), all = (Tasks.Tasklists.list({ maxResults: 100 }).items) || [];
+      for (var i = 0; i < all.length; i++) if (String(all[i].title).trim().toLowerCase() === name.trim().toLowerCase()) return out_({ ok: true, v: 3, id: all[i].id, found: true });
+      var nl = Tasks.Tasklists.insert({ title: name });
+      return out_({ ok: true, v: 3, id: nl.id, created: true });
+    }
+    if (p.action === 'renameList' && p.list && p.title) {
+      if (typeof Tasks === 'undefined') return out_({ ok: false, error: TASKS_MISSING });
+      Tasks.Tasklists.patch({ title: String(p.title).slice(0, 100) }, p.list);
+      return out_({ ok: true, v: 3 });
+    }
+    // passar uma tarefa para outra lista: cria-a lá (com tudo) e apaga a antiga
+    if (p.action === 'move' && p.list && p.task && p.to) {
+      if (typeof Tasks === 'undefined') return out_({ ok: false, error: TASKS_MISSING });
+      var old = Tasks.Tasks.get(p.list, p.task);
+      var nt = { title: old.title, notes: old.notes || '', status: old.status };
+      if (old.due) nt.due = old.due;
+      var moved = Tasks.Tasks.insert(nt, p.to);
+      Tasks.Tasks.remove(p.list, p.task);
+      return out_({ ok: true, v: 3, id: moved.id, list: p.to });
     }
     if (p.action === 'delete' && p.list && p.task) {
       if (typeof Tasks === 'undefined') return out_({ ok: false, error: TASKS_MISSING });
       Tasks.Tasks.remove(p.list, p.task);
-      return out_({ ok: true, v: 2 });
+      return out_({ ok: true, v: 3 });
     }
-    return out_(hoje_(p.date, p.days));
+    return out_(hoje_(p.date, p.days, p.all === '1'));
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   }
@@ -65,7 +89,7 @@ function defaultList_() {
   try { return Tasks.Tasklists.get('@default').id; } catch (x) { return '@default'; }
 }
 
-function hoje_(dateStr, daysStr) {
+function hoje_(dateStr, daysStr, all) {
   var tz = Session.getScriptTimeZone();
   var start = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
   start.setHours(0, 0, 0, 0);
@@ -104,7 +128,7 @@ function hoje_(dateStr, daysStr) {
   // tarefas: por fazer, com data até hoje (inclui as atrasadas)
   var tasks = [];
   if (typeof Tasks === 'undefined') {
-    return { ok: true, v: 2, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: [], tasksError: TASKS_MISSING };
+    return { ok: true, v: 3, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: [], tasksError: TASKS_MISSING };
   }
   var lists = (Tasks.Tasklists.list({ maxResults: 100 }).items) || [];
   lists.forEach(function (l) {
@@ -112,16 +136,18 @@ function hoje_(dateStr, daysStr) {
     do {
       var r = Tasks.Tasks.list(l.id, { showCompleted: false, showHidden: false, maxResults: 100, pageToken: page });
       (r.items || []).forEach(function (t) {
-        if (!t.due || !t.title) return;
-        var due = String(t.due).slice(0, 10);
-        if (due > upto) return;
-        tasks.push({ id: t.id, list: l.id, listName: l.title, title: t.title, due: due, overdue: due < today, notes: t.notes || '' });
+        if (!t.title) return;
+        // all: todas as tarefas por fazer (com ou sem data) — é o que as Tarefas do Zeus pedem
+        if (!t.due && !all) return;
+        var due = t.due ? String(t.due).slice(0, 10) : '';
+        if (due > upto && !all) return;
+        tasks.push({ id: t.id, list: l.id, listName: l.title, title: t.title, due: due, overdue: !!due && due < today, notes: t.notes || '' });
       });
       page = r.nextPageToken;
     } while (page);
   });
 
-  return { ok: true, v: 2, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: tasks };
+  return { ok: true, v: 3, all: !!all, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: tasks };
 }
 
 function out_(o) {

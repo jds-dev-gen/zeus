@@ -2296,7 +2296,7 @@ async function mgPageAct(op, a = {}) {
 }
 function mgScriptUpdate() {
   const all = S.settings.homeFeeds || [];
-  const f = all.find(x => (x.v || 1) < 2) || all.find(x => x.id === S.settings.mgFeed) || all[0];
+  const f = all.find(x => (x.v || 1) < 3) || all.find(x => x.id === S.settings.mgFeed) || all[0];
   if (!f) return { ok: false, error: 'Nenhuma conta Google ligada.' };
   const code = homeScriptCodeFor(f); if (!code) return { ok: false, error: 'Não encontrei o código.' };
   clipboard.writeText(code);

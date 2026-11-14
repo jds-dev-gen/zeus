@@ -76,14 +76,14 @@ function setupMacGyver(x) {
     if (gBusy) return gBusy;
     gBusy = (async () => {
       const date = ymd();
-      const res = await Promise.all(feeds().map(f => x.callFeed(f, { date, days: 8 }).then(d => ({ f, d }), e => ({ f, e }))));
-      const out = { t: Date.now(), events: [], tasks: [], errors: [], ok: new Set() };
+      const res = await Promise.all(feeds().map(f => x.callFeed(f, { date, days: 8, all: 1 }).then(d => ({ f, d }), e => ({ f, e }))));
+      const out = { t: Date.now(), events: [], tasks: [], errors: [], ok: new Set(), all: new Set() };
       for (const { f, d, e } of res) {
         if (e) { out.errors.push({ feed: f.id, label: feedLabel(f), error: e.message }); continue; }
         x.noteFeed(f, d);
         (d.events || []).forEach(ev => out.events.push(Object.assign({}, ev, { feed: f.id, label: feedLabel(f) })));
         if (d.tasksError) { out.errors.push({ feed: f.id, label: feedLabel(f), error: d.tasksError }); continue; }
-        out.ok.add(f.id);
+        out.ok.add(f.id); if (d.all) out.all.add(f.id);
         (d.tasks || []).forEach(t => out.tasks.push(Object.assign({}, t, { feed: f.id, label: feedLabel(f), v: d.v || 1 })));
       }
       out.events.sort((a, b) => a.start.localeCompare(b.start));
@@ -91,7 +91,8 @@ function setupMacGyver(x) {
       const upto = addDays(date, 7);
       let changed = false;
       for (const t of D.tasks) {
-        if (t.done || !t.g || !t.due || t.due > upto || !out.ok.has(t.g.feed)) continue;
+        if (t.done || !t.g || !out.ok.has(t.g.feed)) continue;
+        if (!out.all.has(t.g.feed) && (!t.due || t.due > upto)) continue;   // o código antigo só mostra as tarefas com data até daqui a uma semana
         const seen = out.tasks.some(g => g.id === t.g.id);
         if (seen) { if (!t.gSeen) { t.gSeen = Date.now(); changed = true; } continue; }
         // só conta como feita noutro sítio se o Google já a mostrava antes e não foi mexida há pouco (a mudança pode ainda não ter chegado)
@@ -100,6 +101,7 @@ function setupMacGyver(x) {
       }
       if (changed) { save(); x.tasksChanged(); }
       G = out;
+      harmonize();
       return G;
     })();
     try { return await gBusy; } finally { gBusy = null; }
@@ -110,13 +112,66 @@ function setupMacGyver(x) {
     return x.callFeed(f, params);
   }
   const gNotes = t => [t.time ? `⏰ ${t.time}` : '', t.notes || '', t.link && t.link.url ? t.link.url : '', 'Criada pelo MacGyver (Zeus)'].filter(Boolean).join('\n');
-  // envia uma tarefa do MacGyver para o Google Tasks (sem esperar; se falhar, fica só no Mac)
-  async function pushToGoogle(t) {
+  /* ---------- Google Tasks: uma lista por tema (código v3) ----------
+     Cada tema tem a sua lista no Google Tasks (com o mesmo nome); as tarefas sem tema ficam na lista principal.
+     As mudanças vão por uma fila, uma de cada vez, para não criar listas repetidas. */
+  const isV3 = feedId => { const f = feeds().find(z => z.id === feedId); return !!f && (f.v || 1) >= 3; };
+  let gq = Promise.resolve();
+  const gQueue = fn => (gq = gq.then(fn).catch(() => {}));
+  async function listIdFor(feedId, areaId) {
+    D.gDefault = D.gDefault || {};
+    const a = D.areas.find(z => z.id === areaId);
+    if (!a) {
+      if (!D.gDefault[feedId]) { const r = await gCall(feedId, { action: 'list' }); if (r && r.id) { D.gDefault[feedId] = r.id; save(); } }
+      return D.gDefault[feedId] || '@default';
+    }
+    a.gList = a.gList || {};
+    if (!a.gList[feedId]) { const r = await gCall(feedId, { action: 'list', title: a.name }); if (!r || !r.id) throw new Error((r && r.error) || 'Não consegui criar a lista no Google Tasks.'); a.gList[feedId] = r.id; save(); }
+    return a.gList[feedId];
+  }
+  // envia uma tarefa do Zeus para o Google Tasks, na lista do tema (sem esperar; se falhar, fica só no Mac)
+  function pushToGoogle(t) {
     const f = writeFeed(); if (!f || t.g) return;
-    try {
-      const r = await x.callFeed(f, { action: 'add', title: t.title, notes: gNotes(t), due: t.due || '' });
-      if (r && r.id) { t.g = { feed: f.id, list: r.list || '@default', id: r.id }; t.gAt = Date.now(); save(); }
-    } catch (e) { /* fica só no Mac */ }
+    gQueue(async () => {
+      if (t.g || t.done || !D.tasks.includes(t)) return;
+      const list = isV3(f.id) ? await listIdFor(f.id, t.area) : '';
+      const r = await x.callFeed(f, Object.assign({ action: 'add', title: t.title, notes: gNotes(t), due: t.due || '' }, list ? { list } : {}));
+      if (r && r.id) { t.g = { feed: f.id, list: r.list || list || '@default', id: r.id }; t.gAt = Date.now(); save(); }
+    });
+  }
+  // depois de mudar de tema: passa a tarefa para a lista certa no Google
+  function placeInGoogle(t) {
+    if (!t.g || !isV3(t.g.feed)) return;
+    gQueue(async () => {
+      if (!t.g || !D.tasks.includes(t)) return;
+      const want = await listIdFor(t.g.feed, t.area);
+      if (want === t.g.list) return;
+      const oldId = t.g.id;
+      const r = await gCall(t.g.feed, { action: 'move', list: t.g.list, task: t.g.id, to: want });
+      if (r && r.id) {
+        t.g = { feed: t.g.feed, list: want, id: r.id }; t.gAt = Date.now(); t.gSeen = 0; save();
+        G.tasks = G.tasks.filter(z => z.id !== oldId); x.tasksChanged();
+      }
+    });
+  }
+  function renameGoogleList(a) {
+    for (const [feedId, list] of Object.entries(a.gList || {})) if (isV3(feedId)) gQueue(() => gCall(feedId, { action: 'renameList', list, title: a.name }));
+  }
+  // uma vez por conta, quando o código v3 aparece: cria as listas dos temas e arruma lá as tarefas (e envia as que só estavam no Mac)
+  let harmonizing = false;
+  function harmonize() {
+    const f = writeFeed(); if (!f || !isV3(f.id) || harmonizing) return;
+    D.gHarm = D.gHarm || {};
+    if (D.gHarm[f.id]) return;
+    harmonizing = true;
+    for (const a of areasSorted()) gQueue(() => listIdFor(f.id, a.id));
+    for (const t of D.tasks) { if (t.done) continue; if (!t.g) pushToGoogle(t); else if (t.g.feed === f.id) placeInGoogle(t); }
+    gQueue(async () => { D.gHarm[f.id] = Date.now(); save(); harmonizing = false; G.t = 0; x.tasksChanged(); });
+  }
+  // lista do Google → tema do Zeus (pela lista guardada, ou pelo nome)
+  function areaForGList(feedId, listId, listName) {
+    const a = D.areas.find(z => z.gList && z.gList[feedId] === listId) || (listName ? D.areas.find(z => fold(z.name) === fold(listName)) : null);
+    return a ? a.id : '';
   }
   function syncGoogle(t, what) {
     if (!t.g) return;
@@ -141,7 +196,7 @@ function setupMacGyver(x) {
     }
     for (const g of G.tasks) {
       if (mine.has(g.id)) continue;
-      out.push({ id: 'g:' + g.feed + '|' + g.list + '|' + g.id, title: g.title, due: g.due, time: '', notes: g.notes || '', link: null, source: 'Google Tasks' + (feeds().length > 1 ? ' · ' + g.label : '') + (g.listName ? ' · ' + g.listName : ''), origin: 'google', synced: true, overdue: g.due < today, v: g.v, area: '', prio: '', order: 1e12, created: 0 });
+      out.push({ id: 'g:' + g.feed + '|' + g.list + '|' + g.id, title: g.title, due: g.due, time: '', notes: g.notes || '', link: null, source: 'Google Tasks' + (feeds().length > 1 ? ' · ' + g.label : '') + (g.listName ? ' · ' + g.listName : ''), origin: 'google', synced: true, overdue: !!g.due && g.due < today, v: g.v, area: areaForGList(g.feed, g.list, g.listName), prio: '', order: 1e12, created: 0 });
     }
     out.sort((a, b) => (a.due ? 0 : 1) - (b.due ? 0 : 1) || a.due.localeCompare(b.due) || (a.time || '99').localeCompare(b.time || '99') || a.title.localeCompare(b.title, 'pt'));
     return out;
@@ -160,11 +215,12 @@ function setupMacGyver(x) {
     const ex = findArea(name); if (ex) return ex;
     const a = { id: 'a' + Date.now().toString(36) + crypto.randomBytes(2).toString('hex'), name, color: AREA_COLORS.includes(color) ? color : AREA_COLORS[D.areas.length % AREA_COLORS.length], order: D.areas.length };
     D.areas.push(a); save(); x.tasksChanged();
+    { const f = writeFeed(); if (f && isV3(f.id)) gQueue(() => listIdFor(f.id, a.id)); }
     return a;
   }
   function changeArea(id, o) {
     const a = D.areas.find(z => z.id === id); if (!a) throw new Error('Tema não encontrado.');
-    if (o.name != null && str(o.name, 60)) a.name = str(o.name, 60);
+    if (o.name != null && str(o.name, 60) && str(o.name, 60) !== a.name) { a.name = str(o.name, 60); renameGoogleList(a); }
     if (o.color && AREA_COLORS.includes(o.color)) a.color = o.color;
     if (Number.isInteger(o.position)) { const list = D.areas.slice().sort((p, q) => p.order - q.order).filter(z => z !== a); list.splice(Math.max(0, Math.min(list.length, o.position)), 0, a); list.forEach((z, k) => { z.order = k; }); }
     if (o.move) { const list = D.areas.slice().sort((p, q) => p.order - q.order); const i = list.indexOf(a), j = i + (o.move < 0 ? -1 : 1); if (j >= 0 && j < list.length) { list.splice(i, 1); list.splice(j, 0, a); list.forEach((z, k) => { z.order = k; }); } }
@@ -172,7 +228,7 @@ function setupMacGyver(x) {
   }
   function removeArea(id) {
     D.areas = D.areas.filter(a => a.id !== id);
-    D.tasks.forEach(t => { if (t.area === id) t.area = ''; });
+    D.tasks.forEach(t => { if (t.area === id) { t.area = ''; if (!t.done) placeInGoogle(t); } });
     save(); x.tasksChanged(); return true;
   }
   const areasSorted = () => D.areas.slice().sort((a, b) => a.order - b.order);
@@ -181,7 +237,7 @@ function setupMacGyver(x) {
   function adopt(id) {
     const g = parseG(id); if (!g) return null;
     const gt = G.tasks.find(z => z.id === g.id); if (!gt) return null;
-    const t = { id: uid(), title: gt.title, due: gt.due || '', time: '', notes: gt.notes || '', link: null, source: 'Google Tasks' + (gt.listName ? ' · ' + gt.listName : ''), created: Date.now(), done: false, g: { feed: g.feed, list: g.list, id: g.id }, gAt: Date.now(), area: '', prio: '', order: 0 };
+    const t = { id: uid(), title: gt.title, due: gt.due || '', time: '', notes: gt.notes || '', link: null, source: 'Google Tasks' + (gt.listName ? ' · ' + gt.listName : ''), created: Date.now(), done: false, g: { feed: g.feed, list: g.list, id: g.id }, gAt: Date.now(), area: areaForGList(g.feed, g.list, gt.listName), prio: '', order: 0 };
     D.tasks.push(t);
     return t;
   }
@@ -210,6 +266,7 @@ function setupMacGyver(x) {
     if (!t && (o.area !== undefined || o.prio !== undefined || o.order !== undefined)) t = adopt(id);
     if (t) {
       if (o.area !== undefined) { const a = o.area ? findArea(o.area) || (o.newArea ? addArea(o.area) : null) : null; const na = a ? a.id : ''; if (na !== (t.area || '')) { t.area = na; if (o.order === undefined) t.order = nextOrder(na); } }
+      if (o.area !== undefined) placeInGoogle(t);
       if (o.prio !== undefined) t.prio = PRIOS.includes(o.prio) ? o.prio : '';
       if (o.order !== undefined && isFinite(+o.order)) t.order = +o.order;
       if (o.link !== undefined) t.link = o.link && /^https?:/.test(o.link.url || '') ? { url: String(o.link.url).slice(0, 2000), title: str(o.link.title, 200), app: String(o.link.app || ''), kind: o.link.kind === 'email' ? 'email' : '' } : null;
@@ -240,7 +297,7 @@ function setupMacGyver(x) {
   const uById = id => unified().find(t => t.id === id);
   function reorder(area, ids) {
     let n = 0;
-    for (const id of ids || []) { let t = findLocal(id) || adopt(id); if (!t) continue; t.area = areaOk(area); t.order = ++n; }
+    for (const id of ids || []) { let t = findLocal(id) || adopt(id); if (!t) continue; const was = t.area || ''; t.area = areaOk(area); t.order = ++n; if (was !== t.area || t.g) placeInGoogle(t); }
     save(); x.tasksChanged(); return true;
   }
   const doneRecent = () => D.tasks.filter(t => t.done && (t.doneAt || 0) > Date.now() - 30 * DAY).sort((a, b) => b.doneAt - a.doneAt).map(t => ({ id: t.id, title: t.title, due: t.due || '', time: t.time || '', notes: t.notes || '', link: t.link || null, source: t.source || '', origin: 'mg', synced: !!t.g, done: true, doneAt: t.doneAt, area: areaOk(t.area), prio: t.prio || '', order: t.order || 0, created: t.created || 0 }));
@@ -786,7 +843,7 @@ Páginas (o Zeus é um browser):
   const h = (name, fn) => ipcMain.handle('macgyver:' + name, (e, ...a) => { if (!from(e)) throw new Error('origem não autorizada'); return fn(...a); });
   function feedInfo() {
     const fs_ = feeds();
-    return { count: fs_.length, write: writeFeed() ? feedLabel(writeFeed()) : '', old: fs_.filter(f => (f.v || 1) < 2).map(feedLabel), all: fs_.map(f => ({ id: f.id, label: feedLabel(f), v: f.v || 1 })) };
+    return { count: fs_.length, write: writeFeed() ? feedLabel(writeFeed()) : '', old: fs_.filter(f => (f.v || 1) < 3).map(feedLabel), v3: fs_.some(f => (f.v || 1) >= 3), all: fs_.map(f => ({ id: f.id, label: feedLabel(f), v: f.v || 1 })) };
   }
   async function snapshot(force) {
     // não espera pelo Google (podia demorar segundos a abrir o painel): responde já e avisa quando chegar
