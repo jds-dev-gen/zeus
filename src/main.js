@@ -1027,7 +1027,7 @@ function withMg(data) {
   tasks.sort((a, b) => (a.overdue - b.overdue) || (a.overdue ? b.due.localeCompare(a.due) : 0) || a.title.localeCompare(b.title));   // hoje primeiro, as atrasadas em baixo
   return Object.assign({}, data, { tasks });
 }
-function noteFeed(f, d) { const v = (d && d.v) || 1; let ch = false; if (f.v !== v) { f.v = v; ch = true; } if (d && d.account && f.account !== d.account) { f.account = d.account; ch = true; } if (ch) saveState(); }
+function noteFeed(f, d) { const v = (d && d.v) || 1; let ch = false; if (f.v !== v) { f.v = v; ch = true; } if (d && d.account && f.account !== d.account) { f.account = d.account; ch = true; } if (d && d.script && f.scriptId !== d.script) { f.scriptId = String(d.script).replace(/[^\w-]/g, ''); ch = true; } if (ch) saveState(); }
 async function homeToday(force) { return withMg(await homeTodayGoogle(force)); }
 async function homeTodayGoogle(force) {
   const feeds = S.settings.homeFeeds || [];
@@ -2306,9 +2306,11 @@ function mgScriptUpdate() {
   const wc = w.webContents;
   wc.on('did-start-navigation', d => { if (d.isMainFrame) googleUA(wc, d.url); });
   wc.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 700, parent: w, autoHideMenuBar: true, webPreferences: WEB_PREFS(ses) } }));
-  const start = f.authuser != null ? `https://script.google.com/u/${f.authuser}/home` : 'https://script.google.com/home';
+  // com o código v3 o Zeus sabe qual é o projeto: abre-o diretamente (senão, a lista dos projetos)
+  const base = f.authuser != null ? `https://script.google.com/u/${f.authuser}` : 'https://script.google.com';
+  const start = f.scriptId ? `${base}/home/projects/${f.scriptId}/edit` : `${base}/home`;
   googleUA(wc, start); w.loadURL(start).catch(() => {});
-  return { ok: true };
+  return { ok: true, direct: !!f.scriptId };
 }
 function setupMg() {
   if (mgView || !win) return;
