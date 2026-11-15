@@ -849,7 +849,7 @@ Páginas (o Zeus é um browser):
   const h = (name, fn) => ipcMain.handle('macgyver:' + name, (e, ...a) => { if (!from(e)) throw new Error('origem não autorizada'); return fn(...a); });
   function feedInfo() {
     const fs_ = feeds();
-    return { count: fs_.length, write: writeFeed() ? feedLabel(writeFeed()) : '', old: fs_.filter(f => (f.v || 1) < 3).map(feedLabel), v3: fs_.some(f => (f.v || 1) >= 3), all: fs_.map(f => ({ id: f.id, label: feedLabel(f), v: f.v || 1 })) };
+    return { count: fs_.length, write: writeFeed() ? feedLabel(writeFeed()) : '', old: fs_.filter(f => (f.v || 1) < 3).map(feedLabel), v3: fs_.some(f => (f.v || 1) >= 3), all: fs_.map(f => ({ id: f.id, label: feedLabel(f), v: f.v || 1, dep: ((/\/macros\/s\/([\w-]+)/.exec(f.url || '') || [])[1] || '').slice(-6) })) };
   }
   async function snapshot(force) {
     // não espera pelo Google (podia demorar segundos a abrir o painel): responde já e avisa quando chegar
