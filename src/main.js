@@ -1027,7 +1027,7 @@ function withMg(data) {
   tasks.sort((a, b) => (a.overdue - b.overdue) || (a.overdue ? b.due.localeCompare(a.due) : 0) || a.title.localeCompare(b.title));   // hoje primeiro, as atrasadas em baixo
   return Object.assign({}, data, { tasks });
 }
-function noteFeed(f, d) { const v = (d && d.v) || 1; if (f.v !== v) { f.v = v; saveState(); } }
+function noteFeed(f, d) { const v = (d && d.v) || 1; let ch = false; if (f.v !== v) { f.v = v; ch = true; } if (d && d.account && f.account !== d.account) { f.account = d.account; ch = true; } if (ch) saveState(); }
 async function homeToday(force) { return withMg(await homeTodayGoogle(force)); }
 async function homeTodayGoogle(force) {
   const feeds = S.settings.homeFeeds || [];

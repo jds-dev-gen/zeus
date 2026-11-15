@@ -66,7 +66,13 @@ function setupMacGyver(x) {
 
   /* ---------- Google (agenda e tarefas, pelo Apps Script da página principal) ---------- */
   const feeds = () => x.feeds() || [];
-  const feedLabel = f => f.label || f.account || 'Google';
+  // o nome de uma conta: o email (é o que distingue a pessoal da do Observador); sem email, o nome da app, numerado se se repetir
+  const feedLabel = f => {
+    if (f.account) return f.account;
+    const all = feeds(), base = f.label || 'Google';
+    const same = all.filter(z => !z.account && (z.label || 'Google') === base);
+    return same.length > 1 ? `${base} (conta ${same.indexOf(f) + 1})` : base;
+  };
   // a conta onde o MacGyver escreve tarefas: a escolhida, senão a primeira com o código novo (versão 2)
   const writeFeed = () => { const all = feeds().filter(f => (f.v || 1) >= 2); return all.find(f => f.id === D.settings.feed) || all[0] || null; };
   let G = { t: 0, events: [], tasks: [], errors: [], ok: new Set() };

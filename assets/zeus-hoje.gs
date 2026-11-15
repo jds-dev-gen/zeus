@@ -85,6 +85,11 @@ function doGet(e) {
   }
 }
 
+// o email da conta (com "Executar como: Eu" o utilizador ativo pode vir vazio; o efetivo é o dono do script)
+function account_() {
+  try { return Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail() || ''; } catch (x) { return ''; }
+}
+
 function defaultList_() {
   try { return Tasks.Tasklists.get('@default').id; } catch (x) { return '@default'; }
 }
@@ -128,7 +133,7 @@ function hoje_(dateStr, daysStr, all) {
   // tarefas: por fazer, com data até hoje (inclui as atrasadas)
   var tasks = [];
   if (typeof Tasks === 'undefined') {
-    return { ok: true, v: 3, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: [], tasksError: TASKS_MISSING };
+    return { ok: true, v: 3, account: account_(), date: today, events: events, tasks: [], tasksError: TASKS_MISSING };
   }
   var lists = (Tasks.Tasklists.list({ maxResults: 100 }).items) || [];
   lists.forEach(function (l) {
@@ -147,7 +152,7 @@ function hoje_(dateStr, daysStr, all) {
     } while (page);
   });
 
-  return { ok: true, v: 3, all: !!all, account: Session.getActiveUser().getEmail(), date: today, events: events, tasks: tasks };
+  return { ok: true, v: 3, all: !!all, account: account_(), date: today, events: events, tasks: tasks };
 }
 
 function out_(o) {
