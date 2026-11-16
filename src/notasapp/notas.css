@@ -231,3 +231,10 @@ body.focus .docwrap { max-width: 760px; padding-top: 56px; }
 .trashv .trnone b { display: block; color: var(--fg); }
 .list .trhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px 10px; color: var(--muted); font-size: 12px; }
 .btn.danger { color: var(--danger); border-color: var(--danger); }
+
+/* cores de destaque por cima do texto selecionado */
+.selbar { position: fixed; z-index: 25; display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--line2); border-radius: 999px; box-shadow: 0 10px 30px rgba(0, 0, 0, .22); }
+.selbar .swc { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.selbar .swc:hover { border-color: var(--muted); transform: scale(1.08); }
+.selbar .lnk { border: 0; background: transparent; color: var(--muted); padding: 2px 6px 2px 9px; font-size: 12.5px; border-left: 1px solid var(--line2); cursor: pointer; }
+.selbar .lnk:hover { color: var(--fg); }

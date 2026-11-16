@@ -602,6 +602,33 @@ function applyHl(k) {
   css(false); touch();
 }
 
+/* destaque rápido: ao selecionar texto na nota, aparecem logo as cores por cima da seleção */
+const selbar = document.createElement('div');
+selbar.className = 'selbar'; selbar.hidden = true;
+selbar.innerHTML = Object.keys(HL).map(k => `<button type="button" class="swc" data-qhl="${k}" title="Destacar a ${HL_NAMES[k].toLowerCase()}" style="background:${HL[k]}"></button>`).join('') + '<button type="button" class="lnk" data-qhl="" title="Tirar o destaque">Tirar</button>';
+document.body.appendChild(selbar);
+selbar.addEventListener('mousedown', e => e.preventDefault());   // não perde a seleção
+selbar.addEventListener('click', e => { const b = e.target.closest('[data-qhl]'); if (!b) return; applyHl(b.dataset.qhl); hideSelbar(); const s = getSelection(); if (s.rangeCount) s.collapseToEnd(); });
+function hideSelbar() { selbar.hidden = true; }
+function showSelbar() {
+  const s = getSelection();
+  if (!s.rangeCount || s.isCollapsed || !inDoc(s.getRangeAt(0)) || !String(s).trim()) { hideSelbar(); return; }
+  const r = s.getRangeAt(0).getBoundingClientRect(); if (!r.width && !r.height) { hideSelbar(); return; }
+  selbar.hidden = false;
+  const w = selbar.offsetWidth, h = selbar.offsetHeight;
+  let top = r.top - h - 8; if (top < 8) top = r.bottom + 8;
+  selbar.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+  selbar.style.top = top + 'px';
+}
+let selT = null;
+doc.addEventListener('mouseup', () => { clearTimeout(selT); selT = setTimeout(showSelbar, 10); });
+doc.addEventListener('keyup', e => { if (e.shiftKey || e.key === 'Shift' || ((e.metaKey || e.ctrlKey) && e.key === 'a')) { clearTimeout(selT); selT = setTimeout(showSelbar, 10); } });
+doc.addEventListener('mousedown', () => hideSelbar());
+doc.addEventListener('keydown', e => { if (!e.shiftKey && e.key !== 'Shift') hideSelbar(); if (e.key === 'Escape') hideSelbar(); });
+document.addEventListener('selectionchange', () => { if (!selbar.hidden) { const s = getSelection(); if (!s.rangeCount || s.isCollapsed) hideSelbar(); } });
+document.addEventListener('scroll', () => hideSelbar(), true);
+window.addEventListener('resize', () => hideSelbar());
+
 /* janelas pequenas */
 const pop = $('#pop');
 let popFor = null;
