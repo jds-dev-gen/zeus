@@ -55,6 +55,7 @@ class Notas {
     try { this.cfg = JSON.parse(fs.readFileSync(this.cfgFile, 'utf8')); } catch (e) { this.cfg = {}; }
     try { this.cache = JSON.parse(fs.readFileSync(this.cacheFile, 'utf8')); } catch (e) { this.cache = {}; }
     this.index = new Map();   // id -> info
+    this.htmlCache = new Map();   // caminho -> texto da nota já lido (só em memória)
     this.scanned = false;
   }
   saveCfg() { try { fs.writeFileSync(this.cfgFile, JSON.stringify(this.cfg, null, 1)); } catch (e) { /* ok */ } }
@@ -117,6 +118,7 @@ class Notas {
             n.id = prev && prev.id ? prev.id : 'x' + crypto.createHash('sha1').update(p).digest('hex').slice(0, 12);
           }
           const text = toText(n.html);
+          this.htmlCache.set(p, { mtime: st.mtimeMs, size: st.size, title: n.title, html: n.html });   // só em memória: abrir a nota fica instantâneo
           c = { path: p, mtime: st.mtimeMs, size: st.size, id: n.id, title: n.title || f.replace(/\.html?$/i, ''), fav: n.fav, created: n.created || new Date(st.birthtimeMs || st.mtimeMs).toISOString(), audio: n.audio, excerpt: text.slice(0, 220), text: text.slice(0, 40000), words: (text.match(/\S+/g) || []).length };
           this.cache[p] = c;
         }
@@ -127,6 +129,7 @@ class Notas {
     // limpa da cache ficheiros que já não existem
     const live = new Set([...seen.values()].map(x => x.path));
     for (const k of Object.keys(this.cache)) if (!live.has(k)) delete this.cache[k];
+    for (const k of this.htmlCache.keys()) if (!live.has(k)) this.htmlCache.delete(k);
     this.saveCache();
     this.index = seen; this.folderList = folders.sort((a, b) => a.localeCompare(b, 'pt'));
     this.scanned = true;
@@ -189,8 +192,15 @@ ${END}
   }
   async read(id) {
     const n = this.info(id); if (!n) return null;
-    let txt; try { txt = await fsp.readFile(n.path, 'utf8'); } catch (e) { return null; }
-    const p = this.parse(txt);
+    // o texto já lido (e não mudado desde então) vem da memória; senão, do ficheiro
+    let p;
+    const hc = this.htmlCache.get(n.path), c = this.cache[n.path];
+    if (hc && c && hc.mtime === c.mtime && hc.size === c.size) p = hc;
+    else {
+      let txt; try { txt = await fsp.readFile(n.path, 'utf8'); } catch (e) { return null; }
+      p = this.parse(txt);
+      if (c) this.htmlCache.set(n.path, { mtime: c.mtime, size: c.size, title: p.title, html: p.html });
+    }
     return { id: n.id, title: p.title || n.title, html: p.html, fav: n.fav, folder: n.folder, created: n.created, updated: n.updated, audio: n.audio ? (path.isAbsolute(n.audio) ? n.audio : path.join(path.dirname(n.path), n.audio)) : '' };
   }
   async create(folder, title, html = '', audio = '') {

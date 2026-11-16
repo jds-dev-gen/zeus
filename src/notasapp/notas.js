@@ -364,15 +364,30 @@ function flashSaved(msg) { const el = $('#saved'); if (!el) return; el.textConte
 /* Abrir, editar e gravar uma nota                                      */
 /* ================================================================== */
 const doc = $('#doc'), titleEl = $('#title');
+/* abrir notas depressa: as notas já lidas ficam em memória (e as da lista são lidas ao passar o rato);
+   a nota que se deixa grava-se por trás, sem esperar */
+const NC = new Map();   // id -> nota lida
+let openTok = 0;
+function prefetch(id) { if (!id || NC.has(id)) return; Z.read(id).then(n => { if (n && !NC.has(id)) NC.set(id, n); }, () => {}); }
 async function openNote(id) {
-  await flush();
+  const tok = ++openTok;
+  if (dirty) save();   // grava a nota anterior por trás (o texto é apanhado já, antes de mudar)
+  document.querySelectorAll('#list .n.on').forEach(x => x.classList.remove('on'));
+  const li = document.querySelector(`#list .n[data-id="${CSS.escape(id)}"]`); if (li) li.classList.add('on');
+  const cached = NC.get(id);
+  if (cached) { cur = Object.assign({}, cached); showNote(cur); applyResults(); }
   const n = await Z.read(id);
-  if (!n) { cur = null; showNote(null); return; }
-  cur = n;
-  showNote(n);
+  if (tok !== openTok) return;   // entretanto abriu-se outra
+  if (!n) { NC.delete(id); cur = null; showNote(null); return; }
+  NC.set(id, n);
+  if (cached && cur && cur.id === id) {
+    // já está à vista: só se atualiza se o ficheiro mudou noutro sítio e não se escreveu entretanto
+    if (!dirty && (n.html !== cached.html || n.title !== cached.title)) { cur = n; showNote(n); }
+    else { cur.updated = n.updated; cur.folder = n.folder; cur.fav = n.fav; cur.audioUrl = n.audioUrl; renderMeta(); }
+  } else { cur = n; showNote(n); applyResults(); }
   renderList();
-  applyResults();
 }
+$('#list').addEventListener('mouseover', e => { const c = e.target.closest('.n[data-id]'); if (c) prefetch(c.dataset.id); });
 function showNote(n) {
   const has = !!n;
   $('#ed').classList.toggle('off', !has);
@@ -416,6 +431,7 @@ async function save() {
   const html = sanitize(doc.innerHTML);
   const title = titleEl.value.trim() || 'Nota sem título';
   const blocks = toBlocks(doc);
+  { const c = NC.get(id) || Object.assign({}, cur); NC.set(id, Object.assign(c, { html, title })); }   // a memória fica já com o texto novo
   dirty = false; saving = true; renderStatus();
   const r = await Z.save(id, { title, html }, blocks);
   saving = false;
