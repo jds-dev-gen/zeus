@@ -7,8 +7,11 @@ const fold = t => String(t || '').normalize('NFD').replace(/\p{M}/gu, '').toLowe
 const HL = { yellow: '#fff1a6', green: '#c6f3cc', blue: '#c9e4ff', pink: '#ffd3e4', orange: '#ffe1bd' };
 const HL_NAMES = { yellow: 'Amarelo', green: 'Verde', blue: 'Azul', pink: 'Rosa', orange: 'Laranja' };
 const COLORS = [['', 'Automática'], ['#c62828', 'Vermelho'], ['#e65100', 'Laranja'], ['#2e7d32', 'Verde'], ['#1a5fb4', 'Azul'], ['#6a1b9a', 'Roxo'], ['#757575', 'Cinzento']];
-const SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 40];
-const BASE = 16;
+// tamanhos em pontos, como no Word e no Google Docs (12 pt = o texto normal; 1 pt = 1,333 px no ecrã)
+const SIZES = [9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36];
+const BASE = 12;
+const PT = px => { const v = px * 0.75, r = Math.round(v); return Math.abs(v - r) < 0.3 ? r : Math.round(v * 2) / 2; };   // px → pt (os px guardam-se inteiros: 19 px = 14 pt)
+const PX = pt => Math.round(pt / 0.75);
 const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
 let L = { where: {}, folders: [], notes: [] };
@@ -522,7 +525,7 @@ function curSize() {
   const s = getSelection(); if (!s.rangeCount) return BASE;
   const n = s.anchorNode; const e = n && (n.nodeType === 1 ? n : n.parentElement);
   if (!e || !doc.contains(e)) return BASE;
-  return Math.round(parseFloat(getComputedStyle(e).fontSize)) || BASE;
+  return PT(parseFloat(getComputedStyle(e).fontSize)) || BASE;
 }
 function syncTools() {
   const s = getSelection();
@@ -575,7 +578,7 @@ $('#tools').addEventListener('click', e => {
   else if (c === 'clear') { exec('removeFormat'); exec('unlink'); }
   else if (c === 'bigger' || c === 'smaller') {
     const now = curSize();
-    const next = c === 'bigger' ? SIZES.find(v => v > now) || 48 : [...SIZES].reverse().find(v => v < now) || 10;
+    const next = c === 'bigger' ? SIZES.find(v => v > now) || 48 : [...SIZES].reverse().find(v => v < now) || 8;
     applySize(next);
   }
   fixNesting(); touch(); syncTools(); keepRange();
@@ -586,7 +589,7 @@ function applySize(px) {
   css(false); exec('fontSize', '7');
   doc.querySelectorAll('font[size="7"]').forEach(f => {
     const sp = document.createElement('span');
-    sp.style.fontSize = px + 'px';
+    sp.style.fontSize = PX(px) + 'px';   // px aqui é o tamanho escolhido, em pontos
     while (f.firstChild) sp.appendChild(f.firstChild);
     sp.querySelectorAll('[style*="font-size"]').forEach(x => { x.style.fontSize = ''; if (!x.getAttribute('style')) x.removeAttribute('style'); });
     f.replaceWith(sp);
@@ -644,6 +647,7 @@ doc.addEventListener('keydown', e => { if (!e.shiftKey && e.key !== 'Shift') hid
 document.addEventListener('selectionchange', () => { if (!selbar.hidden) { const s = getSelection(); if (!s.rangeCount || s.isCollapsed) hideSelbar(); } });
 document.addEventListener('scroll', () => hideSelbar(), true);
 window.addEventListener('resize', () => hideSelbar());
+$('#tools').addEventListener('mousedown', () => hideSelbar());   // ao usar a barra de cima, a barrinha das cores sai
 
 /* janelas pequenas */
 const pop = $('#pop');
@@ -660,7 +664,7 @@ pop.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preve
 function sizePop(b) {
   if (popFor === b) return closePop();
   const now = curSize();
-  openPop(b, `<div class="sizes">${SIZES.map(s => `<button type="button" data-size="${s}" class="${s === now ? 'on' : ''}" style="font-size:${Math.min(s, 22)}px;font-family:Arial">${s} px${s === BASE ? ' <span style="color:var(--muted);font-size:11px">normal</span>' : ''}</button>`).join('')}</div>`);
+  openPop(b, `<div class="sizes">${SIZES.map(s => `<button type="button" data-size="${s}" class="${s === now ? 'on' : ''}" style="font-size:${Math.min(PX(s), 24)}px;font-family:Arial">${s} pt${s === BASE ? ' <span style="color:var(--muted);font-size:11px">normal</span>' : ''}</button>`).join('')}</div>`);
 }
 function colorPop(b) {
   if (popFor === b) return closePop();
