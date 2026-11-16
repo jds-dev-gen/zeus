@@ -188,6 +188,7 @@ function setupMacGyver(x) {
         : what === 'undo' ? { action: 'update', list: t.g.list, task: t.g.id, status: 'needsAction' }
           : { action: 'update', list: t.g.list, task: t.g.id, title: t.title, due: t.due || 'none', notes: gNotes(t) };
     gCall(t.g.feed, p).catch(() => {});
+    if (what === 'done' || what === 'delete') G.tasks = G.tasks.filter(z => z.id !== t.g.id);   // a cópia do Google sai já da lista
     G.t = 0;
   }
 
@@ -195,9 +196,10 @@ function setupMacGyver(x) {
   function unified(today = ymd()) {
     const out = [];
     const mine = new Set();
+    // as tarefas do Zeus ligadas ao Google (também as feitas) nunca aparecem outra vez como "do Google"
+    for (const t of D.tasks) if (t.g) mine.add(t.g.id);
     for (const t of D.tasks) {
       if (t.done) continue;
-      if (t.g) mine.add(t.g.id);
       out.push({ id: t.id, title: t.title, due: t.due || '', time: t.time || '', notes: t.notes || '', link: t.link || null, source: t.source || '', origin: 'mg', synced: !!t.g, overdue: !!t.due && (t.due < today || (t.due === today && t.time && t.time < hm(new Date()))), area: areaOk(t.area), prio: t.prio || '', order: t.order || 0, created: t.created || 0 });
     }
     for (const g of G.tasks) {
