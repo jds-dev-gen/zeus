@@ -610,3 +610,12 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .sg-app select, .sg-add { font: inherit; font-size: 12px; border: 1px solid var(--line2); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 3px 8px; max-width: 160px; }
 .sg-add { border-style: dashed; background: transparent; color: var(--muted); }
 .gtag { font-style: normal; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--g) 15%, var(--bg)); color: color-mix(in srgb, var(--g) 80%, var(--fg)); margin-left: 6px; }
+/* ícone do próprio site */
+.app-btn img.favi { width: 26px; height: 26px; border-radius: 6px; object-fit: contain; display: block; }
+.icon-pick button img.favi { width: 24px; height: 24px; border-radius: 5px; object-fit: contain; }
+.icon-pick button .sitefav { display: grid; justify-items: center; line-height: 1; gap: 1px; }
+.icon-pick button .sitefav svg { width: 16px; height: 16px; }
+.icon-pick button .sitefav small { font-size: 9px; letter-spacing: .02em; opacity: .8; }
+.icon-pick button.none { opacity: .45; }
+.icon-pick button.busy .sitefav { animation: favpulse 1s ease-in-out infinite; }
+@keyframes favpulse { 50% { opacity: .35; } }

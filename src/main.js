@@ -1382,6 +1382,7 @@ function ensureAppView(a) {
   const wc = view.webContents;
   wireWeb(wc, 'app', { appId: a.id });
   wc.on('did-navigate', () => { if (view.getVisible() && fullApp === a.id) fitZoom(view); });
+  wc.on('page-favicon-updated', (e, fav) => { const x = appById(a.id); if (x && x.icon === 'site' && !x.favicon) fillFavicon(x, fav); });
   try { if (ext) ext.addTab(wc, win); } catch (e) { /* ok */ }
   wc.on('page-title-updated', (e, title) => {
     const m = /\((\d+)\)/.exec(title) || /^(\d+)\s/.exec(title);
@@ -1986,7 +1987,7 @@ function setAppMode(id, mode) {
   if (wasOpen) { if (a.mode === 'full') fullApp = id; else openPanel = id; }
   applyLayout(); pushState(true); saveState();
 }
-const ICONS = ['', 'mail', 'pmail', 'wa', 'cal', 'notion', 'pluto', 'apolo', 'work', 'globe', 'star', 'mic', 'play', 'music', 'radar', 'zoom',
+const ICONS = ['', 'site', 'mail', 'pmail', 'wa', 'cal', 'notion', 'pluto', 'apolo', 'work', 'globe', 'star', 'mic', 'play', 'music', 'radar', 'zoom',
   'news', 'podcast', 'headph', 'tv', 'film', 'camera', 'image', 'note', 'book', 'folder', 'check', 'chart', 'money', 'cart', 'bag', 'home', 'plane', 'map', 'pin',
   'users', 'chatb', 'bell', 'bolt', 'spark', 'code', 'nuvem', 'lock', 'heart', 'ball', 'game', 'coffee', 'wrench', 'grid', 'lupa'];
 /* ---------- grupos de apps na barra ---------- */
@@ -2061,7 +2062,66 @@ function groupMenu(id) {
     { label: 'Desfazer o grupo (as apps voltam à barra)', click: () => removeGroup(id) }
   ]).popup({ window: win });
 }
-function addApp({ name, url, mode, icon, isolated }) {
+// ícone do próprio site (favicon / apple-touch-icon), guardado na app como PNG de 64 px em data URL
+const FAV_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+async function favFetch(u, ms) {
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms || 8000);
+  try { return await session.defaultSession.fetch(u, { signal: ac.signal, headers: { 'User-Agent': FAV_UA }, credentials: 'omit' }); } finally { clearTimeout(t); }
+}
+async function favImage(u) {
+  try {
+    const r = await favFetch(u); if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer()); if (!buf.length || buf.length > 3e6) return null;
+    let img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) return null;
+    const { width, height } = img.getSize(); if (width < 16 || height < 16) return null;
+    if (width > 64 || height > 64) img = img.resize({ width: 64, height: 64, quality: 'best' });
+    return { data: img.toDataURL(), size: Math.min(width, height) };
+  } catch (e) { return null; }
+}
+const favCache = new Map();
+async function siteFavicon(url, hints) {
+  let u; try { u = new URL(toURL(url)); } catch (e) { return null; }
+  if (!/^https?:$/.test(u.protocol)) return null;
+  const key = u.origin + u.pathname; if (favCache.has(key)) return favCache.get(key);
+  const cands = [];
+  (hints || []).forEach(h => { if (/^https?:/.test(h) && !/\.svg(\?|$)/i.test(h)) cands.push({ href: h, score: 50 }); });
+  try {
+    const r = await favFetch(u.href, 8000);
+    if (r.ok && /html/i.test(r.headers.get('content-type') || '')) {
+      const html = (await r.text()).slice(0, 400000), base = r.url || u.href;
+      for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
+        const tag = m[0], rel = (/\brel\s*=\s*["']?([^"'>]+)/i.exec(tag) || [])[1] || '';
+        if (!/icon/i.test(rel) || /mask-icon/i.test(rel)) continue;
+        const href = (/\bhref\s*=\s*["']([^"']+)["']/i.exec(tag) || /\bhref\s*=\s*([^\s>]+)/i.exec(tag) || [])[1]; if (!href) continue;
+        if (/\.svg(\?|$)/i.test(href) || /image\/svg/i.test(tag)) continue;
+        const sz = parseInt(((/\bsizes\s*=\s*["']?(\d+)/i.exec(tag)) || [])[1] || '0', 10);
+        let abs; try { abs = new URL(href.replace(/&amp;/g, '&'), base).href; } catch (e) { continue; }
+        cands.push({ href: abs, score: (/apple-touch/i.test(rel) ? 180 : 0) + Math.min(sz, 256) + (/\.png(\?|$)/i.test(abs) ? 5 : 0) });
+      }
+    }
+  } catch (e) { /* sem página: tenta os caminhos habituais */ }
+  cands.sort((a, b) => b.score - a.score);
+  cands.push({ href: u.origin + '/apple-touch-icon.png' }, { href: u.origin + '/favicon.ico' }, { href: 'https://www.google.com/s2/favicons?sz=128&domain=' + encodeURIComponent(u.hostname) });
+  let best = null; const seen = new Set();
+  for (const c of cands) {
+    if (seen.has(c.href)) continue; seen.add(c.href);
+    const img = await favImage(c.href);
+    if (img && (!best || img.size > best.size)) best = img;
+    if (best && best.size >= 48) break;
+  }
+  const out = best ? best.data : null;
+  favCache.set(key, out); return out;
+}
+const okFav = f => typeof f === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(f) && f.length < 120000;
+// app com o ícone do site mas sem imagem (ex.: o site não respondeu ao juntar): tenta outra vez, com os ícones que a página anuncia
+const favBusy = new Set();
+async function fillFavicon(a, hints) {
+  if (!a || a.icon !== 'site' || a.favicon || favBusy.has(a.id)) return;
+  favBusy.add(a.id);
+  try { const f = await siteFavicon(a.url, hints); if (f && a.icon === 'site') { a.favicon = f; saveState(); pushState(true); } } finally { favBusy.delete(a.id); }
+}
+function addApp({ name, url, mode, icon, isolated, favicon }) {
   const u = toURL(url);
   if (!/^https?:/.test(u)) return { ok: false, error: 'Escreve um endereço web válido, por exemplo web.telegram.org.' };
   const id = 'a' + Date.now().toString(36);
@@ -2070,6 +2130,8 @@ function addApp({ name, url, mode, icon, isolated }) {
     icon: ICONS.includes(icon) ? icon : '', isolated: isolated !== false, preload: false,
     linksInTabs: hostOf(u) === 'drive.google.com' ? 'external' : false
   });
+  const na = S.apps[S.apps.length - 1];
+  if (na.icon === 'site') { if (okFav(favicon)) na.favicon = favicon; else fillFavicon(na); }
   saveState(); pushState(true);
   return { ok: true, id };
 }
@@ -2083,6 +2145,7 @@ function updateApp(id, patch) {
   if (patch.name) a.name = String(patch.name).slice(0, 24);
   if (patch.mode) a.mode = patch.mode === 'full' ? 'full' : 'side';
   if (patch.icon !== undefined && ICONS.includes(patch.icon)) a.icon = patch.icon;
+  if (a.icon === 'site') { if (okFav(patch.favicon)) a.favicon = patch.favicon; else if (patch.url !== undefined || !a.favicon) { delete a.favicon; fillFavicon(a); } }
   if (patch.linksInTabs !== undefined) a.linksInTabs = patch.linksInTabs === 'external' ? 'external' : !!patch.linksInTabs;
   if (patch.isolated !== undefined && !!patch.isolated !== !!a.isolated) setIsolated(id, !!patch.isolated);
   saveState(); pushState(true);
@@ -3115,6 +3178,7 @@ function setupIPC() {
   handle('app:close', () => closeAppViews());
   handle('app:mode', (id, mode) => setAppMode(id, mode));
   handle('app:add', d => addApp(d || {}));
+  handle('app:favicon', u => siteFavicon(String(u || '')));
   handle('app:update', (id, patch) => updateApp(id, patch || {}));
   handle('app:remove', id => removeApp(id));
   handle('app:menu', id => appMenu(id));

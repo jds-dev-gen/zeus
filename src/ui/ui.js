@@ -211,6 +211,7 @@ function railSeq() {
 function appItemHTML(a) {
     const on = S.openPanel === a.id || S.fullApp === a.id;
     let inner = a.icon === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>'
+      : a.icon === 'site' && a.favicon ? `<img class="favi" src="${esc(a.favicon)}" alt="">`
       : (ICON[a.icon] && typeof ICON[a.icon] === 'string' ? ICON[a.icon] : `<span class="letter">${esc((a.name || '?').charAt(0).toUpperCase())}</span>`);
     const tag = '';
     const label = `${a.name}${a.id === 'notas' && S.notasStatus === 'rec' ? ', a gravar' : a.id === 'notas' && S.notasStatus === 'busy' ? ', a transcrever' : ''}${a.badge ? ', ' + a.badge + ' por ler' : ''}${a.mode === 'full' ? ', abre em página inteira' : ''}`;
@@ -1949,16 +1950,35 @@ function openGroupEditor(id, withApp, from) {
   });
 }
 
-const ICON_CHOICES = [['', 'Letra'], ['mail', 'Email'], ['pmail', 'Email seguro'], ['wa', 'Conversa'], ['cal', 'Calendário'], ['notion', 'Documento'], ['work', 'Trabalho'], ['globe', 'Web'], ['star', 'Favorito'], ['mic', 'Áudio'], ['play', 'Vídeo'], ['music', 'Música'], ['pluto', 'Planeta'], ['apolo', 'Sol'], ['radar', 'Radar'], ['zoom', 'Zoom'],
+const ICON_CHOICES = [['site', 'Ícone do site'], ['', 'Letra'], ['mail', 'Email'], ['pmail', 'Email seguro'], ['wa', 'Conversa'], ['cal', 'Calendário'], ['notion', 'Documento'], ['work', 'Trabalho'], ['globe', 'Web'], ['star', 'Favorito'], ['mic', 'Áudio'], ['play', 'Vídeo'], ['music', 'Música'], ['pluto', 'Planeta'], ['apolo', 'Sol'], ['radar', 'Radar'], ['zoom', 'Zoom'],
   ['news', 'Notícias'], ['podcast', 'Podcast'], ['headph', 'Auscultadores'], ['tv', 'Televisão'], ['film', 'Filme'], ['camera', 'Câmara'], ['image', 'Imagem'], ['note', 'Nota'], ['book', 'Livro'], ['folder', 'Pasta'], ['check', 'Tarefas'],
   ['chart', 'Gráfico'], ['money', 'Dinheiro'], ['cart', 'Compras'], ['bag', 'Loja'], ['home', 'Casa'], ['plane', 'Viagem'], ['map', 'Mapa'], ['pin', 'Local'], ['users', 'Pessoas'], ['chatb', 'Mensagens'], ['bell', 'Avisos'],
   ['bolt', 'Raio'], ['spark', 'IA'], ['code', 'Código'], ['nuvem', 'Nuvem'], ['lock', 'Cadeado'], ['heart', 'Coração'], ['ball', 'Futebol'], ['game', 'Jogos'], ['coffee', 'Café'], ['wrench', 'Ferramentas'], ['grid', 'Grupo'], ['lupa', 'Procurar']];
-function iconPickerHTML(cur, name, noLetter) {
-  return `<div class="field"><span class="lab">Ícone</span><div class="icon-pick" id="iconPick" role="radiogroup" aria-label="Ícone">${ICON_CHOICES.filter(([k]) => !(noLetter && (k === '' || k === 'cal'))).map(([k, l]) => `<button type="button" role="radio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-icon="${k}" title="${l}" aria-label="${l}">${k === '' ? `<span class="letter">${esc((name || 'A').charAt(0).toUpperCase())}</span>` : k === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>' : ICON[k]}</button>`).join('')}</div></div>`;
+// ícone do site: a imagem vem do processo principal (app:favicon) e fica em pickFav até se gravar
+let pickFav = null, iconTouched = false;
+const siteBtnInner = () => pickFav ? `<img class="favi" src="${esc(pickFav)}" alt="">` : `<span class="sitefav">${ICON.globe}<small>site</small></span>`;
+function setPickFav(f, auto) {
+  pickFav = f || null;
+  const b = document.querySelector('#iconPick [data-icon="site"]'); if (!b) return;
+  b.innerHTML = siteBtnInner(); b.classList.toggle('none', !pickFav);
+  b.title = pickFav ? 'Ícone do site' : 'Ícone do site (não encontrei nenhum)';
+  if (auto && !iconTouched) selectIcon(pickFav ? 'site' : (pickedIcon() === 'site' ? '' : pickedIcon()));
+}
+function selectIcon(k) { const box = $('#iconPick'); if (!box) return; box.querySelectorAll('[data-icon]').forEach(x => { const on = x.dataset.icon === k; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); }); }
+let favReq = 0;
+function lookFav(url, auto) {
+  const n = ++favReq; url = String(url || '').trim();
+  if (!/\./.test(url)) { setPickFav(null, auto); return; }
+  const b = document.querySelector('#iconPick [data-icon="site"]'); if (b) b.classList.add('busy');
+  Z.invoke('app:favicon', url).then(f => { if (n !== favReq) return; if (b) b.classList.remove('busy'); setPickFav(f, auto); }).catch(() => { if (b) b.classList.remove('busy'); });
+}
+function iconPickerHTML(cur, name, noLetter, fav) {
+  if (!noLetter) { pickFav = fav || null; iconTouched = false; }
+  return `<div class="field"><span class="lab">Ícone</span><div class="icon-pick" id="iconPick" role="radiogroup" aria-label="Ícone">${ICON_CHOICES.filter(([k]) => !(noLetter && (k === '' || k === 'cal' || k === 'site'))).map(([k, l]) => `<button type="button" role="radio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}${k === 'site' && !pickFav ? ' none' : ''}" data-icon="${k}" title="${l}" aria-label="${l}">${k === 'site' ? siteBtnInner() : k === '' ? `<span class="letter">${esc((name || 'A').charAt(0).toUpperCase())}</span>` : k === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>' : ICON[k]}</button>`).join('')}</div></div>`;
 }
 function wireIconPicker() {
   const box = $('#iconPick'); if (!box) return;
-  box.addEventListener('click', e => { const b = e.target.closest('[data-icon]'); if (!b) return; box.querySelectorAll('[data-icon]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); }); });
+  box.addEventListener('click', e => { const b = e.target.closest('[data-icon]'); if (!b) return; iconTouched = true; box.querySelectorAll('[data-icon]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); }); });
   tick();
 }
 const pickedIcon = () => { const b = $('#iconPick .on'); return b ? b.dataset.icon : ''; };
@@ -1996,9 +2016,11 @@ function openAddApp(gid) {
   if (!grp) { $('#aaStore').addEventListener('click', () => { closeModal(); Z.invoke('ext:store'); }); $('#aaLoadExt').addEventListener('click', loadExtFromFolder); }
   wireSessionSeg(); wireIconPicker();
   $('#aaName').addEventListener('input', e => { const l = document.querySelector('#iconPick [data-icon=""] .letter'); if (l) l.textContent = (e.target.value.trim() || 'A').charAt(0).toUpperCase(); });
+  let favT = null; $('#aaUrl').addEventListener('input', e => { clearTimeout(favT); favT = setTimeout(() => lookFav(e.target.value, true), 650); });
+  $('#aaUrl').addEventListener('change', e => { clearTimeout(favT); lookFav(e.target.value, true); });
   $('#addAppForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const r = await Z.invoke('app:add', { url: $('#aaUrl').value, name: $('#aaName').value.trim(), mode: $('#aaMode .on').dataset.m, isolated: pickedIsolated(), icon: pickedIcon() });
+    const r = await Z.invoke('app:add', { url: $('#aaUrl').value, name: $('#aaName').value.trim(), mode: $('#aaMode .on').dataset.m, isolated: pickedIsolated(), icon: pickedIcon(), favicon: pickedIcon() === 'site' ? pickFav : null });
     if (!r.ok) { const er = $('#aaErr'); er.textContent = r.error; er.hidden = false; return; }
     if (grp) { const nm = $('#aaName').value.trim() || 'a app'; await Z.invoke('app:setGroup', r.id, gid); closeModal(); toast(`Juntaste ${nm} ao grupo ${grp.name}`); Z.invoke('app:open', r.id); return; }
     closeModal(); toast('Juntaste uma app à barra'); Z.invoke('app:open', r.id);
@@ -2030,14 +2052,16 @@ function openEditApp(id) {
       <div class="field"><label for="edName">Nome</label><input class="inp" id="edName" type="text" value="${esc(a.name)}"></div>
       <div class="field"><label for="edUrl">Endereço</label><input class="inp" id="edUrl" type="text" value="${esc(a.url)}" spellcheck="false"></div>
       ${sessionFieldHTML(!!a.isolated, true)}
-      ${iconPickerHTML(a.icon || '', a.name)}
+      ${iconPickerHTML(a.icon || '', a.name, false, a.favicon || null)}
       <p class="err" id="edErr" hidden></p>
       <div class="row-btns"><button class="btn" type="submit">Guardar</button></div>
     </form>`);
   wireSessionSeg(); wireIconPicker();
+  if (!a.favicon) lookFav(a.url, false);
+  $('#edUrl').addEventListener('change', e => lookFav(e.target.value, false));
   $('#editForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const r = await Z.invoke('app:update', id, { name: $('#edName').value.trim(), url: $('#edUrl').value, icon: pickedIcon(), isolated: pickedIsolated() });
+    const r = await Z.invoke('app:update', id, { name: $('#edName').value.trim(), url: $('#edUrl').value, icon: pickedIcon(), isolated: pickedIsolated(), favicon: pickedIcon() === 'site' ? pickFav : null });
     if (!r.ok) { const er = $('#edErr'); er.textContent = r.error; er.hidden = false; return; }
     closeModal(); toast('App atualizada');
   });
