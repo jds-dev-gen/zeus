@@ -589,3 +589,24 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .gchip.on { background: var(--g); border-color: var(--g); color: #fff; }
 .gchip.on small { color: rgba(255,255,255,.8); }
 .btn.danger { color: #d9473d; }
+
+/* Juntar: app/site ou grupo */
+.seg.addkind { display: flex; width: 100%; margin: 0 0 14px; }
+.seg.addkind button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; font-size: 13.5px; }
+.seg.addkind svg { width: 17px; height: 17px; }
+.linkbtn.back { margin: -4px 0 10px; padding: 0; }
+/* definições: grupos */
+.sgrp { border: 1px solid color-mix(in srgb, var(--g) 40%, var(--line2)); background: color-mix(in srgb, var(--g) 7%, var(--bg)); border-radius: 14px; padding: 10px 12px; margin: 0 0 10px; }
+.sg-h { display: flex; align-items: center; gap: 8px; }
+.sg-h b { color: color-mix(in srgb, var(--g) 75%, var(--fg)); }
+.sg-h small { color: var(--muted); }
+.sg-h .sp { flex: 1; }
+.sg-h .ib { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--line2); background: var(--bg); color: var(--fg); cursor: pointer; padding: 0; }
+.sg-h .ib[disabled] { opacity: .35; cursor: default; }
+.sg-i { width: 26px; height: 26px; border-radius: 8px; background: var(--g); color: #fff; display: grid; place-items: center; }
+.sg-i svg { width: 16px; height: 16px; }
+.sg-apps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+.sg-app { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line2); font-size: 12.5px; }
+.sg-app select, .sg-add { font: inherit; font-size: 12px; border: 1px solid var(--line2); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 3px 8px; max-width: 160px; }
+.sg-add { border-style: dashed; background: transparent; color: var(--muted); }
+.gtag { font-style: normal; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--g) 15%, var(--bg)); color: color-mix(in srgb, var(--g) 80%, var(--fg)); margin-left: 6px; }

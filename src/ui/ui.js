@@ -1863,13 +1863,15 @@ window.addEventListener('pointerup', e => {
 });
 
 /* ---------- criar / editar um grupo ---------- */
-function openGroupEditor(id, withApp) {
+function openGroupEditor(id, withApp, from) {
   const g = id ? groupById(id) : null;
   const color = g ? g.color : Object.keys(GCOL)[(S.groups || []).length % 10];
   const icon = g ? g.icon : 'grid';
   const chosen = new Set(g ? groupApps(g.id).map(a => a.id) : (withApp ? [withApp] : []));
   const apps = S.apps.filter(a => !a.hidden && a.id !== 'apolo');
   openModal('group', `${modalHead(g ? 'Editar o grupo' : 'Grupo novo')}
+    ${from === 'add' ? `<div class="seg addkind" id="aaKind"><button type="button" data-k="app">${ICON.globe}<span>App ou site</span></button><button type="button" class="on" data-k="group">${ICON.grid}<span>Grupo de apps</span></button></div>` : ''}
+    ${from === 'settings' ? '<button class="linkbtn back" type="button" id="grBack">‹ Voltar às definições</button>' : ''}
     <form id="grpForm" class="section" autocomplete="off">
       <div class="field"><label for="grName">Nome</label><input class="inp" id="grName" type="text" maxlength="30" value="${esc(g ? g.name : '')}" placeholder="Por exemplo: Notícias, Produção, Pessoal"></div>
       <div class="field"><span class="lab">Cor</span><div class="gcols" id="grCols">${Object.keys(GCOL).map(k => `<button type="button" class="gc ${k === color ? 'on' : ''}" data-gc="${k}" title="${GNAME[k]}" aria-label="${GNAME[k]}" style="background:${GCOL[k]}"></button>`).join('')}</div></div>
@@ -1883,12 +1885,15 @@ function openGroupEditor(id, withApp) {
   $('#grCols').addEventListener('click', e => { const b = e.target.closest('[data-gc]'); if (!b) return; $('#grCols').querySelectorAll('.gc').forEach(x => x.classList.toggle('on', x === b)); paint(); });
   $('#grApps').addEventListener('click', e => { const b = e.target.closest('[data-ga]'); if (!b) return; b.classList.toggle('on'); const a = appById(b.dataset.ga); b.firstChild.textContent = (b.classList.contains('on') ? '✓ ' : '') + a.name; });
   wireIconPicker(); paint();
-  if (g) $('#grDel').addEventListener('click', async () => { const b = $('#grDel'); if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Desfazer mesmo? (as apps voltam à barra)'; return; } await Z.invoke('group:remove', g.id); closeModal(); toast(`Grupo ${g.name} desfeito`); });
+  const back = () => { if (from === 'settings') openSettings().then(() => { const el = $('#setGroups'); if (el) el.closest('.set-sec').scrollIntoView({ block: 'start' }); }); else closeModal(); };
+  if ($('#aaKind')) $('#aaKind').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b && b.dataset.k === 'app') openAddApp(); });
+  if ($('#grBack')) $('#grBack').addEventListener('click', back);
+  if (g) $('#grDel').addEventListener('click', async () => { const b = $('#grDel'); if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Desfazer mesmo? (as apps voltam à barra)'; return; } await Z.invoke('group:remove', g.id); back(); toast(`Grupo ${g.name} desfeito`); });
   $('#grpForm').addEventListener('submit', async e => {
     e.preventDefault();
     const r = await Z.invoke('group:save', g ? g.id : '', { name: $('#grName').value, color: $('#grCols .on').dataset.gc, icon: pickedIcon() || 'grid', apps: [...document.querySelectorAll('#grApps .gchip.on')].map(b => b.dataset.ga) });
     if (!r || !r.ok) { const er = $('#grErr'); er.textContent = (r && r.error) || 'Não consegui guardar o grupo.'; er.hidden = false; return; }
-    closeModal(); toast(g ? 'Grupo atualizado' : 'Grupo criado');
+    back(); toast(g ? 'Grupo atualizado' : 'Grupo criado');
   });
 }
 
@@ -1917,6 +1922,7 @@ const pickedIsolated = () => { const b = $('#sessSeg .on'); return b ? b.dataset
 
 function openAddApp() {
   openModal('add', `${modalHead('Juntar ao Zeus')}
+    <div class="seg addkind" id="aaKind"><button type="button" class="on" data-k="app">${ICON.globe}<span>App ou site</span></button><button type="button" data-k="group">${ICON.grid}<span>Grupo de apps</span></button></div>
     <form id="addAppForm" class="section" autocomplete="off">
       <span class="lbl-mono">Site como app</span>
       <div class="field"><label for="aaUrl">Endereço</label><input class="inp" id="aaUrl" type="text" placeholder="drive.proton.me" required spellcheck="false"></div>
@@ -1932,6 +1938,7 @@ function openAddApp() {
       <div class="row-btns"><button class="btn ghost" type="button" id="aaStore">Abrir a Chrome Web Store</button><button class="btn ghost" type="button" id="aaLoadExt">Carregar de uma pasta ou .zip…</button></div>
     </div>`);
   $('#aaMode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) $('#aaMode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); });
+  $('#aaKind').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b && b.dataset.k === 'group') openGroupEditor('', '', 'add'); });
   $('#aaStore').addEventListener('click', () => { closeModal(); Z.invoke('ext:store'); });
   $('#aaLoadExt').addEventListener('click', loadExtFromFolder);
   wireSessionSeg(); wireIconPicker();
@@ -2021,6 +2028,8 @@ async function openSettings() {
       <div class="set-row"><span>Motor de pesquisa</span>${segHTML('search', st.search, [['google', 'Google'], ['duckduckgo', 'DuckDuckGo'], ['startpage', 'Startpage'], ['brave', 'Brave']])}</div>
       <div class="set-row"><span>Meteorologia: ${esc((st.city || {}).name || '—')}</span><button class="linkbtn" type="button" id="setCity">Mudar de cidade</button></div>
     </div>
+    <div class="set-sec"><h3>Grupos de apps</h3><p class="hint">Cada grupo ocupa um lugar na barra e abre um quadrado com as suas apps. Muda aqui as apps de grupo, ou arrasta-as na barra.</p><div class="list" id="setGroups"></div>
+      <div class="row-btns"><button class="btn ghost" type="button" id="setAddGroup">Grupo novo</button></div></div>
     <div class="set-sec"><h3>Apps na barra</h3><div class="list" id="setApps"></div>
       <div class="row-btns"><button class="btn ghost" type="button" id="setAddApp">Juntar app</button></div></div>
     <div class="set-sec"><h3>Extensões do Chrome</h3><div class="list" id="setExt"><p class="hint">A carregar…</p></div>
@@ -2091,6 +2100,7 @@ async function openSettings() {
   $('#updInstall').addEventListener('click', installUpdate);
   $('#repoForm').addEventListener('submit', e => { e.preventDefault(); Z.invoke('settings:set', { updateRepo: $('#repoInput').value }); toast('Repositório guardado'); });
   $('#setAddApp').addEventListener('click', openAddApp);
+  $('#setAddGroup').addEventListener('click', () => openGroupEditor('', '', 'settings'));
   $('#setStore').addEventListener('click', () => { closeModal(); Z.invoke('ext:store'); });
   $('#setLoadExt').addEventListener('click', loadExtFromFolder);
   $('#clrHist').addEventListener('click', async () => { await Z.invoke('data:clear', 'history'); toast('Histórico apagado'); });
@@ -2104,9 +2114,44 @@ async function openSettings() {
   renderExtList(await Z.invoke('ext:list'));
   renderPermList(await Z.invoke('permissions:list'));
 }
+function refreshSettingsGroups() {
+  const box = $('#setGroups'); if (!box) return;
+  const gs = (S.groups || []).slice().sort((x, y) => railSeq().indexOf('g:' + x.id) - railSeq().indexOf('g:' + y.id));
+  const opts = cur => `<option value="">Sem grupo (na barra)</option>${gs.map(g => `<option value="${esc(g.id)}" ${cur === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}`;
+  box.innerHTML = gs.length ? gs.map((g, i) => {
+    const apps = groupApps(g.id);
+    return `<div class="sgrp" style="--g:${GCOL[g.color] || GCOL.azul}">
+      <div class="sg-h"><span class="sg-i">${ICON[g.icon] || ICON.grid}</span><b>${esc(g.name)}</b><small>${apps.length} app${apps.length === 1 ? '' : 's'}</small><span class="sp"></span>
+        <button class="ib" type="button" data-gmove="${esc(g.id)}|-1" title="Subir na barra" ${i === 0 ? 'disabled' : ''}>↑</button><button class="ib" type="button" data-gmove="${esc(g.id)}|1" title="Descer na barra" ${i === gs.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="linkbtn" type="button" data-gedit2="${esc(g.id)}">Editar</button><button class="linkbtn" type="button" data-gdel="${esc(g.id)}">Desfazer</button></div>
+      <div class="sg-apps">${apps.map(a => `<div class="sg-app"><span>${esc(a.name)}</span><select data-gset="${esc(a.id)}" aria-label="Grupo de ${esc(a.name)}">${opts(g.id)}</select></div>`).join('') || '<p class="hint">Sem apps.</p>'}
+        <select class="sg-add" data-gaddto="${esc(g.id)}" aria-label="Juntar uma app a ${esc(g.name)}"><option value="">+ Juntar uma app…</option>${S.apps.filter(a => !a.hidden && a.id !== 'apolo' && a.group !== g.id).map(a => `<option value="${esc(a.id)}">${esc(a.name)}${inGroup(a) ? ' (de ' + esc(groupById(a.group).name) + ')' : ''}</option>`).join('')}</select></div>
+    </div>`;
+  }).join('') : '<p class="hint">Ainda não há grupos.</p>';
+}
+$('#modal').addEventListener('change', e => {
+  const sg = e.target.closest('[data-gset]'); if (sg) { Z.invoke('app:setGroup', sg.dataset.gset, sg.value); return; }
+  const ga = e.target.closest('[data-gaddto]'); if (ga && ga.value) { Z.invoke('app:setGroup', ga.value, ga.dataset.gaddto); }
+});
+$('#modal').addEventListener('click', async e => {
+  const gm = e.target.closest('[data-gmove]');
+  if (gm) {
+    const [id, d] = gm.dataset.gmove.split('|');
+    // troca de lugar com o grupo anterior/seguinte na barra
+    const seq = railSeq(), gtoks = seq.filter(t => t[0] === 'g'), k = gtoks.indexOf('g:' + id), other = gtoks[k + +d];
+    if (!other) return;
+    const i = seq.indexOf('g:' + id), j = seq.indexOf(other);
+    seq[i] = other; seq[j] = 'g:' + id;
+    Z.invoke('rail:reorder', seq); return;
+  }
+  const ge = e.target.closest('[data-gedit2]'); if (ge) { openGroupEditor(ge.dataset.gedit2, '', 'settings'); return; }
+  const gd = e.target.closest('[data-gdel]');
+  if (gd) { if (!gd.dataset.sure) { gd.dataset.sure = '1'; gd.textContent = 'Desfazer mesmo?'; setTimeout(() => { if (gd.isConnected) { delete gd.dataset.sure; gd.textContent = 'Desfazer'; } }, 4000); return; } Z.invoke('group:remove', gd.dataset.gdel); }
+});
 function refreshSettingsApps() {
+  refreshSettingsGroups();
   const box = $('#setApps'); if (!box) return;
-  box.innerHTML = S.apps.filter(a => !a.hidden).map(a => `<div class="li"><div class="grow"><span>${esc(a.name)}</span><small>${esc(a.url || 'Endereço por definir')}${a.isolated ? ' · sessão separada' : ''}</small></div>
+  box.innerHTML = S.apps.filter(a => !a.hidden).map(a => `<div class="li"><div class="grow"><span>${esc(a.name)}${inGroup(a) ? ` <i class="gtag" style="--g:${GCOL[groupById(a.group).color] || GCOL.azul}">${esc(groupById(a.group).name)}</i>` : ''}</span><small>${esc(a.url || 'Endereço por definir')}${a.isolated ? ' · sessão separada' : ''}</small></div>
     <div class="seg" data-appmode="${esc(a.id)}"><button type="button" data-v="side" class="${a.mode === 'side' ? 'on' : ''}">Ao lado</button><button type="button" data-v="full" class="${a.mode === 'full' ? 'on' : ''}">Inteira</button></div>
     <button class="linkbtn" type="button" data-editapp="${esc(a.id)}">Editar</button><button class="linkbtn" type="button" data-rmapp="${esc(a.id)}">Remover</button></div>`).join('');
 }
