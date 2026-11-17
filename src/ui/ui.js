@@ -2109,7 +2109,7 @@ async function openSettings() {
     <div class="set-sec"><h3>Grupos de apps</h3><p class="hint">Cada grupo ocupa um lugar na barra e abre um quadrado com as suas apps. Muda aqui as apps de grupo, ou arrasta-as na barra.</p><div class="list" id="setGroups"></div>
       <div class="row-btns"><button class="btn ghost" type="button" id="setAddGroup">Grupo novo</button></div></div>
     <div class="set-sec"><h3>Apps na barra</h3><div class="list" id="setApps"></div>
-      <div class="row-btns"><button class="btn ghost" type="button" id="setAddApp">Juntar app</button></div></div>
+      <div class="row-btns"><button class="btn ghost" type="button" id="setAddApp">Juntar app</button><button class="btn ghost" type="button" id="setSiteIcons" title="As apps de sites passam a usar o ícone do próprio site (as apps do Zeus, como as Notas, ficam iguais)">Usar o ícone de cada site</button></div><p class="hint" id="setSiteIconsMsg" hidden></p></div>
     <div class="set-sec"><h3>Extensões do Chrome</h3><div class="list" id="setExt"><p class="hint">A carregar…</p></div>
       <div class="row-btns"><button class="btn ghost" type="button" id="setStore">Abrir a Chrome Web Store</button><button class="btn ghost" type="button" id="setLoadExt">Carregar de uma pasta ou .zip…</button></div>
       <p class="hint">Para extensões tuas que não estão na loja (como as que usas no modo de programador do Chrome ou do Vivaldi). Ficam ativas nos separadores e em todas as apps da barra.</p></div>
@@ -2177,7 +2177,15 @@ async function openSettings() {
   $('#updCheck').addEventListener('click', async () => { U = await Z.invoke('update:check'); renderUpdate(); });
   $('#updInstall').addEventListener('click', installUpdate);
   $('#repoForm').addEventListener('submit', e => { e.preventDefault(); Z.invoke('settings:set', { updateRepo: $('#repoInput').value }); toast('Repositório guardado'); });
-  $('#setAddApp').addEventListener('click', openAddApp);
+  $('#setAddApp').addEventListener('click', () => openAddApp());
+  $('#setSiteIcons').addEventListener('click', async e => {
+    const b = e.currentTarget, msg = $('#setSiteIconsMsg');
+    b.disabled = true; b.textContent = 'A procurar os ícones…';
+    const r = await Z.invoke('apps:siteIcons', true).catch(() => null);
+    b.disabled = false; b.textContent = 'Usar o ícone de cada site';
+    msg.hidden = false;
+    msg.textContent = !r ? 'Não consegui procurar os ícones.' : r.changed ? `${r.changed} ${r.changed === 1 ? 'app passou' : 'apps passaram'} a ter o ícone do site${r.tried > r.changed ? ` (${r.tried - r.changed} sem ícone, ficam como estavam)` : ''}.` : r.tried ? 'Não encontrei ícones nos sites que faltavam.' : 'Todas as apps de sites já usam o ícone do site.';
+  });
   $('#setAddGroup').addEventListener('click', () => openGroupEditor('', '', 'settings'));
   $('#setStore').addEventListener('click', () => { closeModal(); Z.invoke('ext:store'); });
   $('#setLoadExt').addEventListener('click', loadExtFromFolder);

@@ -311,7 +311,7 @@ function saveNow() {
       tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space, partition: t.partition || null, sessionLabel: t.sessionLabel || null })),
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
-      pendingKey: S.pendingKey || null, apps: S.apps, groups: S.groups || [], removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, protonLinks: true, driveLinks: true, newestFirst: true, rightWideV: true, settings: S.settings, permissions: S.permissions,
+      pendingKey: S.pendingKey || null, apps: S.apps, groups: S.groups || [], favMigrated: !!S.favMigrated, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, protonLinks: true, driveLinks: true, newestFirst: true, rightWideV: true, settings: S.settings, permissions: S.permissions,
       siteZoom: S.siteZoom || {}, downloads: (S.downloads || []).slice(0, DL_MAX).map(d => d.state === 'progressing' ? { ...d, state: 'interrupted', paused: false } : d), visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
@@ -2083,7 +2083,7 @@ const favCache = new Map();
 async function siteFavicon(url, hints) {
   let u; try { u = new URL(toURL(url)); } catch (e) { return null; }
   if (!/^https?:$/.test(u.protocol)) return null;
-  const key = u.origin + u.pathname; if (favCache.has(key)) return favCache.get(key);
+  const key = u.origin + u.pathname, hit = favCache.get(key); if (hit && (hit.f || Date.now() - hit.t < 60000)) return hit.f;
   const cands = [];
   (hints || []).forEach(h => { if (/^https?:/.test(h) && !/\.svg(\?|$)/i.test(h)) cands.push({ href: h, score: 50 }); });
   try {
@@ -2111,7 +2111,7 @@ async function siteFavicon(url, hints) {
     if (best && best.size >= 48) break;
   }
   const out = best ? best.data : null;
-  favCache.set(key, out); return out;
+  favCache.set(key, { f: out, t: Date.now() }); return out;  // sem ícone: volta a tentar passado 1 minuto
 }
 const okFav = f => typeof f === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(f) && f.length < 120000;
 // app com o ícone do site mas sem imagem (ex.: o site não respondeu ao juntar): tenta outra vez, com os ícones que a página anuncia
@@ -2120,6 +2120,15 @@ async function fillFavicon(a, hints) {
   if (!a || a.icon !== 'site' || a.favicon || favBusy.has(a.id)) return;
   favBusy.add(a.id);
   try { const f = await siteFavicon(a.url, hints); if (f && a.icon === 'site') { a.favicon = f; saveState(); pushState(true); } } finally { favBusy.delete(a.id); }
+}
+// apps que já estavam na barra: "all" passa todas as apps de sites para o ícone do site; senão só as que tinham a letra
+async function useSiteIcons(all) {
+  const list = S.apps.filter(a => !a.internal && /^https?:/.test(a.url || '') && a.icon !== 'site' && (all || !a.icon));
+  let n = 0, i = 0;
+  const worker = async () => { while (i < list.length) { const a = list[i++]; const f = await siteFavicon(a.url); if (f) { a.icon = 'site'; a.favicon = f; n++; } } };
+  await Promise.all([worker(), worker(), worker()]);
+  if (n) { saveState(); pushState(true); }
+  return { ok: true, changed: n, tried: list.length };
 }
 function addApp({ name, url, mode, icon, isolated, favicon }) {
   const u = toURL(url);
@@ -3179,6 +3188,7 @@ function setupIPC() {
   handle('app:mode', (id, mode) => setAppMode(id, mode));
   handle('app:add', d => addApp(d || {}));
   handle('app:favicon', u => siteFavicon(String(u || '')));
+  handle('apps:siteIcons', all => useSiteIcons(!!all));
   handle('app:update', (id, patch) => updateApp(id, patch || {}));
   handle('app:remove', id => removeApp(id));
   handle('app:menu', id => appMenu(id));
@@ -3443,6 +3453,8 @@ app.whenReady().then(async () => {
   // a interface só fala com o processo principal; não precisa de permissões
   session.defaultSession.setPermissionRequestHandler((wc, p, cb) => cb(false));
   setupIPC();
+  // 0.22.6: uma vez, as apps de sites que tinham só a letra passam a ter o ícone do site
+  if (!S.favMigrated) setTimeout(() => useSiteIcons(false).then(r => { S.favMigrated = true; saveState(); }).catch(() => {}), 8000);
   buildMenu();
   createWindow();
   await setupExtensions();

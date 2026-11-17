@@ -14,7 +14,7 @@ const INVOKE = new Set([
   'tab:new', 'tab:open', 'tab:close', 'tab:later', 'tab:move', 'tab:restore', 'tab:reopen', 'tab:menu',
   'navigate', 'nav', 'find', 'history:suggest', 'auth:reply', 'home:today', 'home:taskDone', 'home:setupOpen', 'home:accounts', 'home:feedAdd', 'home:feedRemove', 'home:code', 'history:browsers', 'history:import', 'history:count', 'share:info', 'share:do', 'page:snapshot', 'pip:toggle', 'pip:sound', 'space:pick', 'space:home', 'zoom:saveCurrent', 'zoom:current', 'zoom:update', 'zoom:remove', 'zoom:cols', 'zoom:addCol', 'video:probe', 'video:download', 'downloads:list', 'downloads:do', 'downloads:thumb', 'scores:get', 'scores:search', 'scores:teams', 'scores:open', 'scores:status', 'scores:details', 'scores:refresh',
   'space:add', 'space:rename', 'space:remove', 'space:reorder',
-  'app:open', 'app:close', 'app:mode', 'app:add', 'app:favicon', 'app:update', 'app:remove', 'app:menu', 'app:reload', 'app:reorder', 'rail:reorder', 'group:save', 'group:remove', 'group:menu', 'app:setGroup', 'page:insertText',
+  'app:open', 'app:close', 'app:mode', 'app:add', 'app:favicon', 'apps:siteIcons', 'app:update', 'app:remove', 'app:menu', 'app:reload', 'app:reorder', 'rail:reorder', 'group:save', 'group:remove', 'group:menu', 'app:setGroup', 'page:insertText',
   'claude:toggle', 'claude:sendPage', 'claude:ask', 'claude:new',
   'settings:set', 'permissions:list', 'permissions:forget',
   'ext:list', 'ext:store', 'ext:remove', 'ext:load', 'data:clear', 'ui:focusPage',
