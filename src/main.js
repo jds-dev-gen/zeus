@@ -90,6 +90,7 @@ const SEARCH = {
 };
 
 let S = {
+  groups: [],             // grupos de apps na barra: {id, name, color, icon, pos} (a app diz o grupo em app.group)
   tabs: [],               // {id, url, title, favicon, space}
   currentId: null,
   mru: [],
@@ -310,7 +311,7 @@ function saveNow() {
       tabs: S.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, space: t.space, partition: t.partition || null, sessionLabel: t.sessionLabel || null })),
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
-      pendingKey: S.pendingKey || null, apps: S.apps, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, protonLinks: true, driveLinks: true, newestFirst: true, rightWideV: true, settings: S.settings, permissions: S.permissions,
+      pendingKey: S.pendingKey || null, apps: S.apps, groups: S.groups || [], removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, protonLinks: true, driveLinks: true, newestFirst: true, rightWideV: true, settings: S.settings, permissions: S.permissions,
       siteZoom: S.siteZoom || {}, downloads: (S.downloads || []).slice(0, DL_MAX).map(d => d.state === 'progressing' ? { ...d, state: 'interrupted', paused: false } : d), visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
       claudeOpen: S.claudeOpen
     };
@@ -569,6 +570,7 @@ function pushState(now) {
       spaces: S.spaces, later: S.later, closed: S.closed, pickSpace,
       apps: S.apps.map(a => Object.assign({}, a, { badge: badges[a.id] || 0, loaded: appViews.has(a.id), error: appErrors[a.id] || null })),
       notasStatus: notasApp && notasApp.status ? notasApp.status() : '',
+      groups: S.groups || [],
       openPanel, fullApp, fullAppURL: fullApp && wc ? wc.getURL() : '', claudeOpen: S.claudeOpen,
       settings: S.settings,
       topSites: topSites(),
@@ -1984,7 +1986,81 @@ function setAppMode(id, mode) {
   if (wasOpen) { if (a.mode === 'full') fullApp = id; else openPanel = id; }
   applyLayout(); pushState(true); saveState();
 }
-const ICONS = ['', 'mail', 'pmail', 'wa', 'cal', 'notion', 'pluto', 'apolo', 'work', 'globe', 'star', 'mic', 'play', 'music'];
+const ICONS = ['', 'mail', 'pmail', 'wa', 'cal', 'notion', 'pluto', 'apolo', 'work', 'globe', 'star', 'mic', 'play', 'music', 'radar', 'zoom',
+  'news', 'podcast', 'headph', 'tv', 'film', 'camera', 'image', 'note', 'book', 'folder', 'check', 'chart', 'money', 'cart', 'bag', 'home', 'plane', 'map', 'pin',
+  'users', 'chatb', 'bell', 'bolt', 'spark', 'code', 'nuvem', 'lock', 'heart', 'ball', 'game', 'coffee', 'wrench', 'grid', 'lupa'];
+/* ---------- grupos de apps na barra ---------- */
+const GROUP_COLORS = ['azul', 'verde', 'laranja', 'vermelho', 'roxo', 'rosa', 'amarelo', 'petroleo', 'castanho', 'grafite'];
+const groupById = id => (S.groups || []).find(g => g.id === id);
+// a barra de cima a baixo: apps sem grupo e grupos (cada grupo no lugar onde foi posto)
+function railSeq() {
+  const seq = S.apps.filter(a => !a.hidden && !(a.group && groupById(a.group))).map(a => 'a:' + a.id);
+  (S.groups || []).slice().sort((x, y) => (x.pos || 0) - (y.pos || 0)).forEach(g => seq.splice(Math.max(1, Math.min(seq.length, g.pos == null ? seq.length : g.pos)), 0, 'g:' + g.id));
+  return seq;
+}
+function railReorder(seq) {
+  if (!Array.isArray(seq)) return;
+  const apps = [], byId = new Map(S.apps.map(a => [a.id, a]));
+  seq.forEach((tok, i) => {
+    const [k, id] = [String(tok).slice(0, 1), String(tok).slice(2)];
+    if (k === 'a' && byId.has(id)) apps.push(byId.get(id));
+    if (k === 'g') { const g = groupById(id); if (g) g.pos = i; }
+  });
+  S.apps.forEach(a => { if (!apps.includes(a)) apps.push(a); });
+  S.apps = apps;
+}
+function saveGroup(id, o) {
+  o = o || {};
+  const name = String(o.name || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+  if (!name) return { ok: false, error: 'O grupo precisa de um nome.' };
+  S.groups = S.groups || [];
+  let g = id && groupById(id);
+  if (!g) {
+    const seq = railSeq();
+    // o grupo novo entra onde está a primeira app escolhida (senão, no fim)
+    const first = (o.apps || []).map(x => seq.indexOf('a:' + x)).filter(i => i > -1).sort((a, b) => a - b)[0];
+    g = { id: 'g' + Date.now().toString(36), pos: first != null ? first : seq.length };
+    S.groups.push(g);
+  }
+  g.name = name;
+  g.color = GROUP_COLORS.includes(o.color) ? o.color : (g.color || 'azul');
+  g.icon = ICONS.includes(o.icon) && o.icon ? o.icon : (g.icon || 'grid');
+  if (Array.isArray(o.apps)) {
+    const want = new Set(o.apps.map(String));
+    S.apps.forEach(a => { if (want.has(a.id) && a.id !== 'apolo') a.group = g.id; else if (a.group === g.id) delete a.group; });
+  }
+  saveState(); pushState(true);
+  return { ok: true, id: g.id };
+}
+function removeGroup(id) {
+  const g = groupById(id); if (!g) return false;
+  // as apps voltam para a barra, no lugar do grupo
+  const seq = railSeq(), at = seq.indexOf('g:' + id);
+  const members = S.apps.filter(a => a.group === id).map(a => 'a:' + a.id);
+  S.apps.forEach(a => { if (a.group === id) delete a.group; });
+  S.groups = S.groups.filter(x => x !== g);
+  const rest = seq.filter(t => t !== 'g:' + id && !members.includes(t));
+  rest.splice(Math.max(0, at), 0, ...members);
+  railReorder(rest);
+  saveState(); pushState(true);
+  return true;
+}
+function setAppGroup(appId, groupId) {
+  const a = appById(appId); if (!a || a.id === 'apolo') return false;
+  if (groupId && !groupById(groupId)) return false;
+  if (groupId) a.group = groupId; else delete a.group;
+  saveState(); pushState(true);
+  return true;
+}
+function groupMenu(id) {
+  const g = groupById(id); if (!g) return;
+  Menu.buildFromTemplate([
+    { label: 'Editar o grupo…', click: () => ui.send('ui-command', { cmd: 'edit-group', id }) },
+    { label: 'Grupo novo…', click: () => ui.send('ui-command', { cmd: 'edit-group', id: '' }) },
+    { type: 'separator' },
+    { label: 'Desfazer o grupo (as apps voltam à barra)', click: () => removeGroup(id) }
+  ]).popup({ window: win });
+}
 function addApp({ name, url, mode, icon, isolated }) {
   const u = toURL(url);
   if (!/^https?:/.test(u)) return { ok: false, error: 'Escreve um endereço web válido, por exemplo web.telegram.org.' };
@@ -2056,6 +2132,12 @@ function appMenu(id) {
     { type: 'separator' },
     { label: 'Recarregar', enabled: !!view, click: () => view && view.webContents.reload() },
     { label: 'Editar nome, endereço e ícone…', click: () => ui.send('ui-command', { cmd: 'edit-app', id }) },
+    ...(id === 'apolo' ? [] : [{ label: 'Grupo', submenu: [
+      { label: 'Sem grupo (na barra)', type: 'radio', checked: !a.group || !groupById(a.group), click: () => setAppGroup(id, '') },
+      ...(S.groups || []).map(g => ({ label: g.name, type: 'radio', checked: a.group === g.id, click: () => setAppGroup(id, g.id) })),
+      { type: 'separator' },
+      { label: 'Grupo novo…', click: () => ui.send('ui-command', { cmd: 'edit-group', id: '', app: id }) }
+    ] }]),
     { label: 'Sessão separada', type: 'checkbox', checked: !!a.isolated, click: () => askIsolated(id, !a.isolated) },
     { label: 'Links', submenu: [
       { label: 'Abrem dentro da app', type: 'radio', checked: !a.linksInTabs, click: () => { a.linksInTabs = false; saveState(); pushState(true); } },
@@ -3036,6 +3118,11 @@ function setupIPC() {
   handle('app:update', (id, patch) => updateApp(id, patch || {}));
   handle('app:remove', id => removeApp(id));
   handle('app:menu', id => appMenu(id));
+  handle('rail:reorder', seq => { railReorder(seq); saveState(); pushState(true); return true; });
+  handle('group:save', (id, o) => saveGroup(id ? String(id) : '', o));
+  handle('group:remove', id => removeGroup(String(id)));
+  handle('group:menu', id => groupMenu(String(id)));
+  handle('app:setGroup', (appId, groupId) => setAppGroup(String(appId), groupId ? String(groupId) : ''));
   handle('app:reorder', ids => {
     if (!Array.isArray(ids)) return;
     const byId = new Map(S.apps.map(a => [a.id, a]));

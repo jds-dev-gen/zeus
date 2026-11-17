@@ -30,6 +30,41 @@ const ICON = {
   mic: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
   music: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>',
   play: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>',
+  // catálogo alargado (0.22): apps e grupos
+  news: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h6M7 13h10M7 16h8"/></svg>',
+  podcast: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="11" r="2.5"/><path d="M8 16a6 6 0 1 1 8 0M5 19a10 10 0 1 1 14 0"/></svg>',
+  headph: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/></svg>',
+  tv: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+  film: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/></svg>',
+  camera: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l2-3h4l2 3"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  image: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>',
+  note: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h10l4 4v12H5z"/><path d="M8 12h8M8 16h5"/></svg>',
+  book: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4z"/><path d="M20 4h-6v16"/></svg>',
+  folder: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  check: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></svg>',
+  chart: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  money: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>',
+  cart: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M3 4h2l2.5 11h11l2-8H6"/></svg>',
+  bag: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>',
+  home: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"/><path d="M10 20v-6h4v6"/></svg>',
+  plane: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 14l20-8-6 15-4-6z"/></svg>',
+  map: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4l6 2 6-2v14l-6 2-6-2-6 2V6z"/><path d="M9 4v14M15 6v14"/></svg>',
+  pin: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+  users: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2 20a7 7 0 0 1 14 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M22 20a7 7 0 0 0-4-6.3"/></svg>',
+  chatb: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/></svg>',
+  bell: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></svg>',
+  bolt: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
+  spark: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg>',
+  code: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8l-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/></svg>',
+  nuvem: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 10.5 3.8 3.8 0 0 0 7 18z"/></svg>',
+  lock: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  heart: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-8-5-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 9c0 6-8 11-8 11z"/></svg>',
+  ball: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7l4 3-1.5 4.5h-5L8 10z"/></svg>',
+  game: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 11v3M5.5 12.5h3M16 12h.01M18 14h.01"/></svg>',
+  coffee: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 10h2a2 2 0 0 1 0 4h-2M8 2v3M12 2v3"/></svg>',
+  wrench: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0 5 5L13 18l-3 3-4-4 3-3 6.7-6.7z"/></svg>',
+  grid: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  lupa: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5"/></svg>',
   plus: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   gear: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>',
   x: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
@@ -162,23 +197,46 @@ Z.on('state', st => {
   requestAnimationFrame(sendLayout);
 });
 
-let railKey = '';
-function renderRail() {
-  const key = JSON.stringify([S.apps, S.openPanel, S.fullApp, S.notasStatus]);
-  if (key === railKey) return;
-  railKey = key;
-  // em cima: hora e data (fixas); no meio: as apps (fazem scroll); em baixo: definições
-  let h = `<div class="rail-head"><div class="clock" aria-label="Hora"><b data-clock></b><span data-dshort></span></div></div>`;
-  h += '<div class="rail-apps" id="railApps">';
-  S.apps.forEach((a, i) => {
-    if (a.hidden) return;
+/* ---------- grupos de apps ---------- */
+const GCOL = { azul: '#3b6fe0', verde: '#2f9e6b', laranja: '#e8833a', vermelho: '#d9473d', roxo: '#7c5ce0', rosa: '#d6589b', amarelo: '#d4a52a', petroleo: '#1f8a8a', castanho: '#9a6b45', grafite: '#55565c' };
+const GNAME = { azul: 'Azul', verde: 'Verde', laranja: 'Laranja', vermelho: 'Vermelho', roxo: 'Roxo', rosa: 'Rosa', amarelo: 'Amarelo', petroleo: 'Petróleo', castanho: 'Castanho', grafite: 'Grafite' };
+const groupById = id => ((S && S.groups) || []).find(g => g.id === id);
+const inGroup = a => !!(a.group && groupById(a.group));
+const groupApps = id => S.apps.filter(a => a.group === id && !a.hidden);
+function railSeq() {
+  const seq = S.apps.filter(a => !a.hidden && !inGroup(a)).map(a => 'a:' + a.id);
+  (S.groups || []).slice().sort((x, y) => (x.pos || 0) - (y.pos || 0)).forEach(g => seq.splice(Math.max(1, Math.min(seq.length, g.pos == null ? seq.length : g.pos)), 0, 'g:' + g.id));
+  return seq;
+}
+function appItemHTML(a) {
     const on = S.openPanel === a.id || S.fullApp === a.id;
     let inner = a.icon === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>'
       : (ICON[a.icon] && typeof ICON[a.icon] === 'string' ? ICON[a.icon] : `<span class="letter">${esc((a.name || '?').charAt(0).toUpperCase())}</span>`);
     const tag = '';
     const label = `${a.name}${a.id === 'notas' && S.notasStatus === 'rec' ? ', a gravar' : a.id === 'notas' && S.notasStatus === 'busy' ? ', a transcrever' : ''}${a.badge ? ', ' + a.badge + ' por ler' : ''}${a.mode === 'full' ? ', abre em página inteira' : ''}`;
     const nst = a.id === 'notas' ? (S.notasStatus === 'rec' ? 'st-rec' : S.notasStatus === 'busy' ? 'st-busy' : '') : '';
-    h += `<div class="app-item ${a.id === 'apolo' ? 'apolo' : ''} ${on ? 'on' : ''} ${nst}" data-appid="${esc(a.id)}"><button class="app-btn" type="button" data-app="${esc(a.id)}" aria-label="${esc(label)}" title="${esc(a.name)} — clique direito para opções">${inner}${tag}</button>${a.badge ? `<span class="badge">${a.badge > 99 ? '99+' : a.badge}</span>` : ''}<span class="lbl">${esc(a.name)}</span></div>`;
+    return `<div class="app-item ${a.id === 'apolo' ? 'apolo' : ''} ${on ? 'on' : ''} ${nst}" data-appid="${esc(a.id)}"><button class="app-btn" type="button" data-app="${esc(a.id)}" aria-label="${esc(label)}" title="${esc(a.name)} — clique direito para opções">${inner}${tag}</button>${a.badge ? `<span class="badge">${a.badge > 99 ? '99+' : a.badge}</span>` : ''}<span class="lbl">${esc(a.name)}</span></div>`;
+}
+function groupItemHTML(g) {
+  const apps = groupApps(g.id);
+  const open = grpOpen === g.id, inside = apps.some(a => S.openPanel === a.id || S.fullApp === a.id);
+  const badge = apps.reduce((n, a) => n + (+a.badge || 0), 0);
+  const ic = ICON[g.icon] && typeof ICON[g.icon] === 'string' ? ICON[g.icon] : ICON.grid;
+  const nst = apps.some(a => a.id === 'notas') ? (S.notasStatus === 'rec' ? 'st-rec' : S.notasStatus === 'busy' ? 'st-busy' : '') : '';   // as Notas a gravar/transcrever veem-se também no grupo
+  return `<div class="app-item grp ${open ? 'open' : ''} ${inside ? 'inside' : ''} ${nst}" data-groupid="${esc(g.id)}" style="--g:${GCOL[g.color] || GCOL.azul}"><button class="app-btn" type="button" data-group="${esc(g.id)}" aria-label="${esc('Grupo ' + g.name + ', ' + apps.length + ' apps')}" title="${esc(g.name)} — ${apps.map(a => esc(a.name)).join(', ') || 'vazio'}">${ic}<i class="gcnt">${apps.length}</i>${badge ? `<span class="badge">${badge > 99 ? '99+' : badge}</span>` : ''}</button><span class="lbl">${esc(g.name)}</span></div>`;
+}
+let railKey = '';
+function renderRail() {
+  const key = JSON.stringify([S.apps, S.groups, S.openPanel, S.fullApp, S.notasStatus, grpOpen]);
+  if (key === railKey) return;
+  railKey = key;
+  // em cima: hora e data (fixas); no meio: as apps e os grupos (fazem scroll); em baixo: definições
+  let h = `<div class="rail-head"><div class="clock" aria-label="Hora"><b data-clock></b><span data-dshort></span></div></div>`;
+  h += '<div class="rail-apps" id="railApps">';
+  railSeq().forEach((tok, i) => {
+    const id = tok.slice(2);
+    if (tok[0] === 'g') { const g = groupById(id); if (g) h += groupItemHTML(g); }
+    else { const a = appById(id); if (a) h += appItemHTML(a); }
     if (i === 0) h += '<span class="rail-sep" aria-hidden="true"></span>';
   });
   h += `<div class="app-item"><button class="app-btn add" type="button" data-add-app aria-label="Juntar site como app ou extensão" title="Juntar">${ICON.plus}</button><span class="lbl">Juntar</span></div>`;
@@ -190,8 +248,11 @@ function renderRail() {
   tick();
 }
 $('#rail').addEventListener('click', e => {
+  const gb = e.target.closest('[data-group]');
+  if (gb) { if (grpOpen === gb.dataset.group) closeGroup(); else openGroup(gb.dataset.group); return; }
   const b = e.target.closest('[data-app],[data-add-app],[data-settings]');
   if (!b) return;
+  closeGroup();
   if (b.dataset.app) {
     const a = appById(b.dataset.app);
     if (a && !a.url) { if (ov.open) closeMosaic(); openSetupApp(a.id); return; }
@@ -204,47 +265,57 @@ $('#rail').addEventListener('click', e => {
   } else if (b.hasAttribute('data-add-app')) openAddApp();
   else openSettings();
 });
-/* Arrastar os ícones para mudar a ordem (com o rato, sem depender do arrastar do sistema) */
+/* Arrastar os ícones para mudar a ordem (com o rato, sem depender do arrastar do sistema).
+   Uma app largada no meio de um grupo entra nesse grupo. */
 let railDrag = null, suppressClick = false;
-const clearDrop = () => document.querySelectorAll('.app-item.drop-before,.app-item.drop-after,.app-item.dragging').forEach(x => x.classList.remove('drop-before', 'drop-after', 'dragging'));
-function railTarget(y) {
-  const items = [...document.querySelectorAll('.app-item[data-appid]')];
-  for (const it of items) { const r = it.getBoundingClientRect(); if (y < r.top + r.height / 2) return { it, after: false }; }
+const clearDrop = () => document.querySelectorAll('.app-item.drop-before,.app-item.drop-after,.app-item.dragging,.app-item.drop-in').forEach(x => x.classList.remove('drop-before', 'drop-after', 'dragging', 'drop-in'));
+const tokOf = it => it.dataset.groupid ? 'g:' + it.dataset.groupid : 'a:' + it.dataset.appid;
+function railTarget(y, dragTok) {
+  const items = [...document.querySelectorAll('#railApps .app-item[data-appid], #railApps .app-item[data-groupid]')];
+  for (const it of items) {
+    const r = it.getBoundingClientRect();
+    // por cima do meio de um grupo: entra no grupo (só apps)
+    if (dragTok && dragTok[0] === 'a' && it.dataset.groupid && y > r.top + r.height * 0.22 && y < r.bottom - r.height * 0.22) return { it, into: true };
+    if (y < r.top + r.height / 2) return { it, after: false };
+  }
   return items.length ? { it: items[items.length - 1], after: true } : null;
 }
 $('#rail').addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
-  const it = e.target.closest('.app-item[data-appid]'); if (!it) return;
-  railDrag = { id: it.dataset.appid, el: it, y0: e.clientY, active: false, pid: e.pointerId };
+  const it = e.target.closest('.app-item[data-appid], .app-item[data-groupid]'); if (!it) return;
+  railDrag = { tok: tokOf(it), el: it, y0: e.clientY, active: false, pid: e.pointerId };
 });
 window.addEventListener('pointermove', e => {
   if (!railDrag) return;
   if (!railDrag.active) {
     if (Math.abs(e.clientY - railDrag.y0) < 6) return;
-    railDrag.active = true; railDrag.el.classList.add('dragging');
+    railDrag.active = true; railDrag.el.classList.add('dragging'); closeGroup();
     try { $('#rail').setPointerCapture(railDrag.pid); } catch (_) { /* ok */ }
   }
-  const t = railTarget(e.clientY);
-  document.querySelectorAll('.app-item.drop-before,.app-item.drop-after').forEach(x => x.classList.remove('drop-before', 'drop-after'));
-  if (t && t.it !== railDrag.el) t.it.classList.add(t.after ? 'drop-after' : 'drop-before');
+  const t = railTarget(e.clientY, railDrag.tok);
+  document.querySelectorAll('.app-item.drop-before,.app-item.drop-after,.app-item.drop-in').forEach(x => x.classList.remove('drop-before', 'drop-after', 'drop-in'));
+  if (t && t.it !== railDrag.el) t.it.classList.add(t.into ? 'drop-in' : t.after ? 'drop-after' : 'drop-before');
 });
 window.addEventListener('pointerup', e => {
   if (!railDrag) return;
   const d = railDrag; railDrag = null;
   if (!d.active) return;
   suppressClick = true; setTimeout(() => { suppressClick = false; }, 50);
-  const t = railTarget(e.clientY);
+  const t = railTarget(e.clientY, d.tok);
   clearDrop();
   if (!t || t.it === d.el) return;
-  const ids = S.apps.map(a => a.id).filter(id => id !== d.id);
-  let i = ids.indexOf(t.it.dataset.appid);
-  if (i < 0) i = ids.length; else if (t.after) i += 1;
-  ids.splice(i, 0, d.id);
-  Z.invoke('app:reorder', ids);
+  if (t.into) { const g = groupById(t.it.dataset.groupid), a = appById(d.tok.slice(2)); Z.invoke('app:setGroup', d.tok.slice(2), t.it.dataset.groupid); if (g && a) toast(`${a.name} passou para o grupo ${g.name}`); return; }
+  const seq = railSeq().filter(x => x !== d.tok);
+  let i = seq.indexOf(tokOf(t.it));
+  if (i < 0) i = seq.length; else if (t.after) i += 1;
+  seq.splice(Math.max(1, i), 0, d.tok);   // o Apolo fica sempre em primeiro
+  Z.invoke('rail:reorder', seq);
 });
 $('#rail').addEventListener('click', e => { if (suppressClick) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
 $('#rail').addEventListener('dragstart', e => e.preventDefault());
 $('#rail').addEventListener('contextmenu', e => {
+  const gb = e.target.closest('[data-group]');
+  if (gb) { e.preventDefault(); closeGroup(); Z.invoke('group:menu', gb.dataset.group); return; }
   const b = e.target.closest('[data-app]');
   if (b) { e.preventDefault(); Z.invoke('app:menu', b.dataset.app); }
 });
@@ -1200,7 +1271,7 @@ let coverShot = null;
 function showCover(on) {
   // a imagem da página só serve por baixo do campo de endereço de cima e do menu de partilha
   // (nunca na pesquisa da página principal, que é a própria interface)
-  const cover = (shareOpen || (on && sug.input === $('#addr'))) && coverShot !== null;
+  const cover = (shareOpen || !!grpOpen || (on && sug.input === $('#addr'))) && coverShot !== null;
   const slot = $('#pageSlot'); let img = $('#coverImg');
   if (cover && coverShot) {
     if (!img) { img = document.createElement('img'); img.id = 'coverImg'; img.className = 'cover'; img.alt = ''; slot.appendChild(img); }
@@ -1291,6 +1362,7 @@ Z.on('ui-command', c => {
   if (c.cmd === 'find') openFind();
   if (c.cmd === 'mosaic') ov.open ? closeMosaic() : openMosaic(false);
   if (c.cmd === 'edit-app') openEditApp(c.id);
+  if (c.cmd === 'edit-group') openGroupEditor(c.id || '', c.app || '');
   if (c.cmd === 'mosaic-close') closeMosaic();
   if (c.cmd === 'new-space-with') { if (!ov.open) openMosaic(false); ov.addingSpace = true; ov.moveAfterAdd = c.id; renderZones(); }
   if (c.cmd === 'share') { shareOpen ? closeShare() : openShare(); }
@@ -1698,9 +1770,134 @@ $('#modalWrap').addEventListener('mousedown', e => { if (e.target.id === 'modalW
 const modalHead = t => `<div class="m-head"><h2>${esc(t)}</h2><button class="nb" type="button" data-mclose aria-label="Fechar">${ICON.x}</button></div>`;
 $('#modal').addEventListener('click', e => { if (e.target.closest('[data-mclose]')) closeModal(); });
 
-const ICON_CHOICES = [['', 'Letra'], ['mail', 'Email'], ['pmail', 'Email seguro'], ['wa', 'Conversa'], ['cal', 'Calendário'], ['notion', 'Documento'], ['work', 'Trabalho'], ['globe', 'Web'], ['star', 'Favorito'], ['mic', 'Áudio'], ['play', 'Vídeo'], ['music', 'Música'], ['pluto', 'Planeta'], ['apolo', 'Sol'], ['radar', 'Radar'], ['zoom', 'Zoom']];
-function iconPickerHTML(cur, name) {
-  return `<div class="field"><span class="lab">Ícone</span><div class="icon-pick" id="iconPick" role="radiogroup" aria-label="Ícone">${ICON_CHOICES.map(([k, l]) => `<button type="button" role="radio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-icon="${k}" title="${l}" aria-label="${l}">${k === '' ? `<span class="letter">${esc((name || 'A').charAt(0).toUpperCase())}</span>` : k === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>' : ICON[k]}</button>`).join('')}</div></div>`;
+/* ---------- o quadrado de um grupo (abre à direita da barra) ---------- */
+let grpOpen = null;
+const grpPop = document.createElement('div'); grpPop.id = 'grpPop'; grpPop.className = 'grppop'; grpPop.hidden = true; grpPop.setAttribute('role', 'dialog'); document.body.appendChild(grpPop);
+function renderGroupPop() {
+  const g = groupById(grpOpen); if (!g) { closeGroup(); return; }
+  const apps = groupApps(g.id);
+  grpPop.style.setProperty('--g', GCOL[g.color] || GCOL.azul);
+  grpPop.innerHTML = `<i class="garrow"></i><div class="gp-h"><span class="gp-i">${ICON[g.icon] || ICON.grid}</span><b>${esc(g.name)}</b><span class="sp"></span><button class="gp-e" type="button" data-gedit title="Editar o grupo" aria-label="Editar o grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button></div>
+    <div class="gp-g">${apps.map(a => appItemHTML(a)).join('')}<div class="app-item"><button class="app-btn add" type="button" data-gadd title="Juntar apps a este grupo">${ICON.plus}</button><span class="lbl">Juntar</span></div></div>
+    ${apps.length ? '<p class="gp-hint">Arrasta uma app para fora para a tirar do grupo</p>' : '<p class="gp-hint">Grupo vazio: carrega em Juntar, ou arrasta apps da barra para cima do grupo.</p>'}`;
+  placeGroupPop();
+}
+function placeGroupPop() {
+  const btn = document.querySelector(`#rail [data-group="${CSS.escape(grpOpen)}"]`); if (!btn) return;
+  const b = btn.getBoundingClientRect(), rail = $('#rail').getBoundingClientRect();
+  const h = grpPop.offsetHeight, top = Math.max(8, Math.min(innerHeight - h - 8, b.top + b.height / 2 - 34));
+  grpPop.style.left = (rail.right + 10) + 'px'; grpPop.style.top = top + 'px';
+  grpPop.querySelector('.garrow').style.top = Math.max(14, Math.min(h - 28, b.top + b.height / 2 - top - 7)) + 'px';
+}
+function openGroup(id) {
+  if (ov.open) closeMosaic();
+  if (shareOpen) closeShare();
+  grpOpen = id; railKey = ''; renderRail();
+  grpPop.hidden = false; renderGroupPop();
+  coverShot = null; showCover(true);
+  Z.invoke('page:snapshot').then(img => { if (grpOpen) { coverShot = img || ''; showCover(true); } });
+}
+function closeGroup() {
+  if (!grpOpen) return;
+  grpOpen = null; grpPop.hidden = true; grpPop.innerHTML = '';
+  railKey = ''; if (S) renderRail();
+  coverShot = null; showCover(false);
+}
+grpPop.addEventListener('click', e => {
+  if (gpDragged) return;
+  const id = grpOpen;
+  if (e.target.closest('[data-gedit]')) { closeGroup(); openGroupEditor(id); return; }
+  if (e.target.closest('[data-gadd]')) { closeGroup(); openGroupEditor(id); return; }
+  const b = e.target.closest('[data-app]'); if (!b) return;
+  closeGroup();
+  const a = appById(b.dataset.app);
+  if (a && !a.url) { openSetupApp(a.id); return; }
+  Z.invoke('app:open', b.dataset.app);
+});
+grpPop.addEventListener('contextmenu', e => { const b = e.target.closest('[data-app]'); if (b) { e.preventDefault(); Z.invoke('app:menu', b.dataset.app); } });
+document.addEventListener('mousedown', e => { if (grpOpen && !e.target.closest('#grpPop') && !e.target.closest('[data-group]')) closeGroup(); });
+document.addEventListener('keydown', e => { if (grpOpen && e.key === 'Escape') { e.preventDefault(); closeGroup(); } });
+window.addEventListener('resize', () => { if (grpOpen) placeGroupPop(); });
+// tirar uma app do grupo: arrastá-la para fora do quadrado (se for largada na barra, fica nesse sítio)
+let gpDrag = null, gpDragged = false;
+grpPop.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  const it = e.target.closest('.app-item[data-appid]'); if (!it) return;
+  gpDrag = { id: it.dataset.appid, el: it, x0: e.clientX, y0: e.clientY, on: false, ghost: null };
+});
+window.addEventListener('pointermove', e => {
+  if (!gpDrag) return;
+  if (!gpDrag.on) {
+    if (Math.hypot(e.clientX - gpDrag.x0, e.clientY - gpDrag.y0) < 7) return;
+    gpDrag.on = true; gpDrag.el.classList.add('dragging');
+    const gh = gpDrag.el.querySelector('.app-btn').cloneNode(true); gh.className = 'app-btn gp-ghost'; document.body.appendChild(gh); gpDrag.ghost = gh;
+  }
+  gpDrag.ghost.style.left = (e.clientX - 25) + 'px'; gpDrag.ghost.style.top = (e.clientY - 25) + 'px';
+  const out = !e.target.closest || !document.elementFromPoint(e.clientX, e.clientY)?.closest('#grpPop');
+  grpPop.classList.toggle('dropping-out', out);
+});
+window.addEventListener('pointerup', e => {
+  if (!gpDrag) return;
+  const d = gpDrag; gpDrag = null;
+  if (!d.on) return;
+  gpDragged = true; setTimeout(() => { gpDragged = false; }, 60);
+  if (d.ghost) d.ghost.remove();
+  d.el.classList.remove('dragging'); grpPop.classList.remove('dropping-out');
+  const over = document.elementFromPoint(e.clientX, e.clientY);
+  if (over && over.closest('#grpPop')) return;
+  const a = appById(d.id), g = groupById(a && a.group);
+  closeGroup();
+  Z.invoke('app:setGroup', d.id, '').then(() => {
+    // largada na barra: fica nesse lugar
+    const rr = $('#rail').getBoundingClientRect();
+    if (e.clientX >= rr.left && e.clientX <= rr.right) {
+      setTimeout(() => {
+        const t = railTarget(e.clientY, ''); if (!t) return;
+        const seq = railSeq().filter(x => x !== 'a:' + d.id);
+        let i = seq.indexOf(tokOf(t.it)); if (i < 0) i = seq.length; else if (t.after) i += 1;
+        seq.splice(Math.max(1, i), 0, 'a:' + d.id); Z.invoke('rail:reorder', seq);
+      }, 80);
+    }
+  });
+  if (a && g) toast(`${a.name} saiu do grupo ${g.name}`);
+});
+
+/* ---------- criar / editar um grupo ---------- */
+function openGroupEditor(id, withApp) {
+  const g = id ? groupById(id) : null;
+  const color = g ? g.color : Object.keys(GCOL)[(S.groups || []).length % 10];
+  const icon = g ? g.icon : 'grid';
+  const chosen = new Set(g ? groupApps(g.id).map(a => a.id) : (withApp ? [withApp] : []));
+  const apps = S.apps.filter(a => !a.hidden && a.id !== 'apolo');
+  openModal('group', `${modalHead(g ? 'Editar o grupo' : 'Grupo novo')}
+    <form id="grpForm" class="section" autocomplete="off">
+      <div class="field"><label for="grName">Nome</label><input class="inp" id="grName" type="text" maxlength="30" value="${esc(g ? g.name : '')}" placeholder="Por exemplo: Notícias, Produção, Pessoal"></div>
+      <div class="field"><span class="lab">Cor</span><div class="gcols" id="grCols">${Object.keys(GCOL).map(k => `<button type="button" class="gc ${k === color ? 'on' : ''}" data-gc="${k}" title="${GNAME[k]}" aria-label="${GNAME[k]}" style="background:${GCOL[k]}"></button>`).join('')}</div></div>
+      ${iconPickerHTML(icon, '', true)}
+      <div class="field"><span class="lab">Apps</span><div class="gapps" id="grApps">${apps.map(a => { const other = a.group && a.group !== (g && g.id) && groupById(a.group); return `<button type="button" class="gchip ${chosen.has(a.id) ? 'on' : ''}" data-ga="${esc(a.id)}" title="${other ? 'Agora no grupo ' + esc(other.name) + ' — passa para este' : ''}">${chosen.has(a.id) ? '✓ ' : ''}${esc(a.name)}${other ? ` <small>· ${esc(other.name)}</small>` : ''}</button>`; }).join('')}</div>
+        <p class="hint">Cada app só está num grupo; escolher aqui uma app de outro grupo passa-a para este. Também podes arrastar apps da barra para cima do grupo, ou para fora do quadrado.</p></div>
+      <p class="err" id="grErr" hidden></p>
+      <div class="row-btns">${g ? '<button class="btn ghost danger" type="button" id="grDel">Desfazer o grupo</button><span style="flex:1"></span>' : ''}<button class="btn" type="submit">${g ? 'Guardar' : 'Criar grupo'}</button></div>
+    </form>`, 'wide');
+  const paint = () => { const c = GCOL[$('#grCols .on').dataset.gc]; $('#grpForm').style.setProperty('--g', c); };
+  $('#grCols').addEventListener('click', e => { const b = e.target.closest('[data-gc]'); if (!b) return; $('#grCols').querySelectorAll('.gc').forEach(x => x.classList.toggle('on', x === b)); paint(); });
+  $('#grApps').addEventListener('click', e => { const b = e.target.closest('[data-ga]'); if (!b) return; b.classList.toggle('on'); const a = appById(b.dataset.ga); b.firstChild.textContent = (b.classList.contains('on') ? '✓ ' : '') + a.name; });
+  wireIconPicker(); paint();
+  if (g) $('#grDel').addEventListener('click', async () => { const b = $('#grDel'); if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Desfazer mesmo? (as apps voltam à barra)'; return; } await Z.invoke('group:remove', g.id); closeModal(); toast(`Grupo ${g.name} desfeito`); });
+  $('#grpForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const r = await Z.invoke('group:save', g ? g.id : '', { name: $('#grName').value, color: $('#grCols .on').dataset.gc, icon: pickedIcon() || 'grid', apps: [...document.querySelectorAll('#grApps .gchip.on')].map(b => b.dataset.ga) });
+    if (!r || !r.ok) { const er = $('#grErr'); er.textContent = (r && r.error) || 'Não consegui guardar o grupo.'; er.hidden = false; return; }
+    closeModal(); toast(g ? 'Grupo atualizado' : 'Grupo criado');
+  });
+}
+
+const ICON_CHOICES = [['', 'Letra'], ['mail', 'Email'], ['pmail', 'Email seguro'], ['wa', 'Conversa'], ['cal', 'Calendário'], ['notion', 'Documento'], ['work', 'Trabalho'], ['globe', 'Web'], ['star', 'Favorito'], ['mic', 'Áudio'], ['play', 'Vídeo'], ['music', 'Música'], ['pluto', 'Planeta'], ['apolo', 'Sol'], ['radar', 'Radar'], ['zoom', 'Zoom'],
+  ['news', 'Notícias'], ['podcast', 'Podcast'], ['headph', 'Auscultadores'], ['tv', 'Televisão'], ['film', 'Filme'], ['camera', 'Câmara'], ['image', 'Imagem'], ['note', 'Nota'], ['book', 'Livro'], ['folder', 'Pasta'], ['check', 'Tarefas'],
+  ['chart', 'Gráfico'], ['money', 'Dinheiro'], ['cart', 'Compras'], ['bag', 'Loja'], ['home', 'Casa'], ['plane', 'Viagem'], ['map', 'Mapa'], ['pin', 'Local'], ['users', 'Pessoas'], ['chatb', 'Mensagens'], ['bell', 'Avisos'],
+  ['bolt', 'Raio'], ['spark', 'IA'], ['code', 'Código'], ['nuvem', 'Nuvem'], ['lock', 'Cadeado'], ['heart', 'Coração'], ['ball', 'Futebol'], ['game', 'Jogos'], ['coffee', 'Café'], ['wrench', 'Ferramentas'], ['grid', 'Grupo'], ['lupa', 'Procurar']];
+function iconPickerHTML(cur, name, noLetter) {
+  return `<div class="field"><span class="lab">Ícone</span><div class="icon-pick" id="iconPick" role="radiogroup" aria-label="Ícone">${ICON_CHOICES.filter(([k]) => !(noLetter && (k === '' || k === 'cal'))).map(([k, l]) => `<button type="button" role="radio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-icon="${k}" title="${l}" aria-label="${l}">${k === '' ? `<span class="letter">${esc((name || 'A').charAt(0).toUpperCase())}</span>` : k === 'cal' ? '<span class="cal"><small data-dday></small><b data-dnum></b></span>' : ICON[k]}</button>`).join('')}</div></div>`;
 }
 function wireIconPicker() {
   const box = $('#iconPick'); if (!box) return;
