@@ -249,7 +249,7 @@ function renderRail() {
 }
 $('#rail').addEventListener('click', e => {
   const gb = e.target.closest('[data-group]');
-  if (gb) { if (grpOpen === gb.dataset.group) closeGroup(); else openGroup(gb.dataset.group); return; }
+  if (gb) { clearTimeout(grpHoverT); grpHoverT = null; if (grpOpen === gb.dataset.group) { if (grpHover) grpHover = false; else closeGroup(); } else { openGroup(gb.dataset.group); grpHover = false; } return; }
   const b = e.target.closest('[data-app],[data-add-app],[data-settings]');
   if (!b) return;
   closeGroup();
@@ -1797,7 +1797,29 @@ function openGroup(id) {
   coverShot = null; showCover(true);
   Z.invoke('page:snapshot').then(img => { if (grpOpen) { coverShot = img || ''; showCover(true); } });
 }
+// abrir o grupo ao passar o rato (sem carregar); fecha sozinho quando o rato sai do grupo e do quadrado
+// (se for aberto com um clique, fica aberto até clicar fora, Esc ou outro grupo)
+let grpHover = false, grpHoverT = null, grpHoverId = null, grpLeaveT = null;
+document.addEventListener('mousemove', e => {
+  const t = e.target instanceof Element ? e.target : null;
+  if ((railDrag && railDrag.active) || (gpDrag && gpDrag.on) || modal) { clearTimeout(grpHoverT); grpHoverT = null; clearTimeout(grpLeaveT); grpLeaveT = null; return; }
+  const gb = t && t.closest('#rail [data-group]'), inPop = t && t.closest('#grpPop');
+  if (gb) {
+    clearTimeout(grpLeaveT); grpLeaveT = null;
+    const id = gb.dataset.group;
+    if (grpOpen === id) return;
+    if (grpHoverT && grpHoverId === id) return;
+    clearTimeout(grpHoverT); grpHoverId = id;
+    grpHoverT = setTimeout(() => { grpHoverT = null; if (modal || (railDrag && railDrag.active)) return; openGroup(id); grpHover = true; }, grpOpen ? 120 : 220);
+    return;
+  }
+  clearTimeout(grpHoverT); grpHoverT = null;
+  if (inPop) { clearTimeout(grpLeaveT); grpLeaveT = null; return; }
+  if (grpOpen && grpHover && !grpLeaveT) grpLeaveT = setTimeout(() => { grpLeaveT = null; if (grpHover && !(gpDrag && gpDrag.on)) closeGroup(); }, 380);
+});
+document.documentElement.addEventListener('mouseleave', () => { clearTimeout(grpHoverT); grpHoverT = null; if (grpOpen && grpHover && !grpLeaveT) grpLeaveT = setTimeout(() => { grpLeaveT = null; if (grpHover) closeGroup(); }, 380); });
 function closeGroup() {
+  grpHover = false; clearTimeout(grpLeaveT); grpLeaveT = null;
   if (!grpOpen) return;
   grpOpen = null; grpPop.hidden = true; grpPop.innerHTML = '';
   railKey = ''; if (S) renderRail();
