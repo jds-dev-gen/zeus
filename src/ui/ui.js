@@ -1779,7 +1779,7 @@ function renderGroupPop() {
   grpPop.style.setProperty('--g', GCOL[g.color] || GCOL.azul);
   grpPop.innerHTML = `<i class="garrow"></i><div class="gp-h"><span class="gp-i">${ICON[g.icon] || ICON.grid}</span><b>${esc(g.name)}</b><span class="sp"></span><button class="gp-e" type="button" data-gedit title="Editar o grupo" aria-label="Editar o grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button></div>
     <div class="gp-g">${apps.map(a => appItemHTML(a)).join('')}<div class="app-item"><button class="app-btn add" type="button" data-gadd title="Juntar apps a este grupo">${ICON.plus}</button><span class="lbl">Juntar</span></div></div>
-    ${apps.length ? '<p class="gp-hint">Arrasta uma app para fora para a tirar do grupo</p>' : '<p class="gp-hint">Grupo vazio: carrega em Juntar, ou arrasta apps da barra para cima do grupo.</p>'}`;
+    ${apps.length ? '<p class="gp-hint">Arrasta as apps para mudar a ordem, ou para fora para as tirar do grupo</p>' : '<p class="gp-hint">Grupo vazio: carrega em Juntar, ou arrasta apps da barra para cima do grupo.</p>'}`;
   placeGroupPop();
 }
 function placeGroupPop() {
@@ -1833,9 +1833,29 @@ window.addEventListener('pointermove', e => {
     const gh = gpDrag.el.querySelector('.app-btn').cloneNode(true); gh.className = 'app-btn gp-ghost'; document.body.appendChild(gh); gpDrag.ghost = gh;
   }
   gpDrag.ghost.style.left = (e.clientX - 25) + 'px'; gpDrag.ghost.style.top = (e.clientY - 25) + 'px';
-  const out = !e.target.closest || !document.elementFromPoint(e.clientX, e.clientY)?.closest('#grpPop');
+  const out = !document.elementFromPoint(e.clientX, e.clientY)?.closest('#grpPop');
   grpPop.classList.toggle('dropping-out', out);
+  if (!out) gpReorderAt(e.clientX, e.clientY);
 });
+// mudar a ordem dentro do quadrado: o lugar da app arrastada abre-se onde está o rato e as outras deslizam
+function gpReorderAt(x, y) {
+  const grid = grpPop.querySelector('.gp-g'), me = gpDrag.el;
+  const items = [...grid.querySelectorAll('.app-item[data-appid]')].filter(el => el !== me);
+  if (!items.length) return;
+  let best = null, bd = Infinity;
+  items.forEach(el => { const r = el.getBoundingClientRect(), d = Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2)); if (d < bd) { bd = d; best = el; } });
+  const r = best.getBoundingClientRect(), after = x > r.left + r.width / 2;
+  const ref = after ? best.nextElementSibling : best;
+  if (ref === me || (after ? me.previousElementSibling === best : me.nextElementSibling === best)) return;
+  const all = [...grid.querySelectorAll('.app-item')], before = new Map(all.map(el => [el, el.getBoundingClientRect()]));
+  grid.insertBefore(me, ref);
+  all.forEach(el => {
+    if (el === me) return;
+    const a = before.get(el), b = el.getBoundingClientRect(), dx = a.left - b.left, dy = a.top - b.top;
+    if (dx || dy) el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  });
+  gpDrag.moved = true;
+}
 window.addEventListener('pointerup', e => {
   if (!gpDrag) return;
   const d = gpDrag; gpDrag = null;
@@ -1844,7 +1864,17 @@ window.addEventListener('pointerup', e => {
   if (d.ghost) d.ghost.remove();
   d.el.classList.remove('dragging'); grpPop.classList.remove('dropping-out');
   const over = document.elementFromPoint(e.clientX, e.clientY);
-  if (over && over.closest('#grpPop')) return;
+  if (over && over.closest('#grpPop')) {
+    if (d.moved) {
+      const order = [...grpPop.querySelectorAll('.gp-g .app-item[data-appid]')].map(el => 'a:' + el.dataset.appid);
+      const ids = order.map(t => t.slice(2));
+      // ordem local já, para o quadrado não saltar enquanto o estado não chega
+      const moved = ids.map(id => appById(id)).filter(Boolean);
+      S.apps = S.apps.filter(a => !ids.includes(a.id)).concat(moved);
+      Z.invoke('rail:reorder', railSeq().concat(order));
+    }
+    return;
+  }
   const a = appById(d.id), g = groupById(a && a.group);
   closeGroup();
   Z.invoke('app:setGroup', d.id, '').then(() => {
