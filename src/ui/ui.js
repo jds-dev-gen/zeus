@@ -1778,7 +1778,7 @@ function renderGroupPop() {
   const apps = groupApps(g.id);
   grpPop.style.setProperty('--g', GCOL[g.color] || GCOL.azul);
   grpPop.innerHTML = `<i class="garrow"></i><div class="gp-h"><span class="gp-i">${ICON[g.icon] || ICON.grid}</span><b>${esc(g.name)}</b><span class="sp"></span><button class="gp-e" type="button" data-gedit title="Editar o grupo" aria-label="Editar o grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button></div>
-    <div class="gp-g">${apps.map(a => appItemHTML(a)).join('')}<div class="app-item"><button class="app-btn add" type="button" data-gadd title="Juntar apps a este grupo">${ICON.plus}</button><span class="lbl">Juntar</span></div></div>
+    <div class="gp-g">${apps.map(a => appItemHTML(a)).join('')}<div class="app-item"><button class="app-btn add" type="button" data-gadd title="Juntar uma app nova ou uma que já tens">${ICON.plus}</button><span class="lbl">Juntar</span></div></div>
     ${apps.length ? '<p class="gp-hint">Arrasta as apps para mudar a ordem, ou para fora para as tirar do grupo</p>' : '<p class="gp-hint">Grupo vazio: carrega em Juntar, ou arrasta apps da barra para cima do grupo.</p>'}`;
   placeGroupPop();
 }
@@ -1807,7 +1807,7 @@ grpPop.addEventListener('click', e => {
   if (gpDragged) return;
   const id = grpOpen;
   if (e.target.closest('[data-gedit]')) { closeGroup(); openGroupEditor(id); return; }
-  if (e.target.closest('[data-gadd]')) { closeGroup(); openGroupEditor(id); return; }
+  if (e.target.closest('[data-gadd]')) { closeGroup(); openAddApp(id); return; }
   const b = e.target.closest('[data-app]'); if (!b) return;
   closeGroup();
   const a = appById(b.dataset.app);
@@ -1950,9 +1950,11 @@ function wireSessionSeg() {
 }
 const pickedIsolated = () => { const b = $('#sessSeg .on'); return b ? b.dataset.s === '1' : true; };
 
-function openAddApp() {
-  openModal('add', `${modalHead('Juntar ao Zeus')}
-    <div class="seg addkind" id="aaKind"><button type="button" class="on" data-k="app">${ICON.globe}<span>App ou site</span></button><button type="button" data-k="group">${ICON.grid}<span>Grupo de apps</span></button></div>
+function openAddApp(gid) {
+  const grp = gid && groupById(gid);
+  openModal('add', `${modalHead(grp ? 'Juntar ao grupo ' + grp.name : 'Juntar ao Zeus')}
+    ${grp ? `<div class="seg addkind" id="aaKind"><button type="button" class="on" data-k="app">${ICON.globe}<span>App ou site nova</span></button><button type="button" data-k="have">${ICON.grid}<span>Apps que já tens</span></button></div>`
+      : `<div class="seg addkind" id="aaKind"><button type="button" class="on" data-k="app">${ICON.globe}<span>App ou site</span></button><button type="button" data-k="group">${ICON.grid}<span>Grupo de apps</span></button></div>`}
     <form id="addAppForm" class="section" autocomplete="off">
       <span class="lbl-mono">Site como app</span>
       <div class="field"><label for="aaUrl">Endereço</label><input class="inp" id="aaUrl" type="text" placeholder="drive.proton.me" required spellcheck="false"></div>
@@ -1961,22 +1963,22 @@ function openAddApp() {
       ${sessionFieldHTML(true, false)}
       ${iconPickerHTML('', 'A')}
       <p class="err" id="aaErr" hidden></p>
-      <div class="row-btns"><button class="btn" type="submit">Juntar à barra</button></div>
+      <div class="row-btns"><button class="btn" type="submit">${grp ? 'Juntar ao grupo' : 'Juntar à barra'}</button></div>
     </form>
-    <div class="set-sec"><h3>Extensões do Chrome</h3>
+    ${grp ? '' : `<div class="set-sec"><h3>Extensões do Chrome</h3>
       <p class="hint">Instala-as diretamente da Chrome Web Store, com o botão “Adicionar ao Chrome”. Nem todas funcionam no Zeus; as mais comuns costumam funcionar.</p>
       <div class="row-btns"><button class="btn ghost" type="button" id="aaStore">Abrir a Chrome Web Store</button><button class="btn ghost" type="button" id="aaLoadExt">Carregar de uma pasta ou .zip…</button></div>
-    </div>`);
+    </div>`}`);
   $('#aaMode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) $('#aaMode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); });
-  $('#aaKind').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b && b.dataset.k === 'group') openGroupEditor('', '', 'add'); });
-  $('#aaStore').addEventListener('click', () => { closeModal(); Z.invoke('ext:store'); });
-  $('#aaLoadExt').addEventListener('click', loadExtFromFolder);
+  $('#aaKind').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (!b) return; if (b.dataset.k === 'group') openGroupEditor('', '', 'add'); if (b.dataset.k === 'have') openGroupEditor(gid); });
+  if (!grp) { $('#aaStore').addEventListener('click', () => { closeModal(); Z.invoke('ext:store'); }); $('#aaLoadExt').addEventListener('click', loadExtFromFolder); }
   wireSessionSeg(); wireIconPicker();
   $('#aaName').addEventListener('input', e => { const l = document.querySelector('#iconPick [data-icon=""] .letter'); if (l) l.textContent = (e.target.value.trim() || 'A').charAt(0).toUpperCase(); });
   $('#addAppForm').addEventListener('submit', async e => {
     e.preventDefault();
     const r = await Z.invoke('app:add', { url: $('#aaUrl').value, name: $('#aaName').value.trim(), mode: $('#aaMode .on').dataset.m, isolated: pickedIsolated(), icon: pickedIcon() });
     if (!r.ok) { const er = $('#aaErr'); er.textContent = r.error; er.hidden = false; return; }
+    if (grp) { const nm = $('#aaName').value.trim() || 'a app'; await Z.invoke('app:setGroup', r.id, gid); closeModal(); toast(`Juntaste ${nm} ao grupo ${grp.name}`); Z.invoke('app:open', r.id); return; }
     closeModal(); toast('Juntaste uma app à barra'); Z.invoke('app:open', r.id);
   });
 }
