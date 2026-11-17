@@ -452,15 +452,22 @@ function placeCaretStart() { doc.focus(); const r = document.createRange(); r.se
 window.addEventListener('beforeunload', () => { if (dirty) save(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); else load(); });
 
+// título por defeito: "17/11/26 18:32 Nova nota" (pedido do João); fica selecionado "Nova nota" para escrever por cima
+const NEW_LABEL = 'Nova nota';
+function stampTitle(d = new Date()) {
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${p(d.getFullYear() % 100)} ${p(d.getHours())}:${p(d.getMinutes())} ${NEW_LABEL}`;
+}
 async function newNote(title, html) {
   await flush();
   const folder = view.startsWith('f:') ? view.slice(2) : '';
-  const id = await Z.create(folder, title || '', html || '');
+  const auto = !title, t = title || stampTitle();
+  const id = await Z.create(folder, t, html || '');
   if (view === 'trash') leaveTrash();
   if (view === 'fav' || view === 'recent' || view === 'trash') view = 'all';
   await load();
   await openNote(id);
-  if (!title) { titleEl.select(); titleEl.focus(); }
+  if (auto) { titleEl.focus(); const i = titleEl.value.lastIndexOf(NEW_LABEL); if (i > -1) titleEl.setSelectionRange(i, i + NEW_LABEL.length); else titleEl.select(); }
   return id;
 }
 $('#newNote').addEventListener('click', () => newNote());
