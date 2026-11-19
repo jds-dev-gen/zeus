@@ -2108,7 +2108,7 @@ async function openSettings() {
     </div>
     <div class="set-sec"><h3>Grupos de apps</h3><p class="hint">Cada grupo ocupa um lugar na barra e abre um quadrado com as suas apps. Muda aqui as apps de grupo, ou arrasta-as na barra.</p><div class="list" id="setGroups"></div>
       <div class="row-btns"><button class="btn ghost" type="button" id="setAddGroup">Grupo novo</button></div></div>
-    <div class="set-sec"><h3>Apps na barra</h3><div class="list" id="setApps"></div>
+    <div class="set-sec fold" id="setAppsSec"><button type="button" class="fold-h" id="setAppsFold" aria-expanded="false"><h3>Apps na barra</h3><span class="fold-n" id="setAppsN"></span><span class="fold-t">Mostrar todas</span><svg class="fold-c" viewBox="0 0 16 16" width="14" height="14"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><input class="inp fold-q" id="setAppsQ" type="search" placeholder="Procurar uma app…" autocomplete="off"><div class="list" id="setApps"></div>
       <div class="row-btns"><button class="btn ghost" type="button" id="setAddApp">Juntar app</button><button class="btn ghost" type="button" id="setSiteIcons" title="As apps de sites passam a usar o ícone do próprio site (as apps do Zeus, como as Notas, ficam iguais)">Usar o ícone de cada site</button></div><p class="hint" id="setSiteIconsMsg" hidden></p></div>
     <div class="set-sec"><h3>Extensões do Chrome</h3><div class="list" id="setExt"><p class="hint">A carregar…</p></div>
       <div class="row-btns"><button class="btn ghost" type="button" id="setStore">Abrir a Chrome Web Store</button><button class="btn ghost" type="button" id="setLoadExt">Carregar de uma pasta ou .zip…</button></div>
@@ -2178,6 +2178,8 @@ async function openSettings() {
   $('#updInstall').addEventListener('click', installUpdate);
   $('#repoForm').addEventListener('submit', e => { e.preventDefault(); Z.invoke('settings:set', { updateRepo: $('#repoInput').value }); toast('Repositório guardado'); });
   $('#setAddApp').addEventListener('click', () => openAddApp());
+  $('#setAppsFold').addEventListener('click', () => { setAppsFold(!appsOpen); if (appsOpen) setTimeout(() => { const q = $('#setAppsQ'); if (q && $('#setApps').children.length > 8) q.focus({ preventScroll: true }); }, 0); });
+  $('#setAppsQ').addEventListener('input', refreshSettingsApps);
   $('#setSiteIcons').addEventListener('click', async e => {
     const b = e.currentTarget, msg = $('#setSiteIconsMsg');
     b.disabled = true; b.textContent = 'A procurar os ícones…';
@@ -2234,10 +2236,26 @@ $('#modal').addEventListener('click', async e => {
   const gd = e.target.closest('[data-gdel]');
   if (gd) { if (!gd.dataset.sure) { gd.dataset.sure = '1'; gd.textContent = 'Desfazer mesmo?'; setTimeout(() => { if (gd.isConnected) { delete gd.dataset.sure; gd.textContent = 'Desfazer'; } }, 4000); return; } Z.invoke('group:remove', gd.dataset.gdel); }
 });
+// "Apps na barra" fecha-se (por defeito fechada; a escolha fica lembrada) e tem pesquisa quando aberta
+let appsOpen = false;
+try { appsOpen = localStorage.getItem('zeus.setAppsOpen') === '1'; } catch (e) { /* ok */ }
+function setAppsFold(open) {
+  appsOpen = !!open; try { localStorage.setItem('zeus.setAppsOpen', appsOpen ? '1' : ''); } catch (e) { /* ok */ }
+  const sec = $('#setAppsSec'); if (!sec) return;
+  sec.classList.toggle('open', appsOpen);
+  $('#setAppsFold').setAttribute('aria-expanded', appsOpen);
+  $('#setAppsFold .fold-t').textContent = appsOpen ? 'Esconder' : 'Mostrar todas';
+  if (!appsOpen) { $('#setAppsQ').value = ''; refreshSettingsApps(); }
+}
 function refreshSettingsApps() {
   refreshSettingsGroups();
   const box = $('#setApps'); if (!box) return;
-  box.innerHTML = S.apps.filter(a => !a.hidden).map(a => `<div class="li"><div class="grow"><span>${esc(a.name)}${inGroup(a) ? ` <i class="gtag" style="--g:${GCOL[groupById(a.group).color] || GCOL.azul}">${esc(groupById(a.group).name)}</i>` : ''}</span><small>${esc(a.url || 'Endereço por definir')}${a.isolated ? ' · sessão separada' : ''}</small></div>
+  const all = S.apps.filter(a => !a.hidden), q = (($('#setAppsQ') || {}).value || '').trim().toLowerCase();
+  const n = $('#setAppsN'); if (n) n.textContent = all.length + (all.length === 1 ? ' app' : ' apps');
+  const sec = $('#setAppsSec'); if (sec) { sec.classList.toggle('open', appsOpen); const t = sec.querySelector('.fold-t'); if (t) t.textContent = appsOpen ? 'Esconder' : 'Mostrar todas'; }
+  const shown = q ? all.filter(a => (a.name + ' ' + (a.url || '')).toLowerCase().includes(q)) : all;
+  if (q && !shown.length) { box.innerHTML = '<p class="hint" style="padding:10px 0">Nenhuma app com esse nome.</p>'; return; }
+  box.innerHTML = shown.map(a => `<div class="li"><div class="grow"><span>${esc(a.name)}${inGroup(a) ? ` <i class="gtag" style="--g:${GCOL[groupById(a.group).color] || GCOL.azul}">${esc(groupById(a.group).name)}</i>` : ''}</span><small>${esc(a.url || 'Endereço por definir')}${a.isolated ? ' · sessão separada' : ''}</small></div>
     <div class="seg" data-appmode="${esc(a.id)}"><button type="button" data-v="side" class="${a.mode === 'side' ? 'on' : ''}">Ao lado</button><button type="button" data-v="full" class="${a.mode === 'full' ? 'on' : ''}">Inteira</button></div>
     <button class="linkbtn" type="button" data-editapp="${esc(a.id)}">Editar</button><button class="linkbtn" type="button" data-rmapp="${esc(a.id)}">Remover</button></div>`).join('');
 }

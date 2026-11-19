@@ -619,3 +619,15 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .icon-pick button.none { opacity: .45; }
 .icon-pick button.busy .sitefav { animation: favpulse 1s ease-in-out infinite; }
 @keyframes favpulse { 50% { opacity: .35; } }
+/* secção que se abre e fecha (Definições › Apps na barra) */
+.set-sec.fold .fold-h { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; width: 100%; cursor: pointer; padding: 2px 0; }
+.set-sec.fold .fold-h h3 { margin: 0; }
+.set-sec.fold .fold-n { font-size: 12px; color: var(--muted); }
+.set-sec.fold .fold-t { margin-left: auto; font-size: 12.5px; color: var(--soft, var(--fg)); text-decoration: underline; text-underline-offset: 3px; }
+.set-sec.fold .fold-c { color: var(--muted); transition: transform .15s; }
+.set-sec.fold.open .fold-c { transform: rotate(90deg); }
+.set-sec.fold #setApps, .set-sec.fold .fold-q { display: none; }
+.set-sec.fold.open #setApps { display: block; }
+.set-sec.fold.open .fold-q { display: block; width: 100%; height: 34px; margin: 0; box-sizing: border-box; }
+.set-sec.fold .fold-h:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; border-radius: 4px; }
+.set-sec.fold:not(.open) .row-btns { margin-top: 10px; }
