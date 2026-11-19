@@ -220,7 +220,7 @@ ${END}
     const n = this.info(id); if (!n) return null;
     let cur; try { cur = this.parse(await fsp.readFile(n.path, 'utf8')); } catch (e) { cur = { html: '', title: n.title }; }
     const next = {
-      id: n.id, created: n.created, audio: 'audio' in patch ? patch.audio : n.audio,
+      id: n.id, created: patch.created || n.created, audio: 'audio' in patch ? patch.audio : n.audio,
       fav: 'fav' in patch ? !!patch.fav : n.fav,
       title: 'title' in patch ? (String(patch.title || '').trim().slice(0, 200) || 'Nota sem título') : (cur.title || n.title),
       html: 'html' in patch ? String(patch.html || '') : cur.html

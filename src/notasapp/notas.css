@@ -254,3 +254,9 @@ body.focus .docwrap { max-width: 760px; padding-top: 56px; }
 .lresize.on::after { background: var(--muted); }
 body.focus .lresize { display: none; }
 body.lresizing, body.lresizing * { cursor: col-resize !important; user-select: none !important; }
+.dtile[data-dtile] { cursor: pointer; transition: transform .1s, border-color .1s; }
+.dtile[data-dtile]:hover { border-color: var(--fg); transform: translateY(-1px); }
+.dtpop { position: fixed; z-index: 60; width: 236px; background: var(--bg); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.18); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.dtp-h { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
+.dtp-in { height: 34px; border: 1px solid var(--line2); border-radius: 8px; padding: 0 10px; background: var(--bg); color: var(--fg); font: inherit; font-size: 13.5px; }
+.dtp-b { display: flex; gap: 6px; align-items: center; }

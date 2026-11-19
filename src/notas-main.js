@@ -47,6 +47,7 @@ function setupNotas(x) {
     if (patch && 'html' in patch) p.html = str(patch.html, 5e6);
     if (patch && 'fav' in patch) p.fav = !!patch.fav;
     if (patch && 'folder' in patch) p.folder = str(patch.folder, 100);
+    if (patch && 'created' in patch && !isNaN(Date.parse(patch.created))) p.created = new Date(Date.parse(patch.created)).toISOString();
     const r = await notas.save(id, p);
     if (r && Array.isArray(blocks) && notas.where().wordCopy) {
       // cópia em Word ao lado da nota, uns segundos depois da última alteração

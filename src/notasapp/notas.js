@@ -1016,7 +1016,7 @@ const DT_WD = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'], DT_MO = ['JAN'
 function tileHTML(t) {
   const d = new Date(t || Date.now());
   const full = d.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  return `<span class="dtile" title="Criada a ${esc(full)}"><span class="wd">${DT_WD[d.getDay()]}</span><b>${d.getDate()}</b><span class="my">${DT_MO[d.getMonth()]} ${String(d.getFullYear() % 100).padStart(2, '0')}</span></span>`;
+  return `<span class="dtile" data-dtile title="Criada a ${esc(full)} — clica para mudar a data"><span class="wd">${DT_WD[d.getDay()]}</span><b>${d.getDate()}</b><span class="my">${DT_MO[d.getMonth()]} ${String(d.getFullYear() % 100).padStart(2, '0')}</span></span>`;
 }
 async function openSettings(msg) {
   const w = await Z.where(), hasKey = await Z.hasKey();
@@ -1123,4 +1123,48 @@ Z.onChanged(() => { clearTimeout(window.__lt); window.__lt = setTimeout(() => lo
   h.addEventListener('pointerup', end); h.addEventListener('pointercancel', end); h.addEventListener('lostpointercapture', end);
   h.addEventListener('dblclick', () => { cur = set(DEF); try { localStorage.removeItem('notas.listw'); } catch (e) { /* ok */ } });
   window.addEventListener('resize', () => { cur = set(cur); });
+})();
+
+// mudar a data de criação: clicar no quadrado da data abre um pequeno painel com o calendário (a hora mantém-se)
+(() => {
+  let pop = null;
+  const close = () => { if (pop) { pop.remove(); pop = null; } };
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  document.addEventListener('click', async e => {
+    const t = e.target.closest('[data-dtile]');
+    if (!t) { if (pop && !e.target.closest('.dtpop')) close(); return; }
+    e.preventDefault(); e.stopPropagation();
+    const btn = t.closest('[data-id]'), id = btn && btn.dataset.id; if (!id) return;
+    const n = (L.notes || []).find(x => x.id === id); if (!n) return;
+    close();
+    const old = new Date(Date.parse(n.created) || n.updated || Date.now());
+    pop = document.createElement('div'); pop.className = 'dtpop';
+    pop.innerHTML = `<div class="dtp-h">Data de criação</div>
+      <input type="date" class="dtp-in" value="${ymd(old)}" max="2100-12-31">
+      <div class="dtp-b"><button type="button" class="btn small" data-dtp="today">Hoje</button><span style="flex:1"></span><button type="button" class="btn small" data-dtp="cancel">Cancelar</button><button type="button" class="btn small primary" data-dtp="ok">Guardar</button></div>`;
+    document.body.appendChild(pop);
+    const r = t.getBoundingClientRect();
+    pop.style.left = Math.min(window.innerWidth - pop.offsetWidth - 10, r.left) + 'px';
+    pop.style.top = Math.min(window.innerHeight - pop.offsetHeight - 10, r.bottom + 6) + 'px';
+    const inp = pop.querySelector('.dtp-in'); inp.focus();
+    const save = async () => {
+      const v = inp.value; if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { inp.focus(); return; }
+      const [y, m, d] = v.split('-').map(Number), nd = new Date(old); nd.setFullYear(y, m - 1, d);
+      close();
+      if (ymd(nd) === ymd(old)) return;
+      if (cur && cur.id === id) await flush();
+      await Z.save(id, { created: nd.toISOString() });
+      if (cur && cur.id === id) cur.created = nd.toISOString();
+      flash('Data mudada para ' + nd.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' }));
+      load();
+    };
+    pop.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-dtp]'); if (!b) return;
+      if (b.dataset.dtp === 'today') inp.value = ymd(new Date());
+      if (b.dataset.dtp === 'cancel') close();
+      if (b.dataset.dtp === 'ok') save();
+    });
+    inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); save(); } if (ev.key === 'Escape') close(); });
+  }, true);
+  document.getElementById('list').addEventListener('scroll', close);
 })();
