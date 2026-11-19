@@ -238,3 +238,11 @@ body.focus .docwrap { max-width: 760px; padding-top: 56px; }
 .selbar .swc:hover { border-color: var(--muted); transform: scale(1.08); }
 .selbar .lnk { border: 0; background: transparent; color: var(--muted); padding: 2px 6px 2px 9px; font-size: 12.5px; border-left: 1px solid var(--line2); cursor: pointer; }
 .selbar .lnk:hover { color: var(--fg); }
+/* data de criação num quadrado (calendário de secretária) */
+.n.dt { flex-direction: row; gap: 12px; align-items: flex-start; }
+.n.dt .nb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dtile { flex: 0 0 46px; width: 46px; border: 1px solid var(--line2); border-radius: 9px; overflow: hidden; text-align: center; line-height: 1; background: var(--bg); margin-top: 1px; }
+.dtile .wd { display: block; background: var(--inv-bg); color: var(--inv-fg); font-size: 10px; font-weight: 600; letter-spacing: .07em; padding: 3px 0 3px; }
+.dtile b { display: block; font-size: 20px; font-weight: 600; padding: 4px 0 1px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.dtile .my { display: block; font-size: 9.5px; font-weight: 500; letter-spacing: .05em; color: var(--muted); padding: 0 0 5px; }
+.n.on .dtile, .n:hover .dtile { border-color: var(--faint); }

@@ -278,10 +278,13 @@ function renderList() {
   $('#list').innerHTML = ns.map(n => {
     const j = busy.get(n.id);
     const jb = j ? `<span class="busy">${j.stage === 'erro' ? 'erro na transcrição' : j.stage === 'resumir' ? 'a resumir' : j.stage === 'espera-modelo' ? 'à espera do modelo' : j.stage === 'pronto' ? 'transcrição pronta' : 'a transcrever'}</span>` : '';
-    return `<button class="n ${cur && cur.id === n.id ? 'on' : ''}" type="button" data-id="${esc(n.id)}" draggable="true">
-      <h3>${n.fav ? '★ ' : ''}${esc(n.title)}</h3>
+    const made = Date.parse(n.created) || n.updated;
+    const meta = [dateTile ? '' : when(made), n.folder && !view.startsWith('f:') ? `<span class="tag">${esc(n.folder)}</span>` : '', n.audio ? '🎙' : ''].filter(Boolean).join(' · ') + jb;
+    const body = `<h3>${n.fav ? '★ ' : ''}${esc(n.title)}</h3>
       ${n.excerpt ? `<p>${esc(n.excerpt)}</p>` : ''}
-      <small>${when(Date.parse(n.created) || n.updated)}${n.folder && !view.startsWith('f:') ? ` · <span class="tag">${esc(n.folder)}</span>` : ''}${n.audio ? ' · 🎙' : ''}${jb}</small></button>`;
+      ${meta ? `<small>${meta}</small>` : ''}`;
+    return `<button class="n ${cur && cur.id === n.id ? 'on' : ''}${dateTile ? ' dt' : ''}" type="button" data-id="${esc(n.id)}" draggable="true">
+      ${dateTile ? `${tileHTML(made)}<span class="nb">${body}</span>` : body}</button>`;
   }).join('');
 }
 $('#list').addEventListener('click', e => {
@@ -1006,6 +1009,15 @@ async function appendTo(id, html, newTitle) {
 /* ================================================================== */
 /* Definições                                                           */
 /* ================================================================== */
+// quadrado com a data de criação (calendário de secretária), à esquerda de cada nota — opção nas definições
+let dateTile = false;
+try { dateTile = localStorage.getItem('notas.dateTile') === '1'; } catch (e) { /* ok */ }
+const DT_WD = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'], DT_MO = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+function tileHTML(t) {
+  const d = new Date(t || Date.now());
+  const full = d.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return `<span class="dtile" title="Criada a ${esc(full)}"><span class="wd">${DT_WD[d.getDay()]}</span><b>${d.getDate()}</b><span class="my">${DT_MO[d.getMonth()]} ${String(d.getFullYear() % 100).padStart(2, '0')}</span></span>`;
+}
 async function openSettings(msg) {
   const w = await Z.where(), hasKey = await Z.hasKey();
   model = await Z.modelState();
@@ -1016,6 +1028,9 @@ async function openSettings(msg) {
       <p class="small">${w.drive ? `Está dentro do ${esc(w.drive)}: a app do ${esc(w.drive)} envia as notas para a cloud sozinha.` : 'Esta pasta não está numa cloud. Para ter cópia no Google Drive, escolhe uma pasta dentro do Google Drive.'}</p>
       <div class="row"><button class="btn small" type="button" data-s="choose">Escolher outra pasta…</button>${w.custom ? '<button class="btn small" type="button" data-s="reset">Usar a pasta automática</button>' : ''}<button class="btn small" type="button" data-s="reveal">Abrir no Finder</button></div>
       <label class="chk"><input type="checkbox" id="sWord" ${w.wordCopy ? 'checked' : ''}> Guardar também uma cópia em Word (.docx) ao lado de cada nota</label>
+    </section>
+    <section><span class="lbl">Lista das notas</span>
+      <label class="chk"><input type="checkbox" id="sDateTile" ${dateTile ? 'checked' : ''}> Mostrar a data de criação num quadrado à esquerda de cada nota</label>
     </section>
     <section><span class="lbl">Transcrição das reuniões (Whisper, no Mac)</span><div id="sModel"></div></section>
     <section><span class="lbl">Resumos (Claude)</span>
@@ -1049,7 +1064,10 @@ $('#modal').addEventListener('click', async e => {
   if (a === 'cancelmodel') { await Z.modelCancel(); }
   if (a === 'delmodel') { await Z.modelRemove(); model = await Z.modelState(); renderSettingsModel(); }
 });
-$('#modal').addEventListener('change', async e => { if (e.target.id === 'sWord') { await Z.setWordCopy(e.target.checked); load(); } });
+$('#modal').addEventListener('change', async e => {
+  if (e.target.id === 'sWord') { await Z.setWordCopy(e.target.checked); load(); }
+  if (e.target.id === 'sDateTile') { dateTile = e.target.checked; try { localStorage.setItem('notas.dateTile', dateTile ? '1' : ''); } catch (x) { /* ok */ } renderList(); }
+});
 $('#modal').addEventListener('submit', async e => {
   e.preventDefault();
   if (e.target.id !== 'keyF') return;
