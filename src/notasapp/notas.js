@@ -947,16 +947,18 @@ function showJobBar({ txt, pct, ind, err, close, action }) {
   b.hidden = false; b.classList.toggle('err', !!err);
   b.innerHTML = `${pct != null || ind ? `<span class="bar ${ind ? 'ind' : ''}"><i style="width:${pct || 0}%"></i></span>` : ''}<span class="txt">${txt}</span>${action || ''}${close ? '<button class="icon" type="button" data-job="close">✕</button>' : ''}`;
 }
+let stopArm = null, stopT = null;
 function renderJob() {
   const b = $('#jobbar');
   const j = cur && jobs.find(x => x.id === cur.id);
   if (!j) { if (!b.classList.contains('err') || !cur) b.hidden = true; return; }
-  if (j.stage === 'transcrever') showJobBar({ txt: `A transcrever a gravação no Mac (${clock(j.secs * 1000)})… ${j.pct}% — podes continuar a trabalhar.`, pct: j.pct, ind: !j.pct });
-  else if (j.stage === 'resumir') showJobBar({ txt: 'A fazer o resumo com o Claude…', ind: true });
+  const stop = `<button class="btn small" type="button" data-job="stop">${stopArm === j.id ? 'Parar mesmo? A transcrição perde-se' : 'Parar'}</button>`;
+  if (j.stage === 'transcrever') showJobBar({ txt: `A transcrever a gravação no Mac (${clock(j.secs * 1000)})… ${j.pct}% — podes continuar a trabalhar.`, pct: j.pct, ind: !j.pct, action: stop });
+  else if (j.stage === 'resumir') showJobBar({ txt: 'A fazer o resumo com o Claude…', ind: true, action: stop });
   else if (j.stage === 'pronto') showJobBar({ txt: 'Transcrição pronta.', pct: 100 });
   else if (j.stage === 'espera-modelo') {
     if (model.state === 'downloading') showJobBar({ txt: `A descarregar o modelo de transcrição… ${model.pct}% (${(model.got / 1e9).toFixed(2)} de ${(model.total / 1e9).toFixed(1)} GB)`, pct: model.pct });
-    else showJobBar({ txt: 'A gravação está guardada. Para a transcrever no Mac, é preciso descarregar uma vez o modelo do Whisper (1,6 GB).' + (model.error ? ` <span style="color:var(--danger)">${esc(model.error)}</span>` : ''), action: '<button class="btn small primary" type="button" data-job="download">Descarregar agora</button>' });
+    else showJobBar({ txt: 'A gravação está guardada. Para a transcrever no Mac, é preciso descarregar uma vez o modelo do Whisper (1,6 GB).' + (model.error ? ` <span style="color:var(--danger)">${esc(model.error)}</span>` : ''), action: '<button class="btn small primary" type="button" data-job="download">Descarregar agora</button>' + stop });
   }
   else if (j.stage === 'erro') showJobBar({ txt: esc(j.error), err: true, action: `<button class="btn small" type="button" data-job="retry">Tentar outra vez</button><button class="btn small" type="button" data-job="dismiss">Ignorar</button>` });
 }
@@ -967,6 +969,10 @@ $('#jobbar').addEventListener('click', async e => {
   if (a === 'download') { model = await Z.modelDownload(); renderJob(); }
   if (a === 'retry' && cur) Z.retryJob(cur.id);
   if (a === 'dismiss' && cur) { await Z.dismissJob(cur.id); $('#jobbar').hidden = true; }
+  if (a === 'stop' && cur) {
+    if (stopArm !== cur.id) { stopArm = cur.id; clearTimeout(stopT); stopT = setTimeout(() => { stopArm = null; renderJob(); }, 4000); renderJob(); return; }
+    stopArm = null; clearTimeout(stopT); await Z.cancelJob(cur.id); flash('Transcrição parada. A gravação continua na nota.');
+  }
 });
 Z.onJobs(j => { jobs = j || []; renderJob(); renderList(); });
 Z.onModel(m => { model = m || model; renderJob(); if (!$('#modal').hidden) renderSettingsModel(); });

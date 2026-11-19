@@ -62,14 +62,14 @@ function setupNotas(x) {
     const tmp = path.join(path.dirname(p), '.' + path.basename(p) + '.tmp');
     await fsp.writeFile(tmp, buf); await fsp.rename(tmp, p);
   }
-  h('remove', id => serial(() => notas.remove(str(id, 40), trash)));
+  h('remove', async id => { const r = await serial(() => notas.remove(str(id, 40), trash)); if (r) cancelJob(str(id, 40)); return r; });
   h('trashList', () => serial(() => notas.trashList(trash)));
   h('trashRead', key => notas.trashRead(str(key, 80)));
   h('restore', key => serial(() => notas.restore(str(key, 80))));
   h('purge', key => serial(() => notas.purge(str(key, 80), trash)));
   h('addFolder', name => serial(() => notas.addFolder(str(name, 100))));
   h('renameFolder', (a, b) => serial(() => notas.renameFolder(str(a, 100), str(b, 100))));
-  h('removeFolder', name => serial(() => notas.removeFolder(str(name, 100), trash)));
+  h('removeFolder', async name => { const r = await serial(() => notas.removeFolder(str(name, 100), trash)); dropOrphans(); return r; });
   h('where', () => notas.where());
   h('chooseRoot', async () => {
     const r = await dialog.showOpenDialog(x.getWin(), { title: 'Pasta das notas', buttonLabel: 'Usar esta pasta', defaultPath: notas.root(), properties: ['openDirectory', 'createDirectory'] });
@@ -274,6 +274,26 @@ function setupNotas(x) {
   h('takeResults', () => { const done = jobs.filter(j => j.stage === 'pronto'); jobs = jobs.filter(j => j.stage !== 'pronto'); saveJobs(); send('jobs', pub()); return done.map(j => ({ id: j.id, html: j.html, title: j.title || '' })); });
   h('retryJob', id => { jobs.filter(j => j.id === str(id, 40) && j.stage === 'erro').forEach(j => { j.stage = j.html ? 'resumir' : 'transcrever'; j.error = ''; }); emit(); runJobs(); return true; });
   h('dismissJob', id => { jobs = jobs.filter(j => !(j.id === str(id, 40) && j.stage === 'erro')); emit(); return true; });
+  // parar uma transcrição/resumo (gravação esquecida, ficheiro enorme…): mata o Whisper se for este, tira o trabalho e apaga o WAV de trabalho
+  let curProc = null, curJob = null;
+  function cancelJob(id) {
+    const gone = jobs.filter(j => j.id === id && j.stage !== 'pronto');
+    if (!gone.length) return false;
+    jobs = jobs.filter(j => !gone.includes(j));
+    gone.forEach(j => {
+      if (curJob === j) { j.cancelled = true; try { curProc && curProc.kill('SIGKILL'); } catch (e) { /* ok */ } }
+      if (j.wav && !process.env.ZEUS_KEEP_WAV) fsp.unlink(j.wav).catch(() => {});
+    });
+    emit(); return true;
+  }
+  h('cancelJob', id => cancelJob(str(id, 40)));
+  // trabalhos de notas que já não existem (apagadas, ou no Lixo): saem, para o ícone das Notas não ficar amarelo para sempre
+  async function dropOrphans() {
+    try { if (!notas.index.size) await serial(() => notas.scan()); } catch (e) { return; }
+    if (!notas.index.size) return;   // pasta das notas inacessível (ex.: Drive desligado): não se mexe em nada
+    jobs.filter(j => j.stage !== 'pronto' && !notas.info(j.id)).forEach(j => cancelJob(j.id));
+  }
+  x.cancelJobFor = cancelJob;
   let running = false;
   async function runJobs() {
     wake();
@@ -283,19 +303,22 @@ function setupNotas(x) {
       for (;;) {
         const j = jobs.find(k => k.stage === 'transcrever' || k.stage === 'resumir');
         if (!j) break;
+        curJob = j;
         if (j.stage === 'transcrever') {
           if (!fs.existsSync(binPath())) { j.stage = 'erro'; j.error = 'O programa de transcrição não está incluído nesta versão do Zeus.'; emit(); continue; }
           if (!fs.existsSync(modelPath())) { j.stage = 'espera-modelo'; emit(); continue; }
           try {
             const segs = await transcribe(j);
             j.transcript = segs; j.stage = 'resumir'; j.pct = 0; emit();
-          } catch (e) { j.stage = 'erro'; j.error = 'A transcrição falhou: ' + (e.message || e); emit(); continue; }
+          } catch (e) { if (j.cancelled) continue; j.stage = 'erro'; j.error = 'A transcrição falhou: ' + (e.message || e); emit(); continue; }
+          if (j.cancelled) continue;
         }
         if (j.stage === 'resumir') {
           let sum = null, err = '';
           if (getKey() && (j.transcript || []).length) {
             try { sum = await claudeSummary(segsToText(j.transcript)); } catch (e) { err = netErr(e); }
           }
+          if (j.cancelled) continue;
           j.html = (sum ? summaryHtml(sum) : '') + transcriptHtml(j.transcript || [], err);
           j.title = sum && sum.titulo ? sum.titulo : '';
           j.stage = 'pronto'; j.pct = 100;
@@ -308,11 +331,11 @@ function setupNotas(x) {
           try { if (Notification.isSupported() && !x.getWin().isFocused()) new Notification({ title: 'Zeus — Notas', body: `A transcrição${n ? ' de "' + n.title + '"' : ''} está pronta.` }).show(); } catch (e) { /* ok */ }
         }
       }
-    } finally { running = false; }
+    } finally { running = false; curJob = null; curProc = null; }
   }
   // quando o modelo fica pronto, os trabalhos à espera dele avançam
   function wake() { let any = false; jobs.forEach(j => { if (j.stage === 'espera-modelo' && fs.existsSync(modelPath())) { j.stage = 'transcrever'; any = true; } }); if (any) emit(); }
-  setTimeout(() => runJobs(), 4000);
+  setTimeout(() => dropOrphans().finally(() => runJobs()), 4000);
 
   function transcribe(j) {
     return new Promise((resolve, reject) => {
@@ -320,7 +343,7 @@ function setupNotas(x) {
       const threads = String(Math.max(2, Math.min(8, (os.cpus() || []).length >= 8 ? 4 : (os.cpus() || []).length - 1)));
       const args = ['-m', modelPath(), '-f', j.wav, '-l', 'pt', '-oj', '-of', out, '-pp', '-t', threads, '-mc', '64'];
       if (fs.existsSync(vadPath()) && !process.env.ZEUS_WHISPER_MODEL) args.push('--vad', '-vm', vadPath());
-      const p = spawn(binPath(), args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      const p = spawn(binPath(), args, { stdio: ['ignore', 'ignore', 'pipe'] }); curProc = p;
       let errTail = '';
       p.stderr.on('data', d => {
         const s = d.toString();
