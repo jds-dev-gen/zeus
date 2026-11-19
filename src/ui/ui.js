@@ -1852,7 +1852,7 @@ window.addEventListener('pointermove', e => {
   if (!gpDrag) return;
   if (!gpDrag.on) {
     if (Math.hypot(e.clientX - gpDrag.x0, e.clientY - gpDrag.y0) < 7) return;
-    gpDrag.on = true; gpDrag.el.classList.add('dragging');
+    gpDrag.on = true; gpDrag.el.classList.add('dragging'); grpPop.classList.add('sorting');
     const gh = gpDrag.el.querySelector('.app-btn').cloneNode(true); gh.className = 'app-btn gp-ghost'; document.body.appendChild(gh); gpDrag.ghost = gh;
   }
   gpDrag.ghost.style.left = (e.clientX - 25) + 'px'; gpDrag.ghost.style.top = (e.clientY - 25) + 'px';
@@ -1863,19 +1863,21 @@ window.addEventListener('pointermove', e => {
 // mudar a ordem dentro do quadrado: o lugar da app arrastada abre-se onde está o rato e as outras deslizam
 function gpReorderAt(x, y) {
   const grid = grpPop.querySelector('.gp-g'), me = gpDrag.el;
-  const items = [...grid.querySelectorAll('.app-item[data-appid]')].filter(el => el !== me);
-  if (!items.length) return;
-  let best = null, bd = Infinity;
-  items.forEach(el => { const r = el.getBoundingClientRect(), d = Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2)); if (d < bd) { bd = d; best = el; } });
-  const r = best.getBoundingClientRect(), after = x > r.left + r.width / 2;
-  const ref = after ? best.nextElementSibling : best;
-  if (ref === me || (after ? me.previousElementSibling === best : me.nextElementSibling === best)) return;
-  const all = [...grid.querySelectorAll('.app-item')], before = new Map(all.map(el => [el, el.getBoundingClientRect()]));
-  grid.insertBefore(me, ref);
+  const items = [...grid.querySelectorAll('.app-item[data-appid]')];
+  if (items.length < 2) return;
+  // lugares pela posição de layout (offsetLeft/Top não contam as animações em curso), para não "tremer" a meio das animações
+  const op = me.offsetParent || grid, gr = op.getBoundingClientRect(), px = x - gr.left - op.clientLeft + op.scrollLeft, py = y - gr.top - op.clientTop + op.scrollTop;
+  const hit = items.find(el => px >= el.offsetLeft && px < el.offsetLeft + el.offsetWidth && py >= el.offsetTop && py < el.offsetTop + el.offsetHeight);
+  if (!hit || hit === me) return;
+  const from = items.indexOf(me), to = items.indexOf(hit);
+  const all = [...grid.querySelectorAll('.app-item')];
+  const before = new Map(all.map(el => [el, el.getBoundingClientRect()]));   // onde se veem agora (com as animações)
+  all.forEach(el => el.getAnimations().forEach(an => an.cancel()));
+  grid.insertBefore(me, to > from ? hit.nextElementSibling : hit);
   all.forEach(el => {
     if (el === me) return;
     const a = before.get(el), b = el.getBoundingClientRect(), dx = a.left - b.left, dy = a.top - b.top;
-    if (dx || dy) el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    if (Math.abs(dx) > .5 || Math.abs(dy) > .5) el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
   });
   gpDrag.moved = true;
 }
@@ -1885,7 +1887,7 @@ window.addEventListener('pointerup', e => {
   if (!d.on) return;
   gpDragged = true; setTimeout(() => { gpDragged = false; }, 60);
   if (d.ghost) d.ghost.remove();
-  d.el.classList.remove('dragging'); grpPop.classList.remove('dropping-out');
+  d.el.classList.remove('dragging'); grpPop.classList.remove('dropping-out', 'sorting');
   const over = document.elementFromPoint(e.clientX, e.clientY);
   if (over && over.closest('#grpPop')) {
     if (d.moved) {

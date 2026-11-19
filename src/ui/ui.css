@@ -573,7 +573,11 @@ body.dragging-card, body.dragging-card .card { cursor: grabbing; }
 .grppop .app-item .app-btn { background: var(--bg); }
 .grppop .app-item.on .app-btn { background: var(--inv-bg); }
 .grppop .app-item.on::before { display: none; }
-.grppop .app-item.dragging { opacity: .3; }
+.grppop .app-item.dragging { opacity: 1; }
+.grppop .app-item.dragging .app-btn { background: transparent !important; border: 1.5px dashed color-mix(in srgb, var(--g, var(--fg)) 45%, transparent) !important; box-shadow: none !important; }
+.grppop .app-item.dragging .app-btn > *, .grppop .app-item.dragging .lbl { visibility: hidden; }
+.grppop.sorting .app-item { pointer-events: none; }
+.grppop.sorting .gp-g { pointer-events: auto; }
 .grppop .app-btn.add { border-style: dashed; background: transparent; color: var(--muted); }
 .grppop .gp-hint { margin: 10px 2px 0; font-size: 11px; color: var(--muted); line-height: 1.4; }
 .grppop.dropping-out { outline: 2px dashed color-mix(in srgb, var(--g) 60%, transparent); outline-offset: 4px; }
