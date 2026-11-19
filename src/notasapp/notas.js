@@ -1108,3 +1108,19 @@ Z.onChanged(() => { clearTimeout(window.__lt); window.__lt = setTimeout(() => lo
   if (!cur) showNote(null);
   applyResults();
 })();
+
+// largura da lista das notas: arrasta-se o separador; fica lembrada
+(() => {
+  const stage = document.querySelector('.stage'), h = $('#lresize'); if (!stage || !h) return;
+  const MIN = 220, DEF = 300, max = () => Math.max(MIN, Math.min(680, window.innerWidth - 210 - 380));
+  const set = w => { w = Math.round(Math.max(MIN, Math.min(max(), w))); stage.style.setProperty('--listw', w + 'px'); if (typeof fitTitle === 'function') requestAnimationFrame(fitTitle); return w; };
+  let cur = DEF; try { cur = +localStorage.getItem('notas.listw') || DEF; } catch (e) { /* ok */ }
+  cur = set(cur);
+  let drag = null;
+  h.addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); h.setPointerCapture(e.pointerId); drag = { x: e.clientX, w: cur }; h.classList.add('on'); document.body.classList.add('lresizing'); });
+  h.addEventListener('pointermove', e => { if (drag) cur = set(drag.w + e.clientX - drag.x); });
+  const end = () => { if (!drag) return; drag = null; h.classList.remove('on'); document.body.classList.remove('lresizing'); try { localStorage.setItem('notas.listw', String(cur)); } catch (e) { /* ok */ } };
+  h.addEventListener('pointerup', end); h.addEventListener('pointercancel', end); h.addEventListener('lostpointercapture', end);
+  h.addEventListener('dblclick', () => { cur = set(DEF); try { localStorage.removeItem('notas.listw'); } catch (e) { /* ok */ } });
+  window.addEventListener('resize', () => { cur = set(cur); });
+})();
