@@ -840,7 +840,6 @@ function ensureTabView(tab) {
     if (win.__zeusAutoFs) { win.setFullScreen(false); win.__zeusAutoFs = false; }
     applyLayout();
   });
-  wc.on('found-in-page', (e, r) => ui.send('find-result', { active: r.activeMatchOrdinal, total: r.matches }));
   wc.loadURL(tab.url).catch(() => { /* tratado em did-fail-load */ });
   return view;
 }
@@ -3155,11 +3154,20 @@ function setupIPC() {
     const wc = pageWC(); if (!wc) return '';
     try { const img = await wc.capturePage(); return img.isEmpty() ? '' : 'data:image/jpeg;base64,' + img.toJPEG(80).toString('base64'); } catch (e) { return ''; }
   });
+  // procurar na página (⌘F): separador aberto ou app em página inteira (também as apps do Zeus)
+  const findWired = new WeakSet();
+  let findWC = null;
   handle('find', (q, opts) => {
-    const v = tabViews.get(S.currentId); if (!v) return;
-    if (!q) { v.webContents.stopFindInPage('clearSelection'); return; }
-    v.webContents.findInPage(q, opts || {});
+    const wc = pageWC();
+    if (findWC && findWC !== wc && !findWC.isDestroyed()) { try { findWC.stopFindInPage('clearSelection'); } catch (e) { /* ok */ } }
+    findWC = wc; if (!wc) return { none: true };
+    if (!findWired.has(wc)) { findWired.add(wc); wc.on('found-in-page', (e, r) => { if (wc === findWC) ui.send('find-result', { active: r.activeMatchOrdinal, total: r.matches }); }); }
+    if (!q) { wc.stopFindInPage('clearSelection'); return; }
+    // no Electron, findNext: true começa uma pesquisa nova; false passa à ocorrência seguinte/anterior
+    wc.findInPage(String(q).slice(0, 300), opts || {});
   });
+  // a barra de procurar está na interface: o teclado tem de passar da página para a interface
+  handle('ui:focusSelf', () => { try { ui.focus(); } catch (e) { /* ok */ } });
   handle('space:add', name => {
     const nm = String(name || '').trim().slice(0, 30); if (!nm) return;
     const id = 's' + Date.now().toString(36);
@@ -3346,7 +3354,9 @@ function buildMenu() {
         { role: 'cut', label: 'Cortar' }, { role: 'copy', label: 'Copiar' }, { role: 'paste', label: 'Colar' },
         { role: 'pasteAndMatchStyle', label: 'Colar sem formatação' }, { role: 'selectAll', label: 'Selecionar tudo' },
         { type: 'separator' },
-        { label: 'Procurar na página', accelerator: 'CmdOrCtrl+F', click: toUI('find') }
+        { label: 'Procurar na página', accelerator: 'CmdOrCtrl+F', click: toUI('find') },
+        { label: 'Procurar seguinte', accelerator: 'CmdOrCtrl+G', click: toUI('find-next') },
+        { label: 'Procurar anterior', accelerator: 'CmdOrCtrl+Shift+G', click: toUI('find-prev') }
       ]
     },
     {

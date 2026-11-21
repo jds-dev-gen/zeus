@@ -1346,11 +1346,17 @@ document.addEventListener('mousedown', e => {
   if (b) { e.preventDefault(); pickSugg(+b.dataset.sg); }
 }, true);
 
-function openFind() { $('#findbox').hidden = false; const i = $('#findInput'); i.focus(); i.select(); }
+async function openFind() {
+  $('#findbox').hidden = false; const i = $('#findInput');
+  await Z.invoke('ui:focusSelf');   // sem isto o teclado ficava na página e não se conseguia escrever
+  i.focus(); i.select();
+  if (i.value) Z.invoke('find', i.value, { findNext: true });
+}
+function findStep(fwd) { const q = $('#findInput').value; if ($('#findbox').hidden || !q) { openFind(); return; } Z.invoke('find', q, { findNext: false, forward: fwd }); }
 function closeFind() { $('#findbox').hidden = true; $('#findCount').textContent = ''; Z.invoke('find', ''); Z.invoke('ui:focusPage'); }
-$('#findInput').addEventListener('input', e => { const q = e.target.value; if (q) Z.invoke('find', q, { findNext: false }); else { Z.invoke('find', ''); $('#findCount').textContent = ''; } });
+$('#findInput').addEventListener('input', e => { const q = e.target.value; if (q) Z.invoke('find', q, { findNext: true }); else { Z.invoke('find', ''); $('#findCount').textContent = ''; } });
 $('#findInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.target.value) Z.invoke('find', e.target.value, { findNext: true, forward: !e.shiftKey });
+  if (e.key === 'Enter' && e.target.value) Z.invoke('find', e.target.value, { findNext: false, forward: !e.shiftKey });
   if (e.key === 'Escape') closeFind();
 });
 $('#findClose').addEventListener('click', closeFind);
@@ -1361,6 +1367,8 @@ Z.on('ui-command', c => {
   if (c.cmd === 'settings') openSettings();
   if (c.cmd === 'address') openAddr();
   if (c.cmd === 'find') openFind();
+  if (c.cmd === 'find-next') findStep(true);
+  if (c.cmd === 'find-prev') findStep(false);
   if (c.cmd === 'mosaic') ov.open ? closeMosaic() : openMosaic(false);
   if (c.cmd === 'edit-app') openEditApp(c.id);
   if (c.cmd === 'edit-group') openGroupEditor(c.id || '', c.app || '');
