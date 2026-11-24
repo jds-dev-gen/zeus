@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Zeus</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app" class="v-home">
+  <nav id="rail" aria-label="Apps">
+    <div class="brand">Zeus</div>
+    <button class="ri" data-go="home" aria-label="Início"><span class="ic" data-icon="home"></span><span>Início</span></button>
+    <button class="ri" data-go="zoom" aria-label="Zoom"><span class="ic" data-icon="zoom"></span><span>Zoom</span></button>
+    <button class="ri" data-go="tabs" aria-label="Separadores"><span class="ic tabsN" data-n="0"></span><span>Separadores</span></button>
+    <div class="grow"></div>
+    <button class="ri small" data-go="settings" aria-label="Definições"><span class="ic" data-icon="sync"></span><i class="dot syncDot"></i></button>
+  </nav>
+
+  <header id="top">
+    <button class="tb" id="bBack" aria-label="Recuar"><span class="ic" data-icon="back"></span></button>
+    <form id="addrForm" autocomplete="off"><input id="addr" type="text" inputmode="url" enterkeyhint="go" spellcheck="false" autocapitalize="off" placeholder="Pesquisar ou escrever um endereço"></form>
+    <button class="tb" id="bReload" aria-label="Recarregar"><span class="ic" data-icon="reload"></span></button>
+    <button class="tb" id="bSave" aria-label="Guardar no Zoom"><span class="ic" data-icon="mark"></span></button>
+    <button class="tb pill" id="bHl" aria-label="Destaques desta página"><i class="sw"></i><b id="hlN">0</b></button>
+    <button class="tb" id="bTabs" aria-label="Separadores"><span class="ic tabsN" data-n="0"></span></button>
+    <div id="prog"></div>
+  </header>
+
+  <main id="main">
+    <div id="page"></div>
+    <section id="screen"></section>
+    <aside id="hlpanel" aria-label="Destaques desta página"></aside>
+  </main>
+
+  <nav id="bottom" aria-label="Barra de baixo">
+    <button data-go="home"><span class="ic" data-icon="home"></span>Início</button>
+    <button data-go="zoom"><span class="ic" data-icon="zoom"></span>Zoom</button>
+    <button id="bbHl"><span class="hlsw"><i></i><i></i><i></i></span>Destaques</button>
+    <button data-go="tabs"><span class="ic tabsN" data-n="0"></span>Separadores</button>
+    <button data-go="settings"><span class="ic" data-icon="settings"></span>Definições</button>
+  </nav>
+
+  <div id="overlay"></div>
+  <div id="toast"></div>
+</div>
+<script src="zoom-core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

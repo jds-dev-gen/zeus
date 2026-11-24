@@ -57,7 +57,7 @@ const arches = which === 'all' ? ['arm64', 'x64'] : [which];
       appCategoryType: 'public.app-category.productivity',
       appCopyright: 'Zeus — browser pessoal do João',
       darwinDarkModeSupport: true,
-      ignore: [/^\/out($|\/)/, /^\/vendor($|\/)/, /^\/assets\/make-icon\.py$/, /^\/package-mac\.js$/, /^\/\.git($|\/)/, /^\/\.github($|\/)/, /^\/scripts($|\/)/, /^\/README\.md$/],
+      ignore: [/^\/out($|\/)/, /^\/vendor($|\/)/, /^\/assets\/make-icon\.py$/, /^\/package-mac\.js$/, /^\/\.git($|\/)/, /^\/\.github($|\/)/, /^\/scripts($|\/)/, /^\/README\.md$/, /^\/android($|\/)/, /^\/docs($|\/)/],
       extendInfo: {
         NSCameraUsageDescription: 'Os sites que abres no Zeus (por exemplo, videochamadas) podem pedir a câmara.',
         NSMicrophoneUsageDescription: 'As Notas do Zeus usam o microfone para gravar reuniões; os sites que abres (por exemplo, WhatsApp ou videochamadas) também o podem pedir.',

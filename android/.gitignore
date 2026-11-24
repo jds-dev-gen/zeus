@@ -1,0 +1,6 @@
+app/build/
+build/
+.gradle/
+local.properties
+app/src/main/assets/app/zoom-core.js
+app/src/main/assets/app/fonts/

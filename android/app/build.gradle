@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+}
+
+// versão em android/version.txt (ex.: 0.1.0 → versionCode 100)
+def ver = file('../version.txt').text.trim()
+def p = ver.tokenize('.')
+def ks = System.getenv('ZEUS_KEYSTORE')
+
+android {
+    namespace 'pt.joao.zeus'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'pt.joao.zeus'
+        minSdk 29
+        targetSdk 34
+        versionName ver
+        versionCode p[0].toInteger() * 10000 + p[1].toInteger() * 100 + p[2].toInteger()
+    }
+
+    signingConfigs {
+        release {
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('ZEUS_KEYSTORE_PASSWORD')
+                keyAlias 'zeus'
+                keyPassword System.getenv('ZEUS_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (ks) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.android.gms:play-services-auth:21.2.0'
+}

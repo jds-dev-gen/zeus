@@ -1605,6 +1605,12 @@ function setupSync() {
     onStatus: st => { if (ui && !ui.isDestroyed()) ui.send('sync', st); }
   });
   sync.register('zoom', { get: () => zoom.data(), merge: mergeZoom, apply: d => zoom.replace(d) });
+  // separadores abertos no Mac, para o tablet os mostrar em "Do Mac" (só o Mac escreve; o tablet só lê)
+  sync.register('mac-tabs', {
+    get: () => ({ tabs: S.tabs.filter(t => /^https?:/.test(t.url || '')).slice(0, 80).map(t => ({ url: t.url, title: t.title || '', space: ((S.spaces || []).find(x => x.id === t.space) || {}).name || '' })) }),
+    merge: local => local,
+    apply: () => {}
+  });
   sync.start();
   powerMonitor.on('resume', () => setTimeout(() => sync.now(), 8000));
   handle('sync:status', () => sync.status());
