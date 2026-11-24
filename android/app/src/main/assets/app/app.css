@@ -223,6 +223,52 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
 .mac-sp { display: block; background: var(--fg) !important; color: #fff !important; font: 600 12px/1 var(--mono) !important; letter-spacing: .08em; text-transform: uppercase; padding: 10px 14px; border-radius: 10px; margin: 18px 0 4px !important; }
 .btn.armed { background: #c0262d; border-color: #c0262d; color: #fff; }
 
+/* Notas (0.5.0) */
+.nt-wrap { display: grid; grid-template-columns: 340px minmax(0, 1fr); height: 100%; min-height: 0; }
+.nt-list { border-right: 1px solid var(--line); background: var(--rail); display: flex; flex-direction: column; min-height: 0; }
+.nt-list-h { padding: 16px 16px 10px; display: flex; flex-direction: column; gap: 10px; }
+.nt-list-h .row { display: flex; align-items: center; gap: 8px; }
+.nt-list-h h1 { flex: 1; font-size: 22px; }
+.nt-items { flex: 1; overflow-y: auto; padding: 0 8px 20px; }
+.nt-i { display: flex; flex-direction: column; gap: 4px; text-align: left; width: 100%; padding: 12px 12px; border-radius: 12px; }
+.nt-i.on { background: #fff; box-shadow: inset 0 0 0 1.5px var(--fg); }
+.nt-i b { font-size: 14.5px; font-weight: 600; display: flex; gap: 6px; }
+.nt-i b span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-i small { color: var(--muted); font-size: 12px; }
+.nt-i p { margin: 0; color: var(--soft); font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ned { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.ned-top { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.ned-top select { height: 40px; border-radius: 10px; border: 1px solid var(--line2); background: #fff; padding: 0 10px; font-size: 13px; }
+.ned-top .grow { flex: 1; }
+.ned-top .tb.star.on { color: #e5a000; }
+.ned-tools { display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.ned-tools::-webkit-scrollbar { display: none; }
+.ned-tools button { min-width: 42px; height: 42px; padding: 0 8px; border-radius: 10px; font-size: 15px; flex-shrink: 0; }
+.ned-tools button:active { background: var(--surface2); }
+.ned-tools .sep { width: 1px; height: 26px; background: var(--line2); margin: 0 4px; flex-shrink: 0; }
+.ned-tools .sw { min-width: 30px; width: 30px; height: 30px; border-radius: 50%; padding: 0; }
+.ned-scroll { flex: 1; overflow-y: auto; }
+.ned-title { width: 100%; border: 0; outline: none; font: 600 26px/1.25 Arial, Helvetica, sans-serif; padding: 24px 32px 6px; background: transparent; }
+.ned-body { min-height: 60vh; outline: none; padding: 6px 32px 120px; font: 16px/1.6 Arial, Helvetica, sans-serif; color: #1a1a1a; user-select: text; -webkit-user-select: text; }
+.ned-body h1 { font-size: 29px; line-height: 1.2; margin: 18px 0 10px; } .ned-body h2 { font-size: 22.5px; margin: 22px 0 8px; } .ned-body h3 { font-size: 18px; margin: 18px 0 6px; }
+.ned-body p { margin: 0 0 10px; }
+.ned-body blockquote { margin: 14px 0; padding: 10px 16px; border-left: 3px solid #d8b400; background: #f6f6f4; border-radius: 0 8px 8px 0; }
+.ned-body ul.todo { list-style: none; padding-left: 4px; }
+.ned-body ul.todo li { position: relative; padding-left: 30px; }
+.ned-body ul.todo li::before { content: ""; position: absolute; left: 0; top: .3em; width: 18px; height: 18px; border: 1.6px solid #66666b; border-radius: 5px; }
+.ned-body ul.todo li[data-done] { color: #888; text-decoration: line-through; }
+.ned-body ul.todo li[data-done]::before { background: var(--fg); border-color: var(--fg); }
+.ned-body a { color: #1a5fb4; }
+.ned-body .ts { font-family: var(--mono); font-size: 12px; color: #777; margin-right: 6px; }
+.ned-empty { flex: 1; display: grid; place-items: center; color: var(--muted); text-align: center; padding: 40px; }
+@media (orientation: portrait) {
+  .nt-wrap { grid-template-columns: minmax(0, 1fr); }
+  .nt-wrap.open .nt-list { display: none; }
+  .nt-wrap:not(.open) .ned-pane { display: none; }
+  .nt-list { border-right: 0; background: var(--bg); }
+}
+.v-notas #screen { overflow: hidden; }
+
 /* Apolo (0.4.0) */
 .ic.letter { font-size: 22px; font-weight: 700; }
 #bottom .ic.letter.sm { width: 26px; height: 26px; border-radius: 8px; border: 1.8px solid currentColor; font-size: 14px; }

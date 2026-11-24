@@ -2376,7 +2376,7 @@ function renderSync(st) {
   }
   const line = SY.state === 'syncing' ? 'A sincronizar…' : SY.state === 'error' ? 'Erro: ' + SY.error : SY.lastOk ? `Última sincronização às ${hm(SY.lastOk)}` : 'Ainda não sincronizou.';
   box.innerHTML = `<div class="set-row"><span>Ligado à Drive de <b>${esc(SY.email || 'a tua conta')}</b></span><span class="hint" style="margin:0">${esc(line)}</span></div>
-    <p class="hint">O Zoom (artigos, coleções e destaques) sincroniza sozinho de 2 em 2 minutos e logo a seguir a cada alteração.</p>
+    <p class="hint">O Zoom (artigos, coleções e destaques) e as Notas sincronizam sozinhos de 2 em 2 minutos e logo a seguir a cada alteração. As gravações e as cópias em Word ficam só no Mac.</p>
     <div class="row-btns"><button class="btn ghost" type="button" id="syncNow">Sincronizar agora</button><button class="btn ghost" type="button" id="syncOff">Desligar</button></div>`;
   $('#syncNow').addEventListener('click', () => Z.invoke('sync:now'));
   $('#syncOff').addEventListener('click', async e => {

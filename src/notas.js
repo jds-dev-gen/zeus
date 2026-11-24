@@ -249,6 +249,19 @@ ${END}
     const i = this.info(id);
     return i ? { id, title: i.title, folder: i.folder, fav: i.fav, updated: i.updated, path: i.path } : null;
   }
+  // nota vinda do tablet (sincronização): fica com o id e a data de criação que trouxe
+  async importNote(n) {
+    this.ensureRoot();
+    const folder = n.folder && (this.folderList || []).includes(n.folder) ? n.folder : '';
+    const dir = path.join(this.root(), folder);
+    await fsp.mkdir(dir, { recursive: true });
+    const note = { id: String(n.id), title: String(n.title || '').trim().slice(0, 200) || 'Nota sem título', fav: !!n.fav, created: n.created && !isNaN(Date.parse(n.created)) ? n.created : new Date().toISOString(), audio: '', html: String(n.html || '') };
+    const p = this.freeName(dir, fileBase(note.title), '.html');
+    await this.writeAtomic(p, this.render(note));
+    await this.scan();
+    this.onChange();
+    return note.id;
+  }
   /* ---------- Lixo das Notas ----------
      Apagar uma nota leva-a (com a cópia em Word e a gravação) para a pasta escondida ".lixo" dentro da pasta das notas,
      numa subpasta só dela; fica lá 30 dias e depois vai para o Lixo do Mac. Pode ser recuperada para a pasta onde estava. */

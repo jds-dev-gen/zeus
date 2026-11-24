@@ -34,6 +34,9 @@ const I = {
   home: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg>',
   zoom: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg>',
   sync: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></svg>',
+  notes: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg>',
+  star: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>',
+  trash: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
   settings: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
   back: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5-7 7 7 7"/></svg>',
   reload: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>',
@@ -77,7 +80,8 @@ const S = {
   space: 'leitura', moveTab: null,
   reader: { size: 20, theme: 'claro' },
   city: null, macTop: [], wx: null, wxAt: 0, visits: {}, closeAll: false,
-  apolo: null, apoloUrl: APOLO
+  apolo: null, apoloUrl: APOLO,
+  notesFolder: 'all', notesQ: '', noteOpen: null, macMt: null
 };
 const spaceTabs = () => S.tabs.filter(t => t.space === S.space);
 const spaceName = id => (S.spaces.find(x => x.id === id) || {}).name || '';
@@ -151,16 +155,21 @@ const Sync = {
   signOut() { ZN.call('signOut').catch(() => {}); this.st.connected = false; this.st.email = ''; this.persist(); clearInterval(this.timer); this.timer = null; this.set('idle'); },
   start() { if (this.timer) return; this.timer = setInterval(() => this.now(), 120000); setTimeout(() => this.now(), 1500); },
   touch() { if (!this.st.connected) return; clearTimeout(this.soonT); this.soonT = setTimeout(() => this.now(), 4000); },
+  seen: {},   // por documento: { mt: hora da Drive, ls: o que este aparelho tinha } — sem mudanças não se descarrega nada
   async doc(name, get, merge, apply) {
     const file = name + '.json';
-    const fid = await D('find', { name: file });
-    if (!fid) { await D('upload', { name: file, text: JSON.stringify(get()) }); return; }
-    const txt = await D('download', { fid });
+    const f = await D('find', { name: file });
+    const local = get(), ls = JSON.stringify(local);
+    if (!f) { const u = await D('upload', { name: file, text: ls }); this.seen[name] = { mt: u && u.mt, ls }; return; }
+    const sn = this.seen[name];
+    if (sn && sn.mt && sn.mt === f.mt && sn.ls === ls) return;
+    const txt = await D('download', { fid: f.id });
     let remote = null; try { remote = JSON.parse(txt); } catch (e) { /* ficheiro estragado: fica o deste aparelho */ }
-    const local = get();
-    const merged = remote ? merge(local, remote) : local;
-    if (JSON.stringify(merged) !== JSON.stringify(local)) apply(merged);
-    if (!remote || JSON.stringify(merged) !== JSON.stringify(remote)) await D('upload', { name: file, text: JSON.stringify(merged), fid });
+    const merged = remote ? merge(local, remote) : local, ms = JSON.stringify(merged);
+    if (ms !== ls) apply(merged);
+    let mt = f.mt;
+    if (!remote || ms !== JSON.stringify(remote)) { const u = await D('upload', { name: file, text: ms, fid: f.id }); mt = u && u.mt; }
+    this.seen[name] = { mt, ls: ms };
   },
   now() {
     if (!this.st.connected) return Promise.resolve(false);
@@ -169,11 +178,13 @@ const Sync = {
       this.set('syncing');
       try {
         await this.doc('zoom', () => zoom.data(), mergeZoom, d => zoom.replace(d));
+        await this.doc('notas', notesGet, window.NotasCore.mergeNotas, notesApply);
         // separadores abertos no Mac (só leitura)
         try {
-          const fid = await D('find', { name: 'mac-tabs.json' });
-          if (fid) {
-            const j = JSON.parse(await D('download', { fid }));
+          const f = await D('find', { name: 'mac-tabs.json' });
+          if (f && f.mt !== S.macMt) {
+            const j = JSON.parse(await D('download', { fid: f.id }));
+            S.macMt = f.mt;
             S.macTabs = Array.isArray(j.tabs) ? j.tabs : []; S.macAt = j.at || 0;
             S.macTop = Array.isArray(j.top) ? j.top : [];
             if (j.city && j.city.lat != null && (!S.city || S.city.lat !== j.city.lat || S.city.lon !== j.city.lon)) { S.city = j.city; S.wx = null; S.wxAt = 0; loadWeather(); }
@@ -273,6 +284,7 @@ async function openApolo() {
   renderTop();
 }
 async function go(view) {
+  if (S.view === 'notas') flushEditor();
   if (view === 'apolo') return openApolo();
   if (view === 'tab' && !cur()) view = 'home';
   if (S.view === 'tab' && view !== 'tab') await thumbNow();
@@ -313,6 +325,7 @@ ZN.on('tabCreated', async d => {
 ZN.on('tabClosedByPage', d => closeTab(d.id));
 ZN.on('openUrl', d => newTab(d.url));
 ZN.on('resume', () => { Sync.now(); renderSoon(); });
+ZN.on('pause', () => { if (S.view === 'notas') flushEditor(); });
 
 /* ---------- desenho ---------- */
 let renderT = null;
@@ -320,7 +333,8 @@ function renderSoon() { if (!renderT) renderT = requestAnimationFrame(() => { re
 function render(force) {
   const app = $('#app');
   // não apagar o que se está a escrever numa caixa do ecrã (a não ser a pedido)
-  const typing = !force && document.activeElement && document.activeElement.tagName === 'INPUT' && $('#screen').contains(document.activeElement);
+  const ae = document.activeElement;
+  const typing = !force && ae && (ae.tagName === 'INPUT' || ae.isContentEditable) && $('#screen').contains(ae);
   app.className = 'v-' + S.view + (S.view === 'tab' && S.hl ? ' hl' : '');
   document.querySelectorAll('[data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === S.view));
   document.querySelectorAll('.tabsN').forEach(el => el.dataset.n = S.tabs.length);
@@ -387,7 +401,132 @@ function recentHls(n) {
   return all.sort((a, b) => (b.h.updatedAt || b.h.createdAt || 0) - (a.h.updatedAt || a.h.createdAt || 0)).slice(0, n);
 }
 
+/* ---------- Notas (as mesmas do Mac; notas-core.js) ---------- */
+let notesDoc = window.NotasCore.normalizeNotas({}), notesT = null;
+const notesGet = () => window.NotasCore.mergeNotas(notesDoc, {});
+async function loadNotes() {
+  try { const t = await ZN.call('storeRead', { name: 'notas.json' }); if (t) notesDoc = window.NotasCore.normalizeNotas(JSON.parse(t)); } catch (e) { /* primeira vez */ }
+}
+function saveNotes(fromSync) {
+  clearTimeout(notesT);
+  notesT = setTimeout(() => ZN.call('storeWrite', { name: 'notas.json', text: JSON.stringify(notesDoc) }).catch(() => {}), 400);
+  if (!fromSync) Sync.touch();
+}
+function notesApply(d) {
+  notesDoc = window.NotasCore.normalizeNotas(d);
+  saveNotes(true);
+  if (S.noteOpen && !notesDoc.notes.some(n => n.id === S.noteOpen)) S.noteOpen = null;
+  if (S.view === 'notas') render();   // não mexe no editor enquanto se escreve (ver render)
+}
+const noteById = id => notesDoc.notes.find(n => n.id === id) || null;
+function touchNote(id, patch) {
+  const n = noteById(id); if (!n) return;
+  Object.assign(n, patch, { updated: Date.now() });
+  saveNotes();
+}
+const pad = x => String(x).padStart(2, '0');
+function newNote() {
+  const d = new Date();
+  const f = S.notesFolder && S.notesFolder.startsWith('f:') ? S.notesFolder.slice(2) : '';
+  const n = { id: 't' + uid(), title: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)} ${pad(d.getHours())}:${pad(d.getMinutes())} Nova nota`, folder: f, fav: false, created: d.toISOString(), updated: Date.now(), html: '' };
+  notesDoc.notes.unshift(n);
+  saveNotes();
+  S.noteOpen = n.id; S.noteNew = true;
+  render(true);
+  setTimeout(() => { const t = $('#nTitle'); if (t) { t.focus(); const k = t.value.indexOf('Nova nota'); if (k >= 0) t.setSelectionRange(k, t.value.length); } }, 60);
+}
+function closeNote() { flushEditor(); S.noteOpen = null; render(true); }
+// o que está no editor passa para a nota (limpo)
+function flushEditor() {
+  const b = $('#nBody'), t = $('#nTitle'); if (!b || !S.noteOpen) return;
+  const n = noteById(S.noteOpen); if (!n) return;
+  const html = cleanHtml(b.innerHTML), title = (t ? t.value.trim() : n.title) || 'Nota sem título';
+  if (html !== n.html || title !== n.title) touchNote(n.id, { html, title });
+}
+let edT = null;
+function editedSoon() { clearTimeout(edT); edT = setTimeout(() => { flushEditor(); const n = noteById(S.noteOpen); const it = n && document.querySelector(`[data-note="${CSS.escape(n.id)}"]`); if (it) { it.querySelector('b span').textContent = n.title; it.querySelector('p').textContent = textOf(n.html).slice(0, 140); } }, 700); }
+/* só ficam as marcas que as Notas do Mac usam (sem scripts nem eventos) */
+const OK_TAGS = new Set(['P', 'DIV', 'BR', 'H1', 'H2', 'H3', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'A', 'SPAN', 'MARK', 'CODE', 'PRE', 'HR', 'SUB', 'SUP']);
+const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'TEMPLATE', 'SVG', 'MATH', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT']);
+function cleanHtml(html) {
+  const doc = new DOMParser().parseFromString('<div id="r">' + String(html || '') + '</div>', 'text/html');
+  const walk = el => {
+    for (const c of [...el.childNodes]) {
+      if (c.nodeType === 8) { c.remove(); continue; }
+      if (c.nodeType !== 1) continue;
+      if (DROP_TAGS.has(c.tagName)) { c.remove(); continue; }
+      walk(c);
+      if (!OK_TAGS.has(c.tagName)) { c.replaceWith(...c.childNodes); continue; }
+      for (const at of [...c.attributes]) {
+        const n = at.name.toLowerCase();
+        if (n === 'href' && c.tagName === 'A' && /^(https?:|mailto:)/i.test(at.value)) continue;
+        if (n === 'class') { const k = at.value.split(/\s+/).filter(x => ['todo', 'ts', 'src'].includes(x)); if (k.length) { c.setAttribute('class', k.join(' ')); continue; } }
+        if (n === 'data-done' || n === 'data-t') continue;
+        if (n === 'style') {
+          const keep = at.value.split(';').map(x => x.trim()).filter(x => /^(color|background-color|background|font-size|font-weight|font-style|text-decoration)\s*:/i.test(x) && !/url\(|expression/i.test(x));
+          if (keep.length) { c.setAttribute('style', keep.join('; ')); continue; }
+        }
+        c.removeAttribute(at.name);
+      }
+    }
+  };
+  const r = doc.getElementById('r'); walk(r);
+  return r.innerHTML.trim();
+}
+const textOf = html => (new DOMParser().parseFromString('<div>' + String(html || '').replace(/<(br|\/p|\/h[1-3]|\/li|\/blockquote)[^>]*>/gi, '$& ') + '</div>', 'text/html').body.textContent || '').replace(/\s+/g, ' ').trim();
+const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? '' : `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`; };
+const HL_COLORS = { yellow: '#fff1a6', green: '#c6f3cc', blue: '#c9e4ff', pink: '#ffd3e4', orange: '#ffe1bd' };
+function notesScreen() {
+  const f = S.notesFolder || 'all', q = (S.notesQ || '').toLowerCase();
+  const all = notesDoc.notes;
+  const list = all.filter(n => (f === 'all' || (f === 'fav' && n.fav) || (f.startsWith('f:') && n.folder === f.slice(2))) && (!q || (n.title + ' ' + textOf(n.html)).toLowerCase().includes(q)));
+  const chip = (id, name, k) => `<button class="chip ${f === id ? 'on' : ''}" data-act="nfolder" data-f="${esc(id)}">${esc(name)}${k != null ? ' · ' + k : ''}</button>`;
+  const n = S.noteOpen ? noteById(S.noteOpen) : null;
+  return `<div class="nt-wrap ${n ? 'open' : ''}">
+    <div class="nt-list"><div class="nt-list-h">
+      <div class="row"><h1>Notas</h1><button class="btn" data-act="nnew">+ Nova</button></div>
+      <input class="inp" id="nq" type="search" placeholder="Procurar nas notas" value="${esc(S.notesQ || '')}">
+      <div class="chips">${chip('all', 'Todas', all.length)}${chip('fav', 'Favoritas', all.filter(x => x.fav).length)}${notesDoc.folders.map(x => chip('f:' + x, x, all.filter(y => y.folder === x).length)).join('')}<button class="chip add" data-act="naddfolder">+ Pasta</button></div>
+    </div>
+    <div class="nt-items">${list.length ? list.map(x => `<button class="nt-i ${n && n.id === x.id ? 'on' : ''}" data-act="nopen" data-id="${esc(x.id)}" data-note="${esc(x.id)}"><b><span>${esc(x.title)}</span>${x.fav ? '★' : ''}</b><small>${fmtDate(x.created)}${x.folder ? ' · ' + esc(x.folder) : ''}</small><p>${esc(textOf(x.html).slice(0, 140))}</p></button>`).join('') : `<p class="empty" style="padding:12px">${Sync.st.connected ? 'Sem notas aqui.' : 'Sem notas. Liga a Drive nas Definições para trazer as notas do Mac.'}</p>`}</div></div>
+    <div class="ned-pane">${n ? noteEditor(n) : '<div class="ned"><div class="ned-empty">Escolhe uma nota, ou cria uma nova.</div></div>'}</div>
+  </div>`;
+}
+function noteEditor(n) {
+  const tb = (act, label, aria, v) => `<button data-act="${act}" ${v ? `data-v="${v}"` : ''} aria-label="${aria}">${label}</button>`;
+  return `<div class="ned">
+    <div class="ned-top"><button class="tb" data-act="nclose" aria-label="Voltar às notas">${I.back}</button>
+      <select id="nFolder" aria-label="Pasta"><option value="">Sem pasta</option>${notesDoc.folders.map(x => `<option ${n.folder === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+      <span class="grow"></span><small class="hint">Criada a ${fmtDate(n.created)}</small>
+      <button class="tb star ${n.fav ? 'fav' : ''}" data-act="nfav" aria-label="Favorita">${I.star}</button>
+      <button class="tb ${S.delArmed === 'note' ? 'on' : ''}" data-act="ndel" aria-label="Apagar a nota">${S.delArmed === 'note' ? 'Apagar?' : I.trash}</button></div>
+    <div class="ned-tools" id="nTools">
+      ${tb('nfmt', '<b>B</b>', 'Negrito', 'bold')}${tb('nfmt', '<i>I</i>', 'Itálico', 'italic')}${tb('nfmt', '<u>U</u>', 'Sublinhado', 'underline')}${tb('nfmt', '<s>S</s>', 'Riscado', 'strikeThrough')}<span class="sep"></span>
+      ${tb('nblock', 'H1', 'Título 1', 'h1')}${tb('nblock', 'H2', 'Título 2', 'h2')}${tb('nblock', 'H3', 'Título 3', 'h3')}${tb('nblock', '¶', 'Texto', 'p')}${tb('nblock', '❝', 'Citação', 'blockquote')}<span class="sep"></span>
+      ${tb('nfmt', '•', 'Lista', 'insertUnorderedList')}${tb('nfmt', '1.', 'Lista numerada', 'insertOrderedList')}${tb('ntodo', '☐', 'Tarefas')}<span class="sep"></span>
+      ${Object.entries(HL_COLORS).map(([k, c]) => `<button class="sw" data-act="nhl" data-v="${c}" style="background:${c}" aria-label="Destacar a ${COLOR_NAMES[k]}"></button>`).join('')}${tb('nhl', 'Tirar', 'Tirar o destaque', 'transparent')}
+    </div>
+    <div class="ned-scroll"><input class="ned-title" id="nTitle" value="${esc(n.title)}" aria-label="Título"><div class="ned-body" id="nBody" contenteditable="true">${cleanHtml(n.html)}</div></div>
+  </div>`;
+}
+// a barra do editor não pode tirar o cursor do texto
+document.addEventListener('pointerdown', e => { if (e.target.closest('#nTools')) e.preventDefault(); });
+document.addEventListener('input', e => {
+  if (e.target.id === 'nBody' || e.target.id === 'nTitle') editedSoon();
+  if (e.target.id === 'nq') { S.notesQ = e.target.value; clearTimeout(document.nqT); document.nqT = setTimeout(() => { const pos = e.target.selectionStart; flushEditor(); render(true); const z = $('#nq'); if (z) { z.focus(); z.setSelectionRange(pos, pos); } }, 250); }
+});
+document.addEventListener('change', e => { if (e.target.id === 'nFolder' && S.noteOpen) { flushEditor(); touchNote(S.noteOpen, { folder: e.target.value }); render(true); } });
+// tarefas: tocar na caixa (à esquerda) marca como feita
+document.addEventListener('click', e => {
+  const li = e.target.closest('#nBody ul.todo > li'); if (!li) return;
+  if (e.clientX - li.getBoundingClientRect().left > 30) return;
+  e.preventDefault();
+  if (li.hasAttribute('data-done')) li.removeAttribute('data-done'); else li.setAttribute('data-done', '');
+  editedSoon();
+}, true);
+
 const SCREENS = {
+  notas: notesScreen,
   home() {
     const now = new Date();
     const items = zoom.data().items.slice(0, 6);
@@ -440,7 +579,7 @@ const SCREENS = {
       <div class="card-box"><div class="lbl">Sincronização com o Zeus do Mac</div>
         ${s.connected ? `<div class="set-row"><span>Ligado à Drive${s.email ? ' de <b>' + esc(s.email) + '</b>' : ''}</span><small class="hint">${esc(s.state === 'syncing' ? 'A sincronizar…' : s.lastOk ? 'Última sincronização às ' + fmtTime(s.lastOk) : '')}</small></div>
           ${s.state === 'error' ? `<p class="err">${esc(s.error)}</p>` : ''}
-          <p class="hint">O Zoom (artigos, coleções e destaques) sincroniza de 2 em 2 minutos, logo a seguir a cada alteração e ao voltares à app.</p>
+          <p class="hint">O Zoom (artigos, coleções e destaques) e as Notas sincronizam de 2 em 2 minutos, logo a seguir a cada alteração e ao voltares à app.</p>
           <div class="row-btns"><button class="btn ghost" data-act="syncNow">Sincronizar agora</button><button class="btn danger" data-act="signout">${S.delArmed === 'signout' ? 'Confirmar: desligar' : 'Desligar'}</button></div>`
         : `<p class="hint">Entra com a mesma conta Google que ligaste no Zeus do Mac. O Zeus só tem acesso à sua pasta escondida na Drive.</p>
           ${s.error ? `<p class="err">${esc(s.error)}</p>` : ''}
@@ -551,6 +690,27 @@ document.addEventListener('click', async e => {
     case 'scol': { const it = zoom.byUrl(cur().url); if (it) zoom.update(it.id, { col: b.dataset.c }); break; }
     case 'snewcol': { const name = prompt('Nome da coleção nova'); if (name) { const c = zoom.addCol(name); const it = zoom.byUrl(cur().url); if (c && it) zoom.update(it.id, { col: c.id }); } break; }
     case 'sclose': S.overlay = null; S.moveTab = null; render(); break;
+    case 'nnew': flushEditor(); newNote(); break;
+    case 'nopen': flushEditor(); S.noteOpen = b.dataset.id; S.delArmed = null; render(true); break;
+    case 'nclose': closeNote(); break;
+    case 'nfolder': flushEditor(); S.notesFolder = b.dataset.f; render(true); break;
+    case 'naddfolder': { const name = prompt('Nome da pasta nova'); if (name && name.trim()) { const v = name.trim().replace(/[\/\\:*?"<>|]/g, ' ').slice(0, 80); if (!notesDoc.folders.includes(v)) { notesDoc.folders.push(v); notesDoc.foldersAt = Date.now(); saveNotes(); } S.notesFolder = 'f:' + v; render(true); } break; }
+    case 'nfav': { flushEditor(); const n = noteById(S.noteOpen); if (n) { touchNote(n.id, { fav: !n.fav }); render(true); } break; }
+    case 'ndel': {
+      if (S.delArmed !== 'note') { S.delArmed = 'note'; render(true); setTimeout(() => { if (S.delArmed === 'note') { S.delArmed = null; render(true); } }, 4000); break; }
+      S.delArmed = null; const id = S.noteOpen;
+      notesDoc.notes = notesDoc.notes.filter(n => n.id !== id); notesDoc.del[id] = Date.now();
+      S.noteOpen = null; saveNotes(); render(true); toast('Nota apagada (no Mac fica no Lixo das Notas)'); break;
+    }
+    case 'nfmt': document.execCommand(b.dataset.v); editedSoon(); break;
+    case 'nblock': document.execCommand('formatBlock', false, b.dataset.v); editedSoon(); break;
+    case 'nhl': document.execCommand('styleWithCSS', false, true); document.execCommand('hiliteColor', false, b.dataset.v); editedSoon(); break;
+    case 'ntodo': {
+      document.execCommand('insertUnorderedList');
+      const sel = getSelection(); const node = sel && sel.anchorNode; const el = node && (node.nodeType === 1 ? node : node.parentElement);
+      const ul = el && el.closest('#nBody ul'); if (ul) ul.classList.toggle('todo');
+      editedSoon(); break;
+    }
     case 'space': S.space = b.dataset.s; render(); break;
     case 'spaceAdd': { const n = prompt('Nome do espaço novo'); if (n && n.trim()) { const x = { id: uid(), name: n.trim().slice(0, 40) }; S.spaces.push(x); S.space = x.id; saveTabs(); render(); } break; }
     case 'spaceEdit': {
@@ -604,7 +764,6 @@ $('#bRead').addEventListener('click', async () => {
   if (r === 'ok') { t.reader = true; renderTop(); } else toast('Não encontrei um artigo para ler nesta página.');
 });
 $('#bHl').addEventListener('click', () => { S.hl = !S.hl; render(); });
-$('#bbHl').addEventListener('click', () => { if (S.view !== 'tab' && cur()) { S.hl = true; go('tab'); } else if (cur()) { S.hl = !S.hl; render(); } else toast('Abre um artigo para ver os destaques.'); });
 $('#bSave').addEventListener('click', async () => {
   const t = cur(); if (!t || !/^https?:/.test(t.url)) return;
   if (!zoom.byUrl(t.url)) {
@@ -677,6 +836,7 @@ function onBack() {
     if (t && t.back) return 'page';
     go('home'); return 'handled';
   }
+  if (S.view === 'notas' && S.noteOpen && matchMedia('(orientation: portrait)').matches) { closeNote(); return 'handled'; }
   if (S.view === 'apolo') { if (S.apolo && S.apolo.back) return 'page'; go('home'); return 'handled'; }
   if (S.view !== 'home') { go(cur() ? 'tab' : 'home'); return 'handled'; }
   return 'exit';
@@ -783,6 +943,7 @@ async function checkUpdate(manual) {
   const info = await ZN.call('ready').catch(() => ({}));
   S.version = (info && info.version) || '';
   await loadZoom();
+  await loadNotes();
   await restoreTabs();
   await Sync.init();
   await loadPrefs();

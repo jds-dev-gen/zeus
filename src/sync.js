@@ -44,6 +44,7 @@ class Sync {
     this.cfg = this.load();
     this.tok = null;                 // { access, exp }
     this.fileIds = {};
+    this.seen = {};                  // por documento: { mt: modifiedTime na Drive, ls: o que este aparelho tinha } — para não descarregar sem mudanças
     this.st = { state: 'idle', lastOk: 0, error: '' };
     this.running = null; this.again = false;
     this.timer = null; this.soon = null;
@@ -138,7 +139,7 @@ class Sync {
   async disconnect() {
     const t = this.cfg.refresh;
     delete this.cfg.refresh; delete this.cfg.email;
-    this.tok = null; this.fileIds = {}; this.store();
+    this.tok = null; this.fileIds = {}; this.seen = {}; this.store();
     clearInterval(this.timer); this.timer = null;
     this.set('idle');
     if (t) { try { await this.o.fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(t), { method: 'POST' }); } catch (e) { /* ok */ } }
@@ -179,44 +180,53 @@ class Sync {
   }
 
   /* ---------- ficheiros na pasta escondida da app ---------- */
+  // { id, mt } do ficheiro na pasta escondida da app (mt = hora da última alteração na Drive), ou null
   async findFile(name) {
-    if (this.fileIds[name]) return this.fileIds[name];
     const q = new URLSearchParams({ spaces: 'appDataFolder', q: `name = '${name}' and trashed = false`, fields: 'files(id,modifiedTime)', orderBy: 'modifiedTime desc', pageSize: '10' });
     const j = await (await this.api(`${DRIVE}/files?${q}`)).json();
     const f = (j.files || [])[0];
     if (f) this.fileIds[name] = f.id;
-    return f ? f.id : null;
+    return f ? { id: f.id, mt: f.modifiedTime || '' } : null;
   }
   async download(id) {
     const r = await this.api(`${DRIVE}/files/${id}?alt=media`);
     const txt = await r.text();
     try { return JSON.parse(txt); } catch (e) { return null; }
   }
+  // devolve { id, mt }
   async upload(name, obj, id) {
     const json = JSON.stringify(obj);
     if (id) {
-      await this.api(`${UPLOAD}/files/${id}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: json });
-      return id;
+      const r = await (await this.api(`${UPLOAD}/files/${id}?uploadType=media&fields=id,modifiedTime`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: json })).json();
+      return { id, mt: r.modifiedTime || '' };
     }
     const boundary = 'zeus' + crypto.randomBytes(8).toString('hex');
     const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: ['appDataFolder'], mimeType: 'application/json' })}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${json}\r\n--${boundary}--`;
-    const j = await (await this.api(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body })).json();
+    const j = await (await this.api(`${UPLOAD}/files?uploadType=multipart&fields=id,modifiedTime`, { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body })).json();
     this.fileIds[name] = j.id;
-    return j.id;
+    return { id: j.id, mt: j.modifiedTime || '' };
   }
 
   /* ---------- documentos ---------- */
   register(name, doc) { this.docs.set(name, doc); }
+  // get e apply podem ser assíncronos; get() === null: o documento não está disponível agora (salta-se)
   async syncDoc(name, doc) {
     const file = name + '.json';
-    const id = await this.findFile(file);
-    const local = doc.get();
-    if (!id) { await this.upload(file, local, null); return; }
+    const f = await this.findFile(file);
+    const local = await doc.get();
+    if (local == null) return;
+    const ls = stable(local);
+    if (!f) { const u = await this.upload(file, local, null); this.seen[name] = { mt: u.mt, ls }; return; }
+    const seen = this.seen[name];
+    if (seen && seen.mt && seen.mt === f.mt && seen.ls === ls) return;   // nada mudou nem aqui nem na Drive
     let remote;
-    try { remote = await this.download(id); } catch (e) { if (/404/.test(e.message)) { delete this.fileIds[file]; return this.syncDoc(name, doc); } throw e; }
+    try { remote = await this.download(f.id); } catch (e) { if (/404/.test(e.message)) { delete this.fileIds[file]; return this.syncDoc(name, doc); } throw e; }
     const merged = remote ? doc.merge(local, remote) : local;
-    if (stable(merged) !== stable(doc.get())) doc.apply(merged);
-    if (!remote || stable(merged) !== stable(remote)) await this.upload(file, merged, id);
+    const ms = stable(merged);
+    if (ms !== ls) await doc.apply(merged);
+    let mt = f.mt;
+    if (!remote || ms !== stable(remote)) mt = (await this.upload(file, merged, f.id)).mt;
+    this.seen[name] = { mt, ls: ms };
   }
 
   /* uma volta de sincronização (se já há uma a correr, faz-se outra a seguir) */

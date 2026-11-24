@@ -24,7 +24,7 @@ function setupNotas(x) {
   const wc = () => { const w = x.getWC(); return w && !w.isDestroyed() ? w : null; };
   const send = (ch, ...a) => { const w = wc(); if (w) w.send('notas:' + ch, ...a); };
   const toast = msg => { const u = x.getUi(); if (u && !u.isDestroyed()) u.send('toast', msg); };
-  const notas = new Notas(UD, () => send('changed'));
+  const notas = new Notas(UD, () => { send('changed'); if (x.onNotasChange) x.onNotasChange(); });
   const from = e => { const w = wc(); return !!w && e.sender === w && e.senderFrame === w.mainFrame; };
   const h = (name, fn) => ipcMain.handle('notas:' + name, async (e, ...a) => (from(e) ? fn(...a) : null));
   const trash = p => shell.trashItem(p);
@@ -465,7 +465,70 @@ function setupNotas(x) {
   async function createNote(title, html, audioAbs) { const id = await serial(() => notas.create('', title, html, audioAbs || '')); send('changed'); return id; }
   function transcribeInto(id, wav, secs) { addJob({ id, wav, secs, stage: 'transcrever', pct: 0, at: Date.now() }); }
   setTimeout(pushStatus, 1500);
-  return { notas, isRecording: () => !!rec, status, quitCheck, createNote, transcribeInto, modelState, getKey, keyState, setKey, whisper: () => ({ bin: binPath(), model: modelPath() }) };
+  /* ---------- sincronização com o Zeus do tablet (desde a 0.26.0; ver notas-core.js e sync.js) ----------
+     Os ficheiros .html continuam a ser a fonte; na Drive (pasta escondida da app) vai uma cópia de todas as notas
+     em notas.json. Um espelho (notas-sync.json) guarda, para cada nota, a hora do ficheiro e a versão que foi
+     sincronizada: assim sabe-se o que mudou no Mac (o ficheiro mudou), o que foi apagado no Mac (desapareceu) e
+     não se volta a ler nenhum ficheiro sem necessidade. O que vem do tablet é escrito nos ficheiros; apagar vai
+     para o Lixo das Notas. As gravações (áudio) e a cópia em Word ficam só no Mac. */
+  const { mergeNotas } = require('./notas-core');
+  const mirrorFile = path.join(UD, 'notas-sync.json');
+  let mirror = null;
+  try { mirror = JSON.parse(fs.readFileSync(mirrorFile, 'utf8')); } catch (e) { mirror = null; }
+  if (!mirror || typeof mirror !== 'object' || !mirror.notes) mirror = { notes: {}, del: {}, folders: [], foldersAt: 0 };
+  const saveMirror = () => { try { const tmp = mirrorFile + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(mirror)); fs.renameSync(tmp, mirrorFile); } catch (e) { /* ok */ } };
+  const syncDoc = {
+    get: () => serial(async () => {
+      await notas.scan();
+      const out = [], live = new Set();
+      for (const n of notas.index.values()) {
+        live.add(n.id);
+        const m = mirror.notes[n.id];
+        if (m && m.mtime === n.updated && m.folder === (n.folder || '')) { out.push({ id: n.id, title: m.title, folder: m.folder, fav: m.fav, created: m.created, updated: m.updated, html: m.html }); continue; }
+        const r = await notas.read(n.id); if (!r) continue;
+        const e = { id: n.id, title: r.title || n.title, folder: n.folder || '', fav: !!n.fav, created: n.created, updated: Math.round(n.updated), html: r.html || '' };
+        mirror.notes[n.id] = Object.assign({ mtime: n.updated }, e);
+        out.push(e);
+      }
+      for (const id of Object.keys(mirror.notes)) if (!live.has(id)) { mirror.del[id] = Math.max(+mirror.del[id] || 0, Date.now()); delete mirror.notes[id]; }
+      const folders = (notas.folderList || []).slice();
+      if (JSON.stringify(folders) !== JSON.stringify(mirror.folders)) { mirror.folders = folders; mirror.foldersAt = Date.now(); }
+      const doc = mergeNotas({ notes: out, folders: mirror.folders, foldersAt: mirror.foldersAt, del: mirror.del }, {});
+      mirror.del = doc.del;   // os apagados com mais de 120 dias esquecem-se
+      saveMirror();
+      return doc;
+    }),
+    merge: mergeNotas,
+    apply: d => serial(async () => {
+      d = mergeNotas(d, {});
+      const have = new Set(notas.folderList || []);
+      for (const f of d.folders) if (!have.has(f)) { try { await notas.addFolder(f); } catch (e) { /* ok */ } }
+      for (const n of d.notes) {
+        const cur = notas.info(n.id), m = mirror.notes[n.id];
+        const localUpdated = m ? m.updated : (cur ? Math.round(cur.updated) : 0);
+        try {
+          if (!cur) await notas.importNote(n);
+          else if (n.updated > localUpdated) {
+            const same = m && m.title === n.title && m.html === n.html && m.fav === n.fav && m.folder === n.folder;
+            if (!same) await notas.save(n.id, { title: n.title, html: n.html, fav: n.fav, folder: n.folder });
+          } else continue;
+        } catch (e) { continue; }
+        const i = notas.info(n.id);
+        if (i) mirror.notes[n.id] = { mtime: i.updated, id: n.id, title: n.title, folder: i.folder || '', fav: n.fav, created: n.created || i.created, updated: n.updated, html: n.html };
+      }
+      for (const [id, t] of Object.entries(d.del)) {
+        mirror.del[id] = Math.max(+mirror.del[id] || 0, t);
+        const cur = notas.info(id), m = mirror.notes[id];
+        if (cur && t >= (m ? m.updated : Math.round(cur.updated))) { try { await notas.remove(id, trash); } catch (e) { /* ok */ } delete mirror.notes[id]; }
+      }
+      mirror.folders = (notas.folderList || []).slice();
+      mirror.foldersAt = Math.max(mirror.foldersAt || 0, d.foldersAt || 0);
+      saveMirror();
+      send('changed');
+    })
+  };
+
+  return { notas, sync: syncDoc, isRecording: () => !!rec, status, quitCheck, createNote, transcribeInto, modelState, getKey, keyState, setKey, whisper: () => ({ bin: binPath(), model: modelPath() }) };
 }
 
 module.exports = { setupNotas, toText };

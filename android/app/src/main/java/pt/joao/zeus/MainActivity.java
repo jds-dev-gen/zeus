@@ -609,9 +609,10 @@ public class MainActivity extends Activity {
         switch (op) {
             case "find": {
                 String q = "name = '" + a.optString("name").replace("'", "") + "' and trashed = false";
-                String u = DRIVE + "/files?spaces=appDataFolder&pageSize=10&orderBy=" + enc("modifiedTime desc") + "&fields=" + enc("files(id)") + "&q=" + enc(q);
+                String u = DRIVE + "/files?spaces=appDataFolder&pageSize=10&orderBy=" + enc("modifiedTime desc") + "&fields=" + enc("files(id,modifiedTime)") + "&q=" + enc(q);
                 JSONArray f = new JSONObject(http("GET", u, tok, null, null)).optJSONArray("files");
-                return f != null && f.length() > 0 ? f.getJSONObject(0).optString("id") : null;
+                if (f == null || f.length() == 0) return null;
+                return obj("id", f.getJSONObject(0).optString("id"), "mt", f.getJSONObject(0).optString("modifiedTime"));
             }
             case "download":
                 return http("GET", DRIVE + "/files/" + enc(a.optString("fid")) + "?alt=media", tok, null, null);
@@ -619,8 +620,8 @@ public class MainActivity extends Activity {
                 byte[] body = a.optString("text").getBytes(StandardCharsets.UTF_8);
                 String fid = a.optString("fid", "");
                 if (!fid.isEmpty() && !fid.equals("null")) {
-                    http("PATCH", UPLOAD + "/files/" + enc(fid) + "?uploadType=media", tok, "application/json", body);
-                    return fid;
+                    String r = http("PATCH", UPLOAD + "/files/" + enc(fid) + "?uploadType=media&fields=id,modifiedTime", tok, "application/json", body);
+                    return obj("id", fid, "mt", new JSONObject(r).optString("modifiedTime"));
                 }
                 String bnd = "zeus" + Long.toHexString(System.nanoTime());
                 String meta = obj("name", a.optString("name"), "parents", new JSONArray().put("appDataFolder"), "mimeType", "application/json").toString();
@@ -628,8 +629,9 @@ public class MainActivity extends Activity {
                 out.write(("--" + bnd + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + meta + "\r\n--" + bnd + "\r\nContent-Type: application/json\r\n\r\n").getBytes(StandardCharsets.UTF_8));
                 out.write(body);
                 out.write(("\r\n--" + bnd + "--").getBytes(StandardCharsets.UTF_8));
-                String r = http("POST", UPLOAD + "/files?uploadType=multipart&fields=id", tok, "multipart/related; boundary=" + bnd, out.toByteArray());
-                return new JSONObject(r).optString("id");
+                String r = http("POST", UPLOAD + "/files?uploadType=multipart&fields=id,modifiedTime", tok, "multipart/related; boundary=" + bnd, out.toByteArray());
+                JSONObject j = new JSONObject(r);
+                return obj("id", j.optString("id"), "mt", j.optString("modifiedTime"));
             }
             case "about": {
                 JSONObject j = new JSONObject(http("GET", DRIVE + "/about?fields=" + enc("user(emailAddress)"), tok, null, null));

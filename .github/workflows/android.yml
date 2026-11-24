@@ -15,7 +15,7 @@ name: Zeus Android
 on:
   push:
     branches: [main]
-    paths: ['android/**', 'src/zoom-core.js', '.github/workflows/android.yml']
+    paths: ['android/**', 'src/zoom-core.js', 'src/notas-core.js', '.github/workflows/android.yml']
   workflow_dispatch:
 
 permissions:
@@ -44,6 +44,7 @@ jobs:
       - name: Ficheiros partilhados com o Zeus do Mac
         run: |
           cp src/zoom-core.js android/app/src/main/assets/app/zoom-core.js
+          cp src/notas-core.js android/app/src/main/assets/app/notas-core.js
           mkdir -p android/app/src/main/assets/app/fonts
           cp src/ui/fonts/Geist-Variable.woff2 android/app/src/main/assets/app/fonts/
 

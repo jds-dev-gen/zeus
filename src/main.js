@@ -24,6 +24,7 @@ const { Updater } = require('./updater');
 const { Scores } = require('./scores');
 const { Zoom, mergeZoom } = require('./zoom');
 const { Sync } = require('./sync');
+const { mergeNotas } = require('./notas-core');
 const PKG = require('../package.json');
 
 const isMac = process.platform === 'darwin';
@@ -1605,6 +1606,12 @@ function setupSync() {
     onStatus: st => { if (ui && !ui.isDestroyed()) ui.send('sync', st); }
   });
   sync.register('zoom', { get: () => zoom.data(), merge: mergeZoom, apply: d => zoom.replace(d) });
+  // Notas (ficheiros .html no Mac ⇄ notas.json na Drive ⇄ tablet); ver notas-main.js
+  sync.register('notas', {
+    get: () => (notasApp && notasApp.sync ? notasApp.sync.get() : null),
+    merge: mergeNotas,
+    apply: d => (notasApp && notasApp.sync ? notasApp.sync.apply(d) : null)
+  });
   // separadores abertos no Mac, para o tablet os mostrar em "Do Mac" (só o Mac escreve; o tablet só lê)
   sync.register('mac-tabs', {
     // + a cidade da meteorologia e os sites mais visitados, para a página inicial do tablet
@@ -3094,7 +3101,8 @@ function setupIPC() {
     app, ipcMain, dialog, shell, Menu, BrowserWindow, net, safeStorage, Notification, systemPreferences,
     getWC: () => notasWC, getUi: () => ui, getWin: () => win, getView: () => appViews.get('notas'),
     getZoom: () => zoom, isDark, openTab: url => newTab({ url, space: spaceForOpener() }),
-    onStatus: () => pushState(true)
+    onStatus: () => pushState(true),
+    onNotasChange: () => { if (sync) sync.touch(); }
   });
   orfeuApp = setupOrfeu({
     app, ipcMain, dialog, shell,

@@ -4,3 +4,4 @@ build/
 local.properties
 app/src/main/assets/app/zoom-core.js
 app/src/main/assets/app/fonts/
+app/src/main/assets/app/notas-core.js
