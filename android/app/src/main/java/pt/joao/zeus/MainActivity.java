@@ -109,7 +109,9 @@ public class MainActivity extends Activity {
         setContentView(root);
         hlScript = readAsset("app/hl.js");
 
-        shell = new WebView(this);
+        ZWebView sv = new ZWebView(this);
+        sv.plain = true;   // Notas e caixas de texto: o menu do Android fica, mas por baixo da seleção
+        shell = sv;
         WebSettings s = shell.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
