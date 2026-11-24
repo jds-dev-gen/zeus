@@ -475,6 +475,12 @@ function cleanHtml(html) {
 }
 const textOf = html => (new DOMParser().parseFromString('<div>' + String(html || '').replace(/<(br|\/p|\/h[1-3]|\/li|\/blockquote)[^>]*>/gi, '$& ') + '</div>', 'text/html').body.textContent || '').replace(/\s+/g, ' ').trim();
 const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? '' : `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`; };
+// data de criação num "calendário de secretária", como nas Notas do Mac (dia da semana, dia, mês e ano)
+const DT_WD = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'], DT_MO = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+function dateTile(iso) {
+  const d = new Date(iso); if (isNaN(d)) return '<span class="dtile"><span class="wd">·</span><b>–</b><span class="my"></span></span>';
+  return `<span class="dtile" aria-label="Criada a ${d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })}"><span class="wd">${DT_WD[d.getDay()]}</span><b>${d.getDate()}</b><span class="my">${DT_MO[d.getMonth()]} ${String(d.getFullYear() % 100).padStart(2, '0')}</span></span>`;
+}
 const HL_COLORS = { yellow: '#fff1a6', green: '#c6f3cc', blue: '#c9e4ff', pink: '#ffd3e4', orange: '#ffe1bd' };
 function notesScreen() {
   const f = S.notesFolder || 'all', q = (S.notesQ || '').toLowerCase();
@@ -488,7 +494,7 @@ function notesScreen() {
       <input class="inp" id="nq" type="search" placeholder="Procurar nas notas" value="${esc(S.notesQ || '')}">
       <div class="chips">${chip('all', 'Todas', all.length)}${chip('fav', 'Favoritas', all.filter(x => x.fav).length)}${notesDoc.folders.map(x => chip('f:' + x, x, all.filter(y => y.folder === x).length)).join('')}<button class="chip add" data-act="naddfolder">+ Pasta</button></div>
     </div>
-    <div class="nt-items">${list.length ? list.map(x => `<button class="nt-i ${n && n.id === x.id ? 'on' : ''}" data-act="nopen" data-id="${esc(x.id)}" data-note="${esc(x.id)}"><b><span>${esc(x.title)}</span>${x.fav ? '★' : ''}</b><small>${fmtDate(x.created)}${x.folder ? ' · ' + esc(x.folder) : ''}</small><p>${esc(textOf(x.html).slice(0, 140))}</p></button>`).join('') : `<p class="empty" style="padding:12px">${Sync.st.connected ? 'Sem notas aqui.' : 'Sem notas. Liga a Drive nas Definições para trazer as notas do Mac.'}</p>`}</div></div>
+    <div class="nt-items">${list.length ? list.map(x => `<button class="nt-i dt ${n && n.id === x.id ? 'on' : ''}" data-act="nopen" data-id="${esc(x.id)}" data-note="${esc(x.id)}">${dateTile(x.created)}<span class="nb"><b><span>${esc(x.title)}</span>${x.fav ? '★' : ''}</b>${x.folder && !f.startsWith('f:') ? `<small>${esc(x.folder)}</small>` : ''}<p>${esc(textOf(x.html).slice(0, 140))}</p></span></button>`).join('') : `<p class="empty" style="padding:12px">${Sync.st.connected ? 'Sem notas aqui.' : 'Sem notas. Liga a Drive nas Definições para trazer as notas do Mac.'}</p>`}</div></div>
     <div class="ned-pane">${n ? noteEditor(n) : '<div class="ned"><div class="ned-empty">Escolhe uma nota, ou cria uma nova.</div></div>'}</div>
   </div>`;
 }

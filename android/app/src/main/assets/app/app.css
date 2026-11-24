@@ -274,6 +274,15 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
 }
 .v-notas #screen { overflow: hidden; height: 100%; }
 
+/* 0.5.2: data de criação à esquerda (como nas Notas do Mac) */
+.nt-i.dt { flex-direction: row; align-items: flex-start; gap: 12px; }
+.nt-i .nb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dtile { flex: 0 0 48px; width: 48px; border: 1px solid var(--line2); border-radius: 9px; overflow: hidden; text-align: center; line-height: 1; background: #fff; margin-top: 1px; }
+.dtile .wd { display: block; background: var(--fg); color: #fff; font-size: 10px; font-weight: 600; letter-spacing: .07em; padding: 4px 0 3px; }
+.dtile b { display: block; font-size: 21px; font-weight: 600; padding: 5px 0 2px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.dtile .my { display: block; font-size: 9.5px; font-weight: 500; letter-spacing: .05em; color: var(--muted); padding: 0 0 6px; }
+.nt-i.on .dtile { border-color: var(--fg); }
+
 /* Apolo (0.4.0) */
 .ic.letter { font-size: 22px; font-weight: 700; }
 #bottom .ic.letter.sm { width: 26px; height: 26px; border-radius: 8px; border: 1.8px solid currentColor; font-size: 14px; }
