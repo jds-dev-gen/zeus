@@ -224,7 +224,12 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
 .btn.armed { background: #c0262d; border-color: #c0262d; color: #fff; }
 
 /* Notas (0.5.0) */
-.nt-wrap { display: grid; grid-template-columns: 340px minmax(0, 1fr); height: 100%; min-height: 0; }
+.nt-wrap { display: grid; grid-template-columns: 340px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100%; min-height: 0; }
+/* 0.5.1: cada coluna com a altura do ecrã, para o texto da nota (e a lista) deslizarem */
+.nt-list, .ned-pane { min-height: 0; height: 100%; overflow: hidden; }
+.ned-pane { display: flex; flex-direction: column; }
+.ned { flex: 1; }
+.ned-scroll { min-height: 0; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .nt-list { border-right: 1px solid var(--line); background: var(--rail); display: flex; flex-direction: column; min-height: 0; }
 .nt-list-h { padding: 16px 16px 10px; display: flex; flex-direction: column; gap: 10px; }
 .nt-list-h .row { display: flex; align-items: center; gap: 8px; }
@@ -267,7 +272,7 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
   .nt-wrap:not(.open) .ned-pane { display: none; }
   .nt-list { border-right: 0; background: var(--bg); }
 }
-.v-notas #screen { overflow: hidden; }
+.v-notas #screen { overflow: hidden; height: 100%; }
 
 /* Apolo (0.4.0) */
 .ic.letter { font-size: 22px; font-weight: 700; }
