@@ -52,7 +52,7 @@ public class ZWebView extends WebView {
             @Override public void onGetContentRect(ActionMode m, View v, Rect out) {
                 if (cb instanceof ActionMode.Callback2) ((ActionMode.Callback2) cb).onGetContentRect(m, v, out);
                 else super.onGetContentRect(m, v, out);
-                if (!empty) out.top = 0;   // o menu do Android vai para baixo da seleção
+                out.top = 0;   // o menu do Android (se aparecer) vai para baixo da seleção
             }
         };
     }
