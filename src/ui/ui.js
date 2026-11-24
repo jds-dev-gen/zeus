@@ -2139,6 +2139,7 @@ async function openSettings() {
     <div class="set-sec"><h3>Privacidade</h3>
       <p class="hint">Apagar todos os dados termina as sessões em todos os sites e apps (WhatsApp, Email, etc.).</p>
       <div class="row-btns"><button class="btn ghost" type="button" id="clrHist">Apagar o histórico</button><button class="btn ghost" type="button" id="clrCache">Limpar a cache</button><button class="btn danger" type="button" id="clrAll">Apagar todos os dados</button></div></div>
+    <div class="set-sec"><h3>Sincronização com o tablet</h3><div id="syncBox"><p class="hint">A carregar…</p></div></div>
     <div class="set-sec"><h3>Atualizações</h3>
       <div class="set-row"><span>Versão instalada: ${esc(S.versions.zeus)}</span>${segHTML('autoUpdate', String(st.autoUpdate !== false), [['true', 'Automáticas'], ['false', 'Desligadas']])}</div>
       <p class="hint" id="updLine"></p>
@@ -2183,6 +2184,7 @@ async function openSettings() {
   };
   Z.invoke('scores:status').then(scStat);
   $('#scRefresh').addEventListener('click', async e => { const b = e.currentTarget; b.textContent = 'A atualizar…'; scStat(await Z.invoke('scores:refresh')); b.textContent = 'Atualizar agora'; });
+  Z.invoke('sync:status').then(renderSync);
   renderUpdate();
   $('#updCheck').addEventListener('click', async () => { U = await Z.invoke('update:check'); renderUpdate(); });
   $('#updInstall').addEventListener('click', installUpdate);
@@ -2337,6 +2339,53 @@ Z.on('update', st => {
   U = st; renderUpdate();
   if (st.state === 'ready' && readyShown !== st.version) { readyShown = st.version; toast(`A versão ${st.version} do Zeus está pronta. Reinicia quando quiseres.`); }
 });
+/* ---------- sincronização com a Drive (Zoom ⇄ tablet) ---------- */
+let SY = null, syncEditing = false;
+function renderSync(st) {
+  if (st) SY = st;
+  const box = $('#syncBox'); if (!box || !SY) return;
+  const hm = t => new Date(t).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+  if (!SY.configured || syncEditing) {
+    box.innerHTML = `<p class="hint">Os artigos, coleções e destaques do Zoom ficam iguais no Zeus do Mac e no do tablet, através de uma pasta escondida da tua Drive (o Zeus só tem acesso a essa pasta). Para começar, cola aqui as credenciais do projeto Google do Zeus (Google Cloud › APIs e serviços › Credenciais › cliente do tipo "App para computador").</p>
+      <form class="field" id="syncForm" autocomplete="off">
+        <label for="syncId">ID do cliente</label><input class="inp" id="syncId" placeholder="…apps.googleusercontent.com" spellcheck="false" value="${esc(SY.clientId || '')}">
+        <label for="syncSecret">Segredo do cliente</label><input class="inp" id="syncSecret" type="password" placeholder="GOCSPX-…" spellcheck="false">
+        <div class="row-btns"><button class="btn" type="submit">Guardar</button>${SY.configured ? '<button class="btn ghost" type="button" id="syncCancel">Cancelar</button>' : ''}</div>
+        <p class="err" id="syncErr" hidden></p></form>`;
+    $('#syncForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const r = await Z.invoke('sync:setClient', $('#syncId').value, $('#syncSecret').value);
+      if (!r || !r.ok) { const er = $('#syncErr'); er.textContent = (r && r.error) || 'Não consegui guardar.'; er.hidden = false; return; }
+      syncEditing = false; renderSync(await Z.invoke('sync:status'));
+    });
+    const c = $('#syncCancel'); if (c) c.addEventListener('click', () => { syncEditing = false; renderSync(); });
+    return;
+  }
+  if (!SY.connected) {
+    box.innerHTML = `<p class="hint">Falta entrar com a tua conta Google. Abre-se um separador com a página da Google; depois de aceitares, fecha-se sozinho.</p>
+      ${SY.error ? `<p class="err">${esc(SY.error)}</p>` : ''}
+      <div class="row-btns"><button class="btn" type="button" id="syncConnect">Entrar com o Google</button><button class="btn ghost" type="button" id="syncEdit">Mudar as credenciais</button></div>`;
+    $('#syncConnect').addEventListener('click', async e => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = 'À espera da Google…';
+      const r = await Z.invoke('sync:connect');
+      if (r && r.ok) toast(`Zeus ligado à Drive de ${r.email || 'a tua conta'}`); else if (r) toast(r.error || 'Não foi possível entrar.');
+      renderSync(await Z.invoke('sync:status'));
+    });
+    $('#syncEdit').addEventListener('click', () => { syncEditing = true; renderSync(); });
+    return;
+  }
+  const line = SY.state === 'syncing' ? 'A sincronizar…' : SY.state === 'error' ? 'Erro: ' + SY.error : SY.lastOk ? `Última sincronização às ${hm(SY.lastOk)}` : 'Ainda não sincronizou.';
+  box.innerHTML = `<div class="set-row"><span>Ligado à Drive de <b>${esc(SY.email || 'a tua conta')}</b></span><span class="hint" style="margin:0">${esc(line)}</span></div>
+    <p class="hint">O Zoom (artigos, coleções e destaques) sincroniza sozinho de 2 em 2 minutos e logo a seguir a cada alteração.</p>
+    <div class="row-btns"><button class="btn ghost" type="button" id="syncNow">Sincronizar agora</button><button class="btn ghost" type="button" id="syncOff">Desligar</button></div>`;
+  $('#syncNow').addEventListener('click', () => Z.invoke('sync:now'));
+  $('#syncOff').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    if (!b.dataset.confirm) { b.dataset.confirm = '1'; b.textContent = 'Confirmar: desligar da Drive'; return; }
+    await Z.invoke('sync:disconnect'); renderSync(await Z.invoke('sync:status'));
+  });
+}
+Z.on('sync', renderSync);
 async function installUpdate() {
   const r = await Z.invoke('update:install');
   if (r && !r.ok && r.error) toast(r.error);

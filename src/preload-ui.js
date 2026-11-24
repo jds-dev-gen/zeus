@@ -18,9 +18,10 @@ const INVOKE = new Set([
   'claude:toggle', 'claude:sendPage', 'claude:ask', 'claude:new',
   'settings:set', 'permissions:list', 'permissions:forget',
   'ext:list', 'ext:store', 'ext:remove', 'ext:load', 'data:clear', 'ui:focusPage', 'ui:focusSelf',
-  'update:status', 'update:check', 'update:install'
+  'update:status', 'update:check', 'update:install',
+  'sync:status', 'sync:setClient', 'sync:connect', 'sync:disconnect', 'sync:now'
 ]);
-const EVENTS = new Set(['state', 'alt', 'toast', 'ui-command', 'find-result', 'extensions', 'update', 'pip', 'scores', 'downloads']);
+const EVENTS = new Set(['state', 'alt', 'toast', 'ui-command', 'find-result', 'extensions', 'update', 'pip', 'scores', 'downloads', 'sync']);
 
 contextBridge.exposeInMainWorld('zeus', {
   platform: process.platform,

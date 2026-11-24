@@ -22,7 +22,8 @@ const { ElectronChromeExtensions } = require('electron-chrome-extensions');
 const { installChromeWebStore, uninstallExtension, loadAllExtensions } = require('electron-chrome-web-store');
 const { Updater } = require('./updater');
 const { Scores } = require('./scores');
-const { Zoom } = require('./zoom');
+const { Zoom, mergeZoom } = require('./zoom');
+const { Sync } = require('./sync');
 const PKG = require('../package.json');
 
 const isMac = process.platform === 'darwin';
@@ -1577,13 +1578,40 @@ function radarPreviewClose(tell) {
 /* ------------------------------------------------------------------ */
 /* Zoom: artigos guardados, coleções e highlights (ver zoom.js)         */
 /* ------------------------------------------------------------------ */
-let zoom = null, zoomNotifyT = null;
-function zoomChanged() {
+let zoom = null, zoomNotifyT = null, sync = null;
+// fromSync: a mudança chegou da Drive (do tablet); senão foi feita aqui e vai para a Drive
+function zoomChanged(fromSync) {
+  if (!fromSync && sync) sync.touch();
+  if (fromSync) setTimeout(refreshHighlights, 150);
   clearTimeout(zoomNotifyT);
   zoomNotifyT = setTimeout(() => {
     pushState();
     if (zoomWC && !zoomWC.isDestroyed()) zoomWC.send('zoomapp:changed');
   }, 120);
+}
+// os destaques mudaram fora da própria página: as páginas abertas voltam a pintá-los
+function refreshHighlights() {
+  const all = [...tabViews.values(), ...[...appViews.values()].filter(v => !v.__internal), ...(radarPrev ? [radarPrev] : [])];
+  all.forEach(v => { try { if (!v.webContents.isDestroyed()) v.webContents.send('zh:refresh'); } catch (e) { /* ok */ } });
+}
+/* Sincronização com a Drive (ver sync.js): para já, o Zoom */
+function setupSync() {
+  sync = new Sync({
+    dir: app.getPath('userData'),
+    fetch: (u, init) => net.fetch(u, init),
+    safeStorage,
+    // a página da Google abre num separador do Zeus (onde a sessão Google já existe) e fecha-se no fim
+    openURL: url => { const t = newTab({ url }); return () => { if (tabById(t.id)) closeTab(t.id); }; },
+    onStatus: st => { if (ui && !ui.isDestroyed()) ui.send('sync', st); }
+  });
+  sync.register('zoom', { get: () => zoom.data(), merge: mergeZoom, apply: d => zoom.replace(d) });
+  sync.start();
+  powerMonitor.on('resume', () => setTimeout(() => sync.now(), 8000));
+  handle('sync:status', () => sync.status());
+  handle('sync:setClient', (id, secret) => sync.setClient(id, secret));
+  handle('sync:connect', () => sync.connect());
+  handle('sync:disconnect', () => sync.disconnect());
+  handle('sync:now', () => sync.now());
 }
 // páginas web do Zeus onde se pode guardar e sublinhar (separadores, apps da barra, pré-visualização do Radar)
 function isWebPage(wc) {
@@ -1640,10 +1668,7 @@ function zoomIPC() {
   zh('theme', () => (isDark() ? 'dark' : 'light'));
   zh('update', (id, patch) => zoom.update(String(id), patch || {}));
   // mudanças feitas na página Zoom aparecem logo nas páginas abertas
-  const refreshPages = () => {
-    const all = [...tabViews.values(), ...[...appViews.values()].filter(v => !v.__internal), ...(radarPrev ? [radarPrev] : [])];
-    all.forEach(v => { try { if (!v.webContents.isDestroyed()) v.webContents.send('zh:refresh'); } catch (e) { /* ok */ } });
-  };
+  const refreshPages = refreshHighlights;
   zh('remove', id => { const r = zoom.remove(String(id)); refreshPages(); return r; });
   zh('addCol', name => zoom.addCol(name));
   zh('renameCol', (id, name) => zoom.renameCol(String(id), name));
@@ -3463,6 +3488,7 @@ app.whenReady().then(async () => {
   // a interface só fala com o processo principal; não precisa de permissões
   session.defaultSession.setPermissionRequestHandler((wc, p, cb) => cb(false));
   setupIPC();
+  setupSync();
   // 0.22.6: uma vez, as apps de sites que tinham só a letra passam a ter o ícone do site
   if (!S.favMigrated) setTimeout(() => useSiteIcons(false).then(r => { S.favMigrated = true; saveState(); }).catch(() => {}), 8000);
   buildMenu();
