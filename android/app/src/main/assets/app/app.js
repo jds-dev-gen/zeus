@@ -44,8 +44,14 @@ document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = I[el.dat
 const S = {
   view: 'home', tabs: [], current: null, hl: false, overlay: null,
   zoomFilter: 'all', zoomQ: '', zoomOpen: null, delArmed: null,
-  macTabs: [], macAt: 0, version: '', update: null
+  macTabs: [], macAt: 0, version: '', update: null,
+  spaces: [{ id: 'leitura', name: 'Leitura' }, { id: 'obs', name: 'Observador' }, { id: 'pessoal', name: 'Pessoal' }],
+  space: 'leitura', moveTab: null,
+  reader: { size: 20, theme: 'claro' }
 };
+const spaceTabs = () => S.tabs.filter(t => t.space === S.space);
+const spaceName = id => (S.spaces.find(x => x.id === id) || {}).name || '';
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const cur = () => S.tabs.find(t => t.id === S.current) || null;
 
 function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2400); }
@@ -158,16 +164,20 @@ function saveTabs() {
   clearTimeout(tabsSaveT);
   tabsSaveT = setTimeout(() => {
     const cu = S.tabs.findIndex(t => t.id === S.current);
-    ZN.call('storeWrite', { name: 'tabs.json', text: JSON.stringify({ current: cu, tabs: S.tabs.filter(t => t.url).map(t => ({ url: t.url, title: t.title })) }) }).catch(() => {});
+    ZN.call('storeWrite', { name: 'tabs.json', text: JSON.stringify({ current: cu, space: S.space, spaces: S.spaces, reader: S.reader, tabs: S.tabs.filter(t => t.url).map(t => ({ url: t.url, title: t.title, space: t.space })) }) }).catch(() => {});
   }, 400);
 }
 async function restoreTabs() {
   let j = null;
   try { const t = await ZN.call('storeRead', { name: 'tabs.json' }); if (t) j = JSON.parse(t); } catch (e) { /* ok */ }
   if (!j || !Array.isArray(j.tabs)) return;
-  for (const t of j.tabs.slice(0, 40)) {
+  if (Array.isArray(j.spaces) && j.spaces.length) S.spaces = j.spaces.filter(x => x && x.id && x.name);
+  if (j.reader) S.reader = Object.assign(S.reader, j.reader);
+  const first = S.spaces[0].id;
+  S.space = S.spaces.some(x => x.id === j.space) ? j.space : first;
+  for (const t of j.tabs.slice(0, 60)) {
     const r = await ZN.call('tabNew', { url: t.url, lazy: true });
-    S.tabs.push({ id: r.id, url: t.url, title: t.title || hostOf(t.url) });
+    S.tabs.push({ id: r.id, url: t.url, title: t.title || hostOf(t.url), space: S.spaces.some(x => x.id === t.space) ? t.space : first });
   }
 }
 function toURL(s) {
@@ -182,7 +192,7 @@ async function newTab(url, show = true) {
   if (!url) return;
   await thumbNow();
   const r = await ZN.call('tabNew', { url, show: false });
-  const t = { id: r.id, url, title: hostOf(url), loading: true };
+  const t = { id: r.id, url, title: hostOf(url), loading: true, space: S.space };
   S.tabs.unshift(t);
   saveTabs();
   if (show) await openTab(t.id); else render();
@@ -191,6 +201,7 @@ async function openTab(id) {
   if (S.view === 'tab' && S.current !== id) await thumbNow();
   S.current = id;
   S.view = 'tab';
+  const tt = cur(); if (tt && tt.space) S.space = tt.space;
   render();
   const info = await ZN.call('tabOpen', { id }).catch(() => null);
   const t = cur();
@@ -203,7 +214,7 @@ async function closeTab(id) {
   if (i < 0) return;
   S.tabs.splice(i, 1);
   await ZN.call('tabClose', { id }).catch(() => {});
-  if (S.current === id) { S.current = S.tabs[Math.min(i, S.tabs.length - 1)] ? S.tabs[Math.min(i, S.tabs.length - 1)].id : null; if (S.view === 'tab') { if (S.current) openTab(S.current); else go('home'); } }
+  if (S.current === id) { const rest = spaceTabs(); S.current = rest.length ? rest[0].id : null; if (S.view === 'tab') { if (S.current) openTab(S.current); else go('home'); } }
   saveTabs(); render();
 }
 async function thumbNow() {
@@ -227,6 +238,7 @@ ZN.on('tab', d => {
   if (d.title) t.title = d.title;
   if ('back' in d) t.back = d.back;
   if ('loading' in d) t.loading = d.loading;
+  if (d.loading === true) t.reader = false;
   if (d.crashed) { t.loading = false; if (S.current === t.id && S.view === 'tab') ZN.call('tabOpen', { id: t.id }); }
   saveTabs();
   if (t.id === S.current) renderTop();
@@ -234,7 +246,7 @@ ZN.on('tab', d => {
 ZN.on('progress', d => { if (d.id !== S.current) return; const p = $('#prog'); p.style.width = (d.p >= 100 ? 0 : d.p) + '%'; });
 ZN.on('tabCreated', async d => {
   await thumbNow();
-  S.tabs.unshift({ id: d.id, url: '', title: 'A abrir…' });
+  S.tabs.unshift({ id: d.id, url: '', title: 'A abrir…', space: (S.tabs.find(x => x.id === d.opener) || {}).space || S.space });
   S.current = d.id; S.view = 'tab';
   render(); saveTabs();
 });
@@ -266,6 +278,8 @@ function renderTop() {
   if (document.activeElement !== addr) addr.value = onTab ? (t.title && t.title !== hostOf(t.url) ? `${hostOf(t.url)} · ${t.title}` : t.url) : '';
   $('#bBack').classList.toggle('off', !(onTab && t.back));
   $('#bReload').hidden = !onTab;
+  $('#bRead').hidden = !onTab;
+  $('#bRead').classList.toggle('on', !!(onTab && t.reader));
   $('#bSave').hidden = !onTab;
   $('#bHl').hidden = !onTab;
   const it = onTab && t.url ? zoom.byUrl(t.url) : null;
@@ -347,15 +361,17 @@ const SCREENS = {
     </div>`;
   },
   tabs() {
-    const mac = S.macTabs || [];
+    const mac = S.macTabs || [], list = spaceTabs();
+    const macBy = {}; mac.forEach(t => { (macBy[t.space || ''] = macBy[t.space || ''] || []).push(t); });
     return `<div class="scr">
       <div class="tabs-head"><h1>Separadores</h1><button class="btn" data-act="newTab">+ Novo separador</button></div>
-      ${S.tabs.length ? `<div class="tgrid" id="tgrid">${S.tabs.map(t => `<div class="tcard ${t.id === S.current ? 'cur' : ''}" data-tab="${t.id}">
+      <div class="sp-chips">${S.spaces.map(x => `<button class="chip ${x.id === S.space ? 'on' : ''}" data-act="space" data-s="${esc(x.id)}">${esc(x.name)} · ${S.tabs.filter(t => t.space === x.id).length}</button>`).join('')}<button class="chip add" data-act="spaceAdd">+ Espaço</button>${S.spaces.length > 1 ? `<button class="chip add" data-act="spaceEdit">Mudar o nome…</button>` : ''}</div>
+      ${list.length ? `<div class="tgrid" id="tgrid">${list.map(t => `<div class="tcard ${t.id === S.current ? 'cur' : ''}" data-tab="${t.id}">
         <button class="th" data-act="openTab" data-id="${t.id}" style="${t.thumb ? `background-image:url('${t.thumb}')` : ''}">${t.thumb ? '' : esc((hostOf(t.url)[0] || '·').toUpperCase())}</button>
         <div class="cap"><span>${esc(t.title || hostOf(t.url) || 'Página nova')}</span><button data-act="closeTab" data-id="${t.id}" aria-label="Fechar">${I.x}</button></div></div>`).join('')}</div>
-        <p class="hint">Desliza um cartão para o lado para o fechar.</p>` : '<p class="empty">Não há separadores abertos.</p>'}
+        <p class="hint">Desliza um cartão para o lado para o fechar · toca sem largar para o mudar de espaço.</p>` : `<p class="empty">Não há separadores em ${esc(spaceName(S.space))}.</p>`}
       <div class="mac"><div class="lbl" style="margin-bottom:4px">Do Mac${S.macAt ? ' · ' + fmtDay(S.macAt) + ' ' + fmtTime(S.macAt) : ''}</div>
-        ${mac.length ? mac.map(t => `<button data-act="openUrl" data-url="${esc(t.url)}"><span>${esc(t.title || hostOf(t.url))}</span><small>${esc(hostOf(t.url))}${t.space ? ' · ' + esc(t.space) : ''}</small></button>`).join('') : `<p class="empty">${Sync.st.connected ? 'Ainda não chegaram os separadores do Mac (precisa do Zeus 0.24 ou mais recente no Mac).' : 'Liga a Drive nas Definições para ver aqui os separadores abertos no Mac.'}</p>`}</div>
+        ${mac.length ? Object.keys(macBy).map(sp => `${sp ? `<div class="mac-sp">${esc(sp)}</div>` : ''}${macBy[sp].map(t => `<button data-act="openUrl" data-url="${esc(t.url)}"><span>${esc(t.title || hostOf(t.url))}</span><small>${esc(hostOf(t.url))}</small></button>`).join('')}`).join('') : `<p class="empty">${Sync.st.connected ? 'Ainda não chegaram os separadores do Mac (precisa do Zeus 0.24 ou mais recente no Mac).' : 'Liga a Drive nas Definições para ver aqui os separadores abertos no Mac.'}</p>`}</div>
     </div>`;
   },
   settings() {
@@ -405,6 +421,22 @@ function renderHlPanel() {
 }
 function renderOverlay() {
   const ov = $('#overlay');
+  if (S.overlay === 'reader') {
+    const r = S.reader, th = [['claro', 'Claro', '#fff', '#1d1d20'], ['sepia', 'Sépia', '#f6efe1', '#3b3127'], ['escuro', 'Escuro', '#141416', '#e4e4e6']];
+    ov.innerHTML = `<div class="sheet" role="dialog" aria-label="Modo de leitura"><h2>Modo de leitura</h2>
+      <div class="set-row"><span>Tamanho da letra</span><div class="stepper"><button data-act="rsize" data-d="-1" aria-label="Mais pequena">A−</button><b>${r.size}</b><button data-act="rsize" data-d="1" aria-label="Maior">A+</button></div></div>
+      <div class="themes">${th.map(([id, n, bg, fg]) => `<button class="${r.theme === id ? 'on' : ''}" data-act="rtheme" data-t="${id}" style="background:${bg};color:${fg}">${n}</button>`).join('')}</div>
+      <div class="row-btns"><button class="btn" data-act="sclose">Feito</button><button class="btn ghost" data-act="rexit">Ver a página original</button></div></div>`;
+    ov.classList.add('on'); return;
+  }
+  if (S.overlay === 'move') {
+    const t = S.tabs.find(x => x.id === S.moveTab);
+    if (!t) { S.overlay = null; ov.classList.remove('on'); return; }
+    ov.innerHTML = `<div class="sheet" role="dialog" aria-label="Mudar de espaço"><h2>Mover para…</h2><p class="hint">${esc(t.title || hostOf(t.url))}</p>
+      <div class="list">${S.spaces.map(x => `<button class="${t.space === x.id ? 'on' : ''}" data-act="moveTo" data-s="${esc(x.id)}">${esc(x.name)}${t.space === x.id ? '<span>✓</span>' : ''}</button>`).join('')}<button data-act="moveNew">+ Espaço novo…</button></div>
+      <div class="row-btns"><button class="btn ghost" data-act="sclose">Cancelar</button></div></div>`;
+    ov.classList.add('on'); return;
+  }
   if (S.overlay !== 'save') { ov.classList.remove('on'); ov.innerHTML = ''; return; }
   const t = cur(), it = t && zoom.byUrl(t.url);
   if (!it) { S.overlay = null; ov.classList.remove('on'); return; }
@@ -419,6 +451,7 @@ function renderOverlay() {
 
 /* ---------- toques ---------- */
 document.addEventListener('click', async e => {
+  if (Date.now() - (S.longAt || 0) < 800 && !e.target.closest('#overlay .sheet')) return;   // o toque longo não abre o separador
   const g = e.target.closest('[data-go]');
   if (g) { go(g.dataset.go); return; }
   const b = e.target.closest('[data-act]');
@@ -450,7 +483,22 @@ document.addEventListener('click', async e => {
     case 'hlCopyAll': { const t = cur(), it = zoom.byUrl(t.url); if (it) { await ZN.call('copy', { text: `${it.title}\n${it.url}\n\n` + it.highlights.map(h => `“${h.text}”${h.comment ? '\n— ' + h.comment : ''}`).join('\n\n') }); toast('Destaques copiados'); } break; }
     case 'scol': { const it = zoom.byUrl(cur().url); if (it) zoom.update(it.id, { col: b.dataset.c }); break; }
     case 'snewcol': { const name = prompt('Nome da coleção nova'); if (name) { const c = zoom.addCol(name); const it = zoom.byUrl(cur().url); if (c && it) zoom.update(it.id, { col: c.id }); } break; }
-    case 'sclose': S.overlay = null; render(); break;
+    case 'sclose': S.overlay = null; S.moveTab = null; render(); break;
+    case 'space': S.space = b.dataset.s; render(); break;
+    case 'spaceAdd': { const n = prompt('Nome do espaço novo'); if (n && n.trim()) { const x = { id: uid(), name: n.trim().slice(0, 40) }; S.spaces.push(x); S.space = x.id; saveTabs(); render(); } break; }
+    case 'spaceEdit': {
+      const x = S.spaces.find(y => y.id === S.space); if (!x) break;
+      const n = prompt(`Novo nome para "${x.name}" (deixa vazio para apagar o espaço; os separadores passam para "${S.spaces.find(y => y.id !== x.id).name}")`, x.name);
+      if (n === null) break;
+      if (n.trim()) x.name = n.trim().slice(0, 40);
+      else if (S.spaces.length > 1) { const to = S.spaces.find(y => y.id !== x.id).id; S.tabs.forEach(t => { if (t.space === x.id) t.space = to; }); S.spaces = S.spaces.filter(y => y.id !== x.id); S.space = to; }
+      saveTabs(); render(); break;
+    }
+    case 'moveTo': { const t = S.tabs.find(x => x.id === S.moveTab); if (t) { t.space = b.dataset.s; toast('Movido para ' + spaceName(t.space)); } S.overlay = null; S.moveTab = null; saveTabs(); render(); break; }
+    case 'moveNew': { const n = prompt('Nome do espaço novo'); const t = S.tabs.find(x => x.id === S.moveTab); if (n && n.trim() && t) { const x = { id: uid(), name: n.trim().slice(0, 40) }; S.spaces.push(x); t.space = x.id; toast('Movido para ' + x.name); } S.overlay = null; S.moveTab = null; saveTabs(); render(); break; }
+    case 'rsize': S.reader.size = Math.max(14, Math.min(30, S.reader.size + (+b.dataset.d) * 2)); readerStyle(); render(); break;
+    case 'rtheme': S.reader.theme = b.dataset.t; readerStyle(); render(); break;
+    case 'rexit': { const t = cur(); S.overlay = null; if (t) { t.reader = false; ZN.call('tabDo', { id: t.id, what: 'reload' }); } render(); break; }
     case 'sremove': {
       if (S.delArmed !== 'save') { S.delArmed = 'save'; render(); break; }
       S.delArmed = null; const it = zoom.byUrl(cur().url); if (it) zoom.remove(it.id); S.overlay = null; refreshPages(); render(); toast('Tirado do Zoom'); break;
@@ -480,6 +528,13 @@ $('#addr').addEventListener('blur', () => setTimeout(renderTop, 100));
 $('#bBack').addEventListener('click', () => { const t = cur(); if (t) ZN.call('tabDo', { id: t.id, what: 'back' }); });
 $('#bReload').addEventListener('click', () => { const t = cur(); if (t) ZN.call('tabDo', { id: t.id, what: t.loading ? 'stop' : 'reload' }); });
 $('#bTabs').addEventListener('click', () => go('tabs'));
+function readerStyle() { const t = cur(); saveTabs(); if (t && t.reader) ZN.call('reader', { id: t.id, opts: S.reader, styleOnly: true }).catch(() => {}); }
+$('#bRead').addEventListener('click', async () => {
+  const t = cur(); if (!t) return;
+  if (t.reader) { S.overlay = 'reader'; render(); return; }
+  const r = await ZN.call('reader', { id: t.id, opts: S.reader }).catch(() => 'none');
+  if (r === 'ok') { t.reader = true; renderTop(); } else toast('Não encontrei um artigo para ler nesta página.');
+});
 $('#bHl').addEventListener('click', () => { S.hl = !S.hl; render(); });
 $('#bbHl').addEventListener('click', () => { if (S.view !== 'tab' && cur()) { S.hl = true; go('tab'); } else if (cur()) { S.hl = !S.hl; render(); } else toast('Abre um artigo para ver os destaques.'); });
 $('#bSave').addEventListener('click', async () => {
@@ -503,10 +558,11 @@ $('#bSave').addEventListener('click', async () => {
     const p = e.changedTouches[0], dx = p.clientX - sx, dy = p.clientY - sy;
     e.preventDefault();
     if (dy < -50 && Math.abs(dy) > Math.abs(dx)) { go('tabs'); return; }
-    if (Math.abs(dx) > 60 && S.tabs.length) {
-      const i = Math.max(0, S.tabs.findIndex(t => t.id === S.current));
-      const j = dx < 0 ? Math.min(S.tabs.length - 1, i + 1) : Math.max(0, i - 1);
-      if (S.view !== 'tab' || j !== i) { openTab(S.tabs[j].id); toast(S.tabs[j].title || hostOf(S.tabs[j].url)); }
+    const list = spaceTabs();
+    if (Math.abs(dx) > 60 && list.length) {
+      const i = Math.max(0, list.findIndex(t => t.id === S.current));
+      const j = dx < 0 ? Math.min(list.length - 1, i + 1) : Math.max(0, i - 1);
+      if (S.view !== 'tab' || j !== i) { openTab(list[j].id); toast(list[j].title || hostOf(list[j].url)); }
     }
   });
 })();
@@ -527,6 +583,20 @@ $('#bSave').addEventListener('click', async () => {
     if (horiz && Math.abs(dx) > 120) { c.style.transform = `translateX(${dx > 0 ? 600 : -600}px)`; c.style.opacity = '0'; setTimeout(() => closeTab(+c.dataset.tab), 150); }
     else { c.style.transform = ''; c.style.opacity = ''; }
   });
+})();
+
+/* toque longo num cartão de separador: mudar de espaço */
+(() => {
+  let lt = null, sx = 0, sy = 0;
+  document.addEventListener('touchstart', e => {
+    const c = e.target.closest('.tcard'); if (!c) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+    clearTimeout(lt);
+    lt = setTimeout(() => { S.longAt = Date.now(); S.moveTab = +c.dataset.tab; S.overlay = 'move'; render(); }, 550);
+  }, { passive: true });
+  document.addEventListener('touchmove', e => { if (Math.abs(e.touches[0].clientX - sx) > 10 || Math.abs(e.touches[0].clientY - sy) > 10) clearTimeout(lt); }, { passive: true });
+  document.addEventListener('touchend', () => clearTimeout(lt));
+  document.addEventListener('contextmenu', e => { if (e.target.closest('.tcard')) e.preventDefault(); });
 })();
 
 /* voltar atrás (botão do Android) */

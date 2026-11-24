@@ -193,3 +193,20 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
 
 #toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); background: var(--fg); color: #fff; padding: 11px 18px; border-radius: 12px; font-size: 14px; z-index: 30; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 86vw; text-align: center; }
 #toast.on { opacity: 1; }
+
+/* modo de leitura e espaços (0.2.0) */
+.tb.read { width: auto; padding: 0 12px; font: 600 17px/1 'Noto Serif', Georgia, serif; border: 1px solid var(--line2); height: 40px; }
+.tb.read.on { background: var(--fg); color: #fff; border-color: var(--fg); }
+.stepper { display: flex; align-items: center; gap: 10px; }
+.stepper button { width: 52px; height: 46px; border-radius: 12px; border: 1px solid var(--line2); background: #fff; font-size: 20px; }
+.stepper b { min-width: 54px; text-align: center; font-variant-numeric: tabular-nums; }
+.themes { display: flex; gap: 10px; }
+.themes button { flex: 1; height: 56px; border-radius: 14px; border: 2px solid var(--line2); font: 500 15px 'Noto Serif', Georgia, serif; }
+.themes button.on { border-color: var(--fg); }
+.sp-chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sp-chips .chip.add { border-style: dashed; color: var(--muted); }
+.sheet .list { display: flex; flex-direction: column; }
+.sheet .list button { text-align: left; padding: 14px 4px; border-top: 1px solid var(--line); font-size: 15px; display: flex; justify-content: space-between; }
+.sheet .list button:first-child { border-top: 0; }
+.sheet .list button.on { font-weight: 600; }
+.mac-sp { font-size: 12px; color: var(--muted); margin: 12px 0 2px; font-weight: 600; }

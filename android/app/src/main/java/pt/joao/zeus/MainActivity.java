@@ -88,7 +88,7 @@ public class MainActivity extends Activity {
     int nextId = 1, current = -1;
     int px, py, pw, ph;            // retângulo da página, em píxeis
     boolean pageShown = false;
-    String hlScript = "", userAgent = null;
+    String hlScript = "", readerScript = null, userAgent = null;
 
     String token = null;
     long tokenExp = 0;
@@ -242,6 +242,16 @@ public class MainActivity extends Activity {
                 Tab t = tabs.get(a.optInt("id"));
                 if (t == null || t.view == null) { reply(id, true, null); return; }
                 t.view.evaluateJavascript(META_JS, v -> replyRaw(id, true, v == null ? "null" : v));
+                return;
+            }
+            case "reader": {
+                Tab t = tabs.get(a.optInt("id"));
+                if (t == null || t.view == null) { reply(id, true, "none"); return; }
+                if (readerScript == null) readerScript = readAsset("app/reader.js");
+                String o = a.optJSONObject("opts") == null ? "{}" : a.optJSONObject("opts").toString();
+                String js = (a.optBoolean("styleOnly") ? "" : readerScript + "\n")
+                        + "(window.__zeusReader ? (" + (a.optBoolean("styleOnly") ? "__zeusReader.style(" + o + ")" : "__zeusReader.enter(" + o + ")") + ") : 'none')";
+                t.view.evaluateJavascript(js, v -> replyRaw(id, true, v == null ? "\"none\"" : v));
                 return;
             }
             case "toPage": {
