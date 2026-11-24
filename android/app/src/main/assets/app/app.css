@@ -63,7 +63,7 @@ svg { flex-shrink: 0; }
 #screen { flex: 1; min-width: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 #hlpanel { display: none; width: 340px; flex-shrink: 0; border-left: 1px solid var(--line); background: var(--rail); overflow-y: auto; }
 .v-tab #screen { display: none; }
-#app:not(.v-tab) #page { display: none; }
+#app:not(.v-tab):not(.v-apolo) #page { display: none; }
 #app.v-tab.hl #hlpanel { display: flex; flex-direction: column; }
 @media (orientation: portrait) {
   #main { flex-direction: column; }
@@ -222,6 +222,14 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
 .site em { font-style: normal; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mac-sp { display: block; background: var(--fg) !important; color: #fff !important; font: 600 12px/1 var(--mono) !important; letter-spacing: .08em; text-transform: uppercase; padding: 10px 14px; border-radius: 10px; margin: 18px 0 4px !important; }
 .btn.armed { background: #c0262d; border-color: #c0262d; color: #fff; }
+
+/* Apolo (0.4.0) */
+.ic.letter { font-size: 22px; font-weight: 700; }
+#bottom .ic.letter.sm { width: 26px; height: 26px; border-radius: 8px; border: 1.8px solid currentColor; font-size: 14px; }
+#bottom button.on .ic.letter.sm { background: var(--fg); color: #fff; border-color: var(--fg); }
+.v-apolo #screen { display: none; }
+#app.v-apolo #page { display: block; }
+@media (orientation: portrait) { #bottom { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 
 /* modo de leitura e espaços (0.2.0) */
 .tb.read { width: auto; padding: 0 12px; font: 600 17px/1 'Noto Serif', Georgia, serif; border: 1px solid var(--line2); height: 40px; }

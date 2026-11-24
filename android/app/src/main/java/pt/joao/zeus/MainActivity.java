@@ -83,7 +83,8 @@ public class MainActivity extends Activity {
     boolean shellReady = false;
     String pendingUrl = null;
 
-    static class Tab { int id; String url; ZWebView view; }
+    // app = true: uma app do Zeus (o Apolo), sem destaques; os links para outros sites vão para separadores
+    static class Tab { int id; String url; ZWebView view; boolean app; String appHost; }
     final Map<Integer, Tab> tabs = new HashMap<>();
     int nextId = 1, current = -1;
     int px, py, pw, ph;            // retângulo da página, em píxeis
@@ -193,6 +194,8 @@ public class MainActivity extends Activity {
                 Tab t = new Tab();
                 t.id = nextId++;
                 t.url = a.optString("url", "");
+                t.app = a.optBoolean("app");
+                if (t.app) t.appHost = Uri.parse(t.url).getHost();
                 tabs.put(t.id, t);
                 if (!a.optBoolean("lazy")) ensureView(t);
                 if (a.optBoolean("show")) { current = t.id; ensureView(t); placeTabs(); }
@@ -351,6 +354,7 @@ public class MainActivity extends Activity {
         if (t.view != null) return t.view;
         final ZWebView v = new ZWebView(this);
         t.view = v;
+        v.plain = t.app;
         WebSettings s = v.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -373,6 +377,11 @@ public class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest r) {
                 String u = r.getUrl().toString();
                 String sc = r.getUrl().getScheme() == null ? "" : r.getUrl().getScheme().toLowerCase();
+                if (t.app && (sc.equals("http") || sc.equals("https")) && r.isForMainFrame() && r.hasGesture()) {
+                    String h = r.getUrl().getHost() == null ? "" : r.getUrl().getHost();
+                    boolean own = h.equals(t.appHost) || h.endsWith(".supabase.co") || h.equals("accounts.google.com");
+                    if (!own) { event("openUrl", obj("url", u)); return true; }   // como no Mac: o Apolo abre os links em separadores
+                }
                 if (sc.equals("http") || sc.equals("https") || sc.equals("about") || sc.equals("data") || sc.equals("blob")) return false;
                 openExternal(u);
                 return true;
@@ -381,7 +390,7 @@ public class MainActivity extends Activity {
                 event("tab", obj("id", t.id, "url", url, "loading", true));
             }
             @Override public void onPageFinished(WebView view, String url) {
-                if (url != null && url.startsWith("http")) view.evaluateJavascript(hlScript, null);
+                if (!t.app && url != null && url.startsWith("http")) view.evaluateJavascript(hlScript, null);
                 JSONObject o = tabInfo(t);
                 try { o.put("loading", false); } catch (Exception e) { /* ok */ }
                 event("tab", o);

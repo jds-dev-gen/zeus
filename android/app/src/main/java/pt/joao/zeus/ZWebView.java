@@ -14,16 +14,19 @@ import android.webkit.WebView;
  * Copiar) — a mesma do Mac. As pegas da seleção continuam a funcionar.
  */
 public class ZWebView extends WebView {
+    /** true nas apps (ex.: Apolo): o menu do Android fica como é, sem a barra de destaques */
+    public boolean plain = false;
+
     public ZWebView(Context c) { super(c); }
 
     @Override
     public ActionMode startActionMode(ActionMode.Callback cb, int type) {
-        return super.startActionMode(wrap(cb), type);
+        return super.startActionMode(plain ? cb : wrap(cb), type);
     }
 
     @Override
     public ActionMode startActionMode(ActionMode.Callback cb) {
-        return super.startActionMode(wrap(cb));
+        return super.startActionMode(plain ? cb : wrap(cb));
     }
 
     private ActionMode.Callback wrap(final ActionMode.Callback cb) {

@@ -7,6 +7,8 @@
  */
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/* o Apolo: uma app do Zeus (como no Mac), com a sua página sempre aberta; não é um separador */
+const APOLO = 'https://apolojsd.netlify.app/';
 const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
 const { ZoomStore, mergeZoom, COLORS } = window.ZoomCore;
 const COLOR_NAMES = { yellow: 'Amarelo', green: 'Verde', blue: 'Azul', pink: 'Rosa', orange: 'Laranja' };
@@ -74,12 +76,14 @@ const S = {
   spaces: [{ id: 'leitura', name: 'Leitura' }, { id: 'obs', name: 'Observador' }, { id: 'pessoal', name: 'Pessoal' }],
   space: 'leitura', moveTab: null,
   reader: { size: 20, theme: 'claro' },
-  city: null, macTop: [], wx: null, wxAt: 0, visits: {}, closeAll: false
+  city: null, macTop: [], wx: null, wxAt: 0, visits: {}, closeAll: false,
+  apolo: null, apoloUrl: APOLO
 };
 const spaceTabs = () => S.tabs.filter(t => t.space === S.space);
 const spaceName = id => (S.spaces.find(x => x.id === id) || {}).name || '';
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const cur = () => S.tabs.find(t => t.id === S.current) || null;
+const onPage = () => (S.view === 'apolo' ? S.apolo : S.view === 'tab' ? cur() : null);
 
 function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2400); }
 
@@ -256,7 +260,20 @@ async function thumbNow() {
   const th = await ZN.call('tabThumb', { id: t.id }).catch(() => null);
   if (th) t.thumb = th;
 }
+async function openApolo() {
+  if (S.view === 'tab') await thumbNow();
+  S.view = 'apolo'; S.overlay = null; S.hl = false;
+  if (!S.apolo) {
+    const r = await ZN.call('tabNew', { url: S.apoloUrl || APOLO, app: true });
+    S.apolo = { id: r.id, url: S.apoloUrl || APOLO, title: 'Apolo', back: false };
+  }
+  render();
+  const info = await ZN.call('tabOpen', { id: S.apolo.id }).catch(() => null);
+  if (info) S.apolo.back = info.back;
+  renderTop();
+}
 async function go(view) {
+  if (view === 'apolo') return openApolo();
   if (view === 'tab' && !cur()) view = 'home';
   if (S.view === 'tab' && view !== 'tab') await thumbNow();
   S.view = view; S.overlay = null;
@@ -266,6 +283,15 @@ async function go(view) {
 }
 
 ZN.on('tab', d => {
+  if (S.apolo && d.id === S.apolo.id) {
+    const a = S.apolo;
+    if (d.url) { a.url = d.url; if (/^https:\/\/apolojsd\.netlify\.app\//.test(d.url)) { S.apoloUrl = d.url; savePrefs(); } }
+    if ('back' in d) a.back = d.back;
+    if ('loading' in d) a.loading = d.loading;
+    if (d.crashed && S.view === 'apolo') ZN.call('tabOpen', { id: a.id });
+    if (S.view === 'apolo') renderTop();
+    return;
+  }
   const t = S.tabs.find(x => x.id === d.id); if (!t) return;
   if (d.url) t.url = d.url;
   if (d.title) t.title = d.title;
@@ -277,7 +303,7 @@ ZN.on('tab', d => {
   saveTabs();
   if (t.id === S.current) renderTop();
 });
-ZN.on('progress', d => { if (d.id !== S.current) return; const p = $('#prog'); p.style.width = (d.p >= 100 ? 0 : d.p) + '%'; });
+ZN.on('progress', d => { const p0 = onPage(); if (!p0 || d.id !== p0.id) return; const p = $('#prog'); p.style.width = (d.p >= 100 ? 0 : d.p) + '%'; });
 ZN.on('tabCreated', async d => {
   await thumbNow();
   S.tabs.unshift({ id: d.id, url: '', title: 'A abrir…', space: (S.tabs.find(x => x.id === d.opener) || {}).space || S.space });
@@ -307,11 +333,12 @@ function render(force) {
 }
 function syncClass() { const s = Sync.st; return !s.connected ? '' : s.state === 'error' ? 'err' : s.state === 'syncing' ? 'busy' : s.lastOk ? 'ok' : ''; }
 function renderTop() {
-  const t = cur(), onTab = S.view === 'tab' && t;
+  const t = cur(), onTab = S.view === 'tab' && t, ap = S.view === 'apolo' && S.apolo;
   const addr = $('#addr');
-  if (document.activeElement !== addr) addr.value = onTab ? (t.title && t.title !== hostOf(t.url) ? `${hostOf(t.url)} · ${t.title}` : t.url) : '';
-  $('#bBack').classList.toggle('off', !(onTab && t.back));
-  $('#bReload').hidden = !onTab;
+  if (document.activeElement !== addr) addr.value = ap ? `Apolo · ${hostOf(S.apolo.url)}` : onTab ? (t.title && t.title !== hostOf(t.url) ? `${hostOf(t.url)} · ${t.title}` : t.url) : '';
+  $('#bBack').classList.toggle('off', !((onTab && t.back) || (ap && S.apolo.back)));
+  $('#bAppHome').hidden = !ap;
+  $('#bReload').hidden = !(onTab || ap);
   $('#bRead').hidden = !onTab;
   $('#bRead').classList.toggle('on', !!(onTab && t.reader));
   $('#bSave').hidden = !onTab;
@@ -328,7 +355,7 @@ function layoutSoon() { cancelAnimationFrame(layoutT); layoutT = requestAnimatio
 let lastLayout = '';
 function sendLayout() {
   const r = $('#page').getBoundingClientRect();
-  const show = S.view === 'tab' && !!cur() && !S.overlay;
+  const show = !!onPage() && !S.overlay;
   const l = { x: r.left, y: r.top, w: r.width, h: r.height, show };
   const k = JSON.stringify(l);
   if (k === lastLayout) return;
@@ -563,10 +590,11 @@ document.addEventListener('submit', e => {
     else newTab(v);
   }
 });
-$('#addr').addEventListener('focus', () => { const t = cur(); if (S.view === 'tab' && t) $('#addr').value = t.url; setTimeout(() => $('#addr').select(), 30); });
+$('#addr').addEventListener('focus', () => { const t = onPage(); if (t) $('#addr').value = S.view === 'apolo' ? '' : t.url; setTimeout(() => $('#addr').select(), 30); });
 $('#addr').addEventListener('blur', () => setTimeout(renderTop, 100));
-$('#bBack').addEventListener('click', () => { const t = cur(); if (t) ZN.call('tabDo', { id: t.id, what: 'back' }); });
-$('#bReload').addEventListener('click', () => { const t = cur(); if (t) ZN.call('tabDo', { id: t.id, what: t.loading ? 'stop' : 'reload' }); });
+$('#bBack').addEventListener('click', () => { const t = onPage(); if (t) ZN.call('tabDo', { id: t.id, what: 'back' }); });
+$('#bReload').addEventListener('click', () => { const t = onPage(); if (t) ZN.call('tabDo', { id: t.id, what: t.loading ? 'stop' : 'reload' }); });
+$('#bAppHome').addEventListener('click', () => { if (S.apolo) { S.apolo.url = APOLO; ZN.call('tabNav', { id: S.apolo.id, url: APOLO }); } });
 $('#bTabs').addEventListener('click', () => go('tabs'));
 function readerStyle() { const t = cur(); saveTabs(); if (t && t.reader) ZN.call('reader', { id: t.id, opts: S.reader, styleOnly: true }).catch(() => {}); }
 $('#bRead').addEventListener('click', async () => {
@@ -649,6 +677,7 @@ function onBack() {
     if (t && t.back) return 'page';
     go('home'); return 'handled';
   }
+  if (S.view === 'apolo') { if (S.apolo && S.apolo.back) return 'page'; go('home'); return 'handled'; }
   if (S.view !== 'home') { go(cur() ? 'tab' : 'home'); return 'handled'; }
   return 'exit';
 }
@@ -728,10 +757,10 @@ function topSites() {
 let prefsT = null;
 function savePrefs() {
   clearTimeout(prefsT);
-  prefsT = setTimeout(() => ZN.call('storeWrite', { name: 'prefs.json', text: JSON.stringify({ city: S.city, macTop: S.macTop, visits: S.visits, wx: S.wx, wxAt: S.wxAt }) }).catch(() => {}), 800);
+  prefsT = setTimeout(() => ZN.call('storeWrite', { name: 'prefs.json', text: JSON.stringify({ city: S.city, macTop: S.macTop, visits: S.visits, wx: S.wx, wxAt: S.wxAt, apoloUrl: S.apoloUrl }) }).catch(() => {}), 800);
 }
 async function loadPrefs() {
-  try { const t = await ZN.call('storeRead', { name: 'prefs.json' }); if (t) { const j = JSON.parse(t); Object.assign(S, { city: j.city || null, macTop: j.macTop || [], visits: j.visits || {}, wx: j.wx || null, wxAt: j.wxAt || 0 }); } } catch (e) { /* ok */ }
+  try { const t = await ZN.call('storeRead', { name: 'prefs.json' }); if (t) { const j = JSON.parse(t); Object.assign(S, { city: j.city || null, macTop: j.macTop || [], visits: j.visits || {}, wx: j.wx || null, wxAt: j.wxAt || 0, apoloUrl: j.apoloUrl || APOLO }); } } catch (e) { /* ok */ }
 }
 
 /* ---------- atualizações (versões android-v… no GitHub) ---------- */
