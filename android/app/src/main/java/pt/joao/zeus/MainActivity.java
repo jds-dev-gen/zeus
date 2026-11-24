@@ -274,7 +274,7 @@ public class MainActivity extends Activity {
             case "drive": { driveCall(id, a, true); return; }
             case "httpGet": {
                 final String url = a.optString("url");
-                if (!url.startsWith("https://api.github.com/")) { reply(id, false, "endereço não permitido"); return; }
+                if (!url.startsWith("https://api.github.com/") && !url.startsWith("https://api.open-meteo.com/")) { reply(id, false, "endereço não permitido"); return; }
                 io.execute(() -> { try { reply(id, true, http("GET", url, null, null, null)); } catch (Exception e) { reply(id, false, String.valueOf(e.getMessage())); } });
                 return;
             }

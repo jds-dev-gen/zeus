@@ -38,6 +38,32 @@ const I = {
   mark: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 3h12v18l-6-4-6 4z"/></svg>',
   x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6 6 18"/></svg>'
 };
+/* meteorologia: os mesmos ícones e nomes do Mac */
+const W = {
+  moon: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>`,
+  drop: '<svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5s-7 7.6-7 12.5a7 7 0 0 0 14 0c0-4.9-7-12.5-7-12.5z"/></svg>',
+  sun: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`,
+  part: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><path d="M9 2.5v1.5M2.5 9H4M4.4 4.4l1 1M13.6 4.4l-1 1"/><path d="M9 19a3.5 3.5 0 0 1 .4-7 4.5 4.5 0 0 1 8.6 1.3A2.9 2.9 0 0 1 18 19z"/></svg>`,
+  cloud: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M7 17a4 4 0 0 1 .5-8 5 5 0 0 1 9.6 1.5A3.3 3.3 0 0 1 17 17z"/></svg>`,
+  fog: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 9h16M3 13h18M5 17h14"/></svg>`,
+  rain: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15a4 4 0 0 1 .5-8 5 5 0 0 1 9.6 1.5A3.3 3.3 0 0 1 17 15z"/><path d="M9 18l-1 2M13 18l-1 2M17 18l-1 2"/></svg>`,
+  snow: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14a4 4 0 0 1 .5-8 5 5 0 0 1 9.6 1.5A3.3 3.3 0 0 1 17 14z"/><path d="M9 18h.01M13 18h.01M11 21h.01M15 21h.01"/></svg>`,
+  storm: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15a4 4 0 0 1 .5-8 5 5 0 0 1 9.6 1.5A3.3 3.3 0 0 1 17 15z"/><path d="M12 15l-2 4h3l-2 3"/></svg>`
+};
+const WX = c => {
+  if (c === 0) return ['Céu limpo', 'sun'];
+  if (c === 1 || c === 2) return ['Pouco nublado', 'part'];
+  if (c === 3) return ['Nublado', 'cloud'];
+  if (c === 45 || c === 48) return ['Nevoeiro', 'fog'];
+  if (c >= 51 && c <= 57) return ['Chuvisco', 'rain'];
+  if (c >= 61 && c <= 67) return ['Chuva', 'rain'];
+  if (c >= 71 && c <= 77) return ['Neve', 'snow'];
+  if (c >= 80 && c <= 82) return ['Aguaceiros', 'rain'];
+  if (c === 85 || c === 86) return ['Aguaceiros de neve', 'snow'];
+  if (c >= 95) return ['Trovoada', 'storm'];
+  return ['—', 'cloud'];
+};
+const DABR = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = I[el.dataset.icon] || ''; });
 
 /* ---------- estado ---------- */
@@ -47,7 +73,8 @@ const S = {
   macTabs: [], macAt: 0, version: '', update: null,
   spaces: [{ id: 'leitura', name: 'Leitura' }, { id: 'obs', name: 'Observador' }, { id: 'pessoal', name: 'Pessoal' }],
   space: 'leitura', moveTab: null,
-  reader: { size: 20, theme: 'claro' }
+  reader: { size: 20, theme: 'claro' },
+  city: null, macTop: [], wx: null, wxAt: 0, visits: {}, closeAll: false
 };
 const spaceTabs = () => S.tabs.filter(t => t.space === S.space);
 const spaceName = id => (S.spaces.find(x => x.id === id) || {}).name || '';
@@ -141,7 +168,13 @@ const Sync = {
         // separadores abertos no Mac (só leitura)
         try {
           const fid = await D('find', { name: 'mac-tabs.json' });
-          if (fid) { const j = JSON.parse(await D('download', { fid })); S.macTabs = Array.isArray(j.tabs) ? j.tabs : []; S.macAt = j.at || 0; }
+          if (fid) {
+            const j = JSON.parse(await D('download', { fid }));
+            S.macTabs = Array.isArray(j.tabs) ? j.tabs : []; S.macAt = j.at || 0;
+            S.macTop = Array.isArray(j.top) ? j.top : [];
+            if (j.city && j.city.lat != null && (!S.city || S.city.lat !== j.city.lat || S.city.lon !== j.city.lon)) { S.city = j.city; S.wx = null; S.wxAt = 0; loadWeather(); }
+            savePrefs();
+          }
         } catch (e) { /* ok */ }
         this.set('ok');
         return true;
@@ -239,6 +272,7 @@ ZN.on('tab', d => {
   if ('back' in d) t.back = d.back;
   if ('loading' in d) t.loading = d.loading;
   if (d.loading === true) t.reader = false;
+  if (d.loading === false && /^https?:/.test(t.url || '')) countVisit(t.url, t.title);
   if (d.crashed) { t.loading = false; if (S.current === t.id && S.view === 'tab') ZN.call('tabOpen', { id: t.id }); }
   saveTabs();
   if (t.id === S.current) renderTop();
@@ -330,17 +364,15 @@ const SCREENS = {
   home() {
     const now = new Date();
     const items = zoom.data().items.slice(0, 6);
-    const hls = recentHls(4);
     return `<div class="scr">
       ${S.update ? `<div class="banner"><span>Há uma versão nova do Zeus para Android: ${esc(S.update.version)}</span><button class="btn" data-act="update">Descarregar</button></div>` : ''}
-      <div class="home-head"><div><div class="clock" id="clock">${fmtTime(now)}</div><div class="date">${esc(now.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' }))}</div></div></div>
+      <div class="home-head"><div><div class="clock" id="clock">${fmtTime(now)}</div><div class="date">${esc(now.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' }))}</div></div>${wxNow()}</div>
+      ${wxForecast()}
       <form id="homeSearch" autocomplete="off"><input class="inp" id="homeQ" type="text" enterkeyhint="go" placeholder="Pesquisar ou escrever um endereço" autocapitalize="off" spellcheck="false"></form>
-      ${syncLine()}
+      <div class="sites">${topSites().map(s => { const h = hostOf(s.url); return `<button class="site" data-act="openUrl" data-url="${esc(s.url)}"><span class="sq">${esc((siteName(s)[0] || '·').toUpperCase())}<img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=128" alt="" onerror="this.remove()"></span><em>${esc(siteName(s))}</em></button>`; }).join('')}</div>
       <div style="display:flex;flex-direction:column;gap:12px"><div class="lbl">Continuar a ler · Zoom<button data-go="zoom">Ver tudo</button></div>
         ${items.length ? `<div class="cards">${items.map(articleCard).join('')}</div>` : '<p class="empty">Os artigos que guardares (ou destacares) aparecem aqui — também os do Mac.</p>'}</div>
-      ${hls.length ? `<div style="display:flex;flex-direction:column"><div class="lbl" style="margin-bottom:8px">Destaques recentes</div>
-        ${hls.map(({ h, it }) => `<button class="hlrow" data-act="openUrl" data-url="${esc(it.url)}"><span><mark class="c-${h.color}">${esc(h.text)}</mark></span><small>${esc(it.title)}${h.comment ? ' · 1 comentário' : ''}</small></button>`).join('')}</div>` : ''}
-      <div class="shorts">${[['O', 'Observador', 'https://observador.pt'], ['P', 'Público', 'https://www.publico.pt'], ['E', 'Expresso', 'https://expresso.pt'], ['G', 'Gmail', 'https://mail.google.com'], ['N', 'Notion', 'https://www.notion.so'], ['Y', 'YouTube', 'https://www.youtube.com']].map(([l, n, u]) => `<button class="short" data-act="openUrl" data-url="${u}"><span>${l}</span>${n}</button>`).join('')}</div>
+      ${syncLine()}
     </div>`;
   },
   zoom() {
@@ -364,7 +396,7 @@ const SCREENS = {
     const mac = S.macTabs || [], list = spaceTabs();
     const macBy = {}; mac.forEach(t => { (macBy[t.space || ''] = macBy[t.space || ''] || []).push(t); });
     return `<div class="scr">
-      <div class="tabs-head"><h1>Separadores</h1><button class="btn" data-act="newTab">+ Novo separador</button></div>
+      <div class="tabs-head"><h1>Separadores</h1>${S.tabs.length ? `<button class="btn ${S.closeAll ? 'armed' : 'ghost'}" data-act="closeAll">${S.closeAll ? `Fechar os ${S.tabs.length}?` : 'Fechar todos'}</button>` : ''}<button class="btn" data-act="newTab">+ Novo separador</button></div>
       <div class="sp-chips">${S.spaces.map(x => `<button class="chip ${x.id === S.space ? 'on' : ''}" data-act="space" data-s="${esc(x.id)}">${esc(x.name)} · ${S.tabs.filter(t => t.space === x.id).length}</button>`).join('')}<button class="chip add" data-act="spaceAdd">+ Espaço</button>${S.spaces.length > 1 ? `<button class="chip add" data-act="spaceEdit">Mudar o nome…</button>` : ''}</div>
       ${list.length ? `<div class="tgrid" id="tgrid">${list.map(t => `<div class="tcard ${t.id === S.current ? 'cur' : ''}" data-tab="${t.id}">
         <button class="th" data-act="openTab" data-id="${t.id}" style="${t.thumb ? `background-image:url('${t.thumb}')` : ''}">${t.thumb ? '' : esc((hostOf(t.url)[0] || '·').toUpperCase())}</button>
@@ -466,6 +498,14 @@ document.addEventListener('click', async e => {
     }
     case 'openTab': openTab(+b.dataset.id); break;
     case 'closeTab': closeTab(+b.dataset.id); break;
+    case 'closeAll': {
+      if (!S.closeAll) { S.closeAll = true; render(); setTimeout(() => { if (S.closeAll) { S.closeAll = false; render(); } }, 4000); break; }
+      S.closeAll = false;
+      const ids = S.tabs.map(t => t.id);
+      S.tabs = []; S.current = null;
+      for (const id of ids) await ZN.call('tabClose', { id }).catch(() => {});
+      saveTabs(); render(); toast('Separadores fechados'); break;
+    }
     case 'newTab': S.view = 'home'; render(); setTimeout(() => { const q = $('#homeQ'); if (q) q.focus(); }, 50); break;
     case 'signin': Sync.signIn(); break;
     case 'signout': if (S.delArmed !== 'signout') { S.delArmed = 'signout'; render(); } else { S.delArmed = null; Sync.signOut(); } break;
@@ -613,6 +653,87 @@ function onBack() {
   return 'exit';
 }
 
+/* ---------- meteorologia (Open-Meteo, a mesma cidade do Mac) e sites mais visitados ---------- */
+const cityNow = () => S.city || { name: 'Lisboa', lat: 38.7223, lon: -9.1393 };
+async function loadWeather(force) {
+  if (!force && S.wx && Date.now() - S.wxAt < 30 * 60 * 1000) return;
+  const c = cityNow();
+  try {
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code,is_day`
+      + `&hourly=temperature_2m,weather_code,precipitation_probability,is_day`
+      + `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=6`;
+    S.wx = JSON.parse(await ZN.call('httpGet', { url: u })); S.wxAt = Date.now();
+    savePrefs();
+    if (S.view === 'home') render();
+  } catch (e) { /* fica o que havia */ }
+}
+const wxIcon = (code, day) => { const ic = WX(code)[1]; return ic === 'sun' && day === 0 ? 'moon' : ic; };
+function wxNow() {
+  const d = S.wx, c = cityNow();
+  if (!d || !d.current) return `<div class="wx"><div><span>${esc(c.name)} · a carregar a meteorologia…</span></div></div>`;
+  const dl = d.daily || {}, rain = dl.precipitation_probability_max ? dl.precipitation_probability_max[0] : null;
+  return `<div class="wx">${W[wxIcon(d.current.weather_code, d.current.is_day)](40)}<div><b>${Math.round(d.current.temperature_2m)}°</b><span>${esc(c.name)} · ${esc(WX(d.current.weather_code)[0])}</span>${dl.temperature_2m_max ? `<span>Hoje: máx. ${Math.round(dl.temperature_2m_max[0])}° · mín. ${Math.round(dl.temperature_2m_min[0])}°${rain != null ? ` · chuva ${rain}%` : ''}</span>` : ''}</div></div>`;
+}
+function wxForecast() {
+  const d = S.wx; if (!d || !d.daily) return '';
+  const dl = d.daily;
+  let h = '<div><div class="fc">';
+  for (let i = 0; i <= 5 && i < dl.time.length; i++) {
+    const day = new Date(dl.time[i] + 'T12:00:00');
+    const lab = i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : DABR[day.getDay()].charAt(0).toUpperCase() + DABR[day.getDay()].slice(1);
+    h += `<div><span>${lab}</span>${W[WX(dl.weather_code[i])[1]](22)}<span>${Math.round(dl.temperature_2m_max[i])}° <em>${Math.round(dl.temperature_2m_min[i])}°</em></span></div>`;
+  }
+  h += '</div>';
+  const H = d.hourly;
+  if (H && H.time) {
+    // do momento atual até ao fim do dia (pelo menos 8 horas)
+    const nowIso = (d.current && d.current.time || '').slice(0, 13);
+    let start = H.time.findIndex(t => t.slice(0, 13) === nowIso); if (start < 0) start = 0;
+    const today = H.time[start].slice(0, 10);
+    let end = start; while (end < H.time.length && H.time[end].slice(0, 10) === today) end++;
+    end = Math.min(H.time.length, Math.max(end, start + 8));
+    let row = '';
+    for (let i = start; i < end; i++) {
+      const p = H.precipitation_probability ? H.precipitation_probability[i] : null;
+      row += `<div class="${i === start ? 'now' : ''}"><span class="h">${i === start ? 'Agora' : H.time[i].slice(11, 13) + 'h'}</span>${W[wxIcon(H.weather_code[i], H.is_day ? H.is_day[i] : 1)](22)}<span>${Math.round(H.temperature_2m[i])}°</span>${p != null ? `<span class="p ${p >= 40 ? 'wet' : ''}">${W.drop}${p}%</span><span class="bar"><i style="width:${p}%"></i></span>` : ''}</div>`;
+    }
+    h += `<div class="hourly">${row}</div>`;
+  }
+  return h + '</div>';
+}
+/* sites mais visitados: os do tablet primeiro, depois os do Mac e, a faltar, alguns habituais */
+function countVisit(url, title) {
+  const h = hostOf(url); if (!h) return;
+  const v = S.visits[h] || (S.visits[h] = { url: new URL(url).origin, title: '', n: 0 });
+  v.n++; v.at = Date.now();
+  if (title && url.replace(/\/$/, '') === v.url) v.title = title;
+  savePrefs();
+}
+const DEFAULT_SITES = [['Observador', 'https://observador.pt'], ['Público', 'https://www.publico.pt'], ['Expresso', 'https://expresso.pt'], ['Gmail', 'https://mail.google.com'], ['Notion', 'https://www.notion.so'], ['YouTube', 'https://www.youtube.com'], ['RTP', 'https://www.rtp.pt'], ['BBC', 'https://www.bbc.com']];
+function siteName(s) {
+  const h = hostOf(s.url);
+  const known = DEFAULT_SITES.find(([, u]) => hostOf(u) === h);
+  if (known) return known[0];
+  const base = h.split('.').slice(-2, -1)[0] || h;
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+function topSites() {
+  const out = [], seen = new Set();
+  const add = (url, title) => { const h = hostOf(url); if (!h || seen.has(h) || out.length >= 8) return; seen.add(h); out.push({ url, title }); };
+  Object.values(S.visits).sort((a, b) => b.n - a.n).forEach(v => add(v.url, v.title));
+  (S.macTop || []).forEach(t => { try { add(new URL(t.url).origin, t.title); } catch (e) { /* ok */ } });
+  DEFAULT_SITES.forEach(([n, u]) => add(u, n));
+  return out;
+}
+let prefsT = null;
+function savePrefs() {
+  clearTimeout(prefsT);
+  prefsT = setTimeout(() => ZN.call('storeWrite', { name: 'prefs.json', text: JSON.stringify({ city: S.city, macTop: S.macTop, visits: S.visits, wx: S.wx, wxAt: S.wxAt }) }).catch(() => {}), 800);
+}
+async function loadPrefs() {
+  try { const t = await ZN.call('storeRead', { name: 'prefs.json' }); if (t) { const j = JSON.parse(t); Object.assign(S, { city: j.city || null, macTop: j.macTop || [], visits: j.visits || {}, wx: j.wx || null, wxAt: j.wxAt || 0 }); } } catch (e) { /* ok */ }
+}
+
 /* ---------- atualizações (versões android-v… no GitHub) ---------- */
 const newer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
 async function checkUpdate(manual) {
@@ -635,7 +756,10 @@ async function checkUpdate(manual) {
   await loadZoom();
   await restoreTabs();
   await Sync.init();
+  await loadPrefs();
   render();
+  loadWeather();
+  setInterval(() => loadWeather(), 30 * 60 * 1000);
   setTimeout(() => checkUpdate(false), 4000);
   setInterval(() => { const c = $('#clock'); if (c) c.textContent = fmtTime(new Date()); }, 15000);
 })();

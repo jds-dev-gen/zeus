@@ -194,6 +194,35 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
 #toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); background: var(--fg); color: #fff; padding: 11px 18px; border-radius: 12px; font-size: 14px; z-index: 30; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 86vw; text-align: center; }
 #toast.on { opacity: 1; }
 
+/* 0.3.0: meteorologia, sites mais visitados, espaços do Mac */
+.home-head .wx { display: flex; align-items: center; gap: 12px; text-align: left; }
+.wx b { font-size: 34px; font-weight: 400; letter-spacing: -.02em; line-height: 1; display: block; }
+.wx span { font-size: 13px; color: var(--muted); display: block; margin-top: 3px; }
+.fc { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border: 1px solid var(--line2); border-radius: 14px; overflow: hidden; }
+.fc div { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 4px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.fc div + div { border-left: 1px solid var(--line); }
+.fc div:first-child { background: var(--fg); color: #fff; }
+.fc em { font-style: normal; color: var(--muted); }
+.fc div:first-child em { color: inherit; opacity: .6; }
+.hourly { display: flex; overflow-x: auto; border: 1px solid var(--line2); border-radius: 14px; margin-top: 10px; scrollbar-width: none; }
+.hourly::-webkit-scrollbar { display: none; }
+.hourly > div { flex: 0 0 66px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 2px 9px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.hourly > div + div { border-left: 1px solid var(--line); }
+.hourly .h { color: var(--muted); font-size: 11.5px; }
+.hourly .now .h { color: var(--fg); font-weight: 600; }
+.hourly .p { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 2px; }
+.hourly .p.wet { color: var(--fg); font-weight: 600; }
+.hourly .bar { width: 26px; height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.hourly .bar i { display: block; height: 100%; background: var(--fg); }
+.sites { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; }
+@media (orientation: portrait) { .sites { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 18px; } }
+.site { display: flex; flex-direction: column; align-items: center; gap: 7px; font-size: 12px; color: var(--soft); min-width: 0; }
+.site .sq { width: 60px; height: 60px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line2); display: grid; place-items: center; position: relative; overflow: hidden; font-size: 20px; font-weight: 700; color: var(--fg); }
+.site .sq img { position: absolute; width: 32px; height: 32px; left: 13px; top: 13px; border-radius: 6px; background: var(--surface); }
+.site em { font-style: normal; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mac-sp { display: block; background: var(--fg) !important; color: #fff !important; font: 600 12px/1 var(--mono) !important; letter-spacing: .08em; text-transform: uppercase; padding: 10px 14px; border-radius: 10px; margin: 18px 0 4px !important; }
+.btn.armed { background: #c0262d; border-color: #c0262d; color: #fff; }
+
 /* modo de leitura e espaços (0.2.0) */
 .tb.read { width: auto; padding: 0 12px; font: 600 17px/1 'Noto Serif', Georgia, serif; border: 1px solid var(--line2); height: 40px; }
 .tb.read.on { background: var(--fg); color: #fff; border-color: var(--fg); }

@@ -1607,7 +1607,8 @@ function setupSync() {
   sync.register('zoom', { get: () => zoom.data(), merge: mergeZoom, apply: d => zoom.replace(d) });
   // separadores abertos no Mac, para o tablet os mostrar em "Do Mac" (só o Mac escreve; o tablet só lê)
   sync.register('mac-tabs', {
-    get: () => ({ tabs: S.tabs.filter(t => /^https?:/.test(t.url || '')).slice(0, 80).map(t => ({ url: t.url, title: t.title || '', space: ((S.spaces || []).find(x => x.id === t.space) || {}).name || '' })) }),
+    // + a cidade da meteorologia e os sites mais visitados, para a página inicial do tablet
+    get: () => ({ tabs: S.tabs.filter(t => /^https?:/.test(t.url || '')).slice(0, 80).map(t => ({ url: t.url, title: t.title || '', space: ((S.spaces || []).find(x => x.id === t.space) || {}).name || '' })), city: S.settings.city || null, top: topSites() }),
     merge: local => local,
     apply: () => {}
   });
