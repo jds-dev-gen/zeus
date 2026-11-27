@@ -1,0 +1,106 @@
+# Publica versões novas do Olimpo para Mac (Apple Silicon e Intel).
+#
+# Quando corre:
+#  - sempre que a versão em olimpo/package.json muda no ramo main;
+#  - à mão, no separador Actions do GitHub ("Run workflow").
+# As versões do Olimpo ficam em Releases com a etiqueta olimpo-v<versão> e nunca passam a
+# ser a "última versão" do repositório (essa continua a ser a do Zeus, que se atualiza por ela).
+name: Olimpo — versões
+
+on:
+  push:
+    branches: [main]
+    paths: [olimpo/package.json]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: olimpo-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: olimpo
+
+jobs:
+  testar:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      publicar: ${{ steps.v.outputs.publicar }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Ver se esta versão já foi publicada
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if gh release view "olimpo-v$V" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            echo "A versão $V do Olimpo já existe; nada a fazer."
+          else
+            echo "publicar=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  compilar:
+    needs: testar
+    if: needs.testar.outputs.publicar == 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Empacotar e assinar (ad-hoc)
+        run: |
+          node package-mac.js arm64
+          node package-mac.js x64
+      - name: Comprimir
+        run: |
+          V=${{ needs.testar.outputs.version }}
+          for A in arm64 x64; do
+            ditto -c -k --keepParent "out/Olimpo-darwin-$A/Olimpo.app" "Olimpo-$V-mac-$A.zip"
+          done
+          ls -la Olimpo-*.zip
+      - uses: actions/upload-artifact@v5
+        with:
+          name: olimpo-mac
+          path: olimpo/Olimpo-*.zip
+          retention-days: 3
+
+  publicar:
+    needs: [testar, compilar]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: olimpo-mac
+          path: dist
+      - name: Somas de verificação
+        working-directory: dist
+        run: sha256sum Olimpo-*.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Publicar a versão
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=${{ needs.testar.outputs.version }}
+          gh release create "olimpo-v$V" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "${{ github.sha }}" \
+            --latest=false \
+            --title "Olimpo $V" \
+            --notes "Versão $V do Olimpo para Mac. Descarrega o zip do teu Mac (arm64 = Apple Silicon, x64 = Intel), abre-o e arrasta o Olimpo para as Aplicações."
