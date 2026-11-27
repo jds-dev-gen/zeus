@@ -68,6 +68,8 @@ const DEFAULT_SETTINGS = {
   rightWide: true,            // separadores à direita: true = com títulos (com zoom ajustado), false = só ícones
   rightZoom: true,            // com os títulos à direita, reduzir o zoom das páginas para manterem o aspeto de computador
   theme: 'dark',              // dark | light | system
+  skin: 'classico',           // classico (preto e branco) | olimpo (vidro, luzes e cor, como o Olimpo)
+  skinCor: 'olimpo',          // cor da skin Olimpo: olimpo (segue o espaço atual do Olimpo) | oceano | lavanda | aurora | floresta | poente | rubi | areia | grafite
   barColor: 'neutro',         // cor das barras (cima, apps, separadores, resultados): neutro | cinza | ardosia | salva | areia | noite | vinho | custom
   barCustom: {},              // cor escolhida à mão, por tema: { light: '#rrggbb', dark: '#rrggbb' }
   search: 'google',           // google | duckduckgo | startpage | brave
@@ -577,6 +579,7 @@ function pushState(now) {
       groups: S.groups || [],
       openPanel, fullApp, fullAppURL: fullApp && wc ? wc.getURL() : '', claudeOpen: S.claudeOpen,
       settings: S.settings,
+      olimpoCor,
       topSites: topSites(),
       platform: process.platform,
       versions: { zeus: app.getVersion(), electron: process.versions.electron, chrome: process.versions.chrome }
@@ -1443,7 +1446,21 @@ let radarWC = null, futebolWC = null, zoomWC = null, notasWC = null, orfeuWC = n
 let ecoApp = null;
 let orfeuApp = null;
 let notasApp = null;
-const isDark = () => S.settings.theme === 'dark' || (S.settings.theme === 'system' && nativeTheme.shouldUseDarkColors);
+const isDark = () => S.settings.skin === 'olimpo' || S.settings.theme === 'dark' || (S.settings.theme === 'system' && nativeTheme.shouldUseDarkColors);
+const themeSource = () => (S.settings.skin === 'olimpo' ? 'dark' : S.settings.theme === 'system' ? 'system' : S.settings.theme);
+/*
+ * Skin Olimpo: a cor pode seguir o espaço atual do Olimpo (lido do ficheiro do Olimpo; muda sozinha
+ * quando se muda de espaço lá).
+ */
+let olimpoCor = null;
+function lerOlimpoCor() {
+  const f = path.join(isMac ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'), 'Olimpo', 'olimpo.json');
+  let c = null;
+  try { const o = JSON.parse(fs.readFileSync(f, 'utf8')); const e = (o.espacos || []).find(x => x.id === o.espacoAtual) || (o.espacos || [])[0]; c = (e && e.cor) || null; } catch (e) { /* sem Olimpo */ }
+  if (c !== olimpoCor) { olimpoCor = c; pushState(); }
+  return f;
+}
+function vigiarOlimpo() { const f = lerOlimpoCor(); try { fs.watchFile(f, { interval: 2000 }, lerOlimpoCor); } catch (e) { /* ok */ } }
 function ensureInternalView(a) {
   const def = INTERNAL[a.internal];
   const view = new WebContentsView({ webPreferences: {
@@ -3276,6 +3293,9 @@ function setupIPC() {
     const ALLOWED = Object.keys(DEFAULT_SETTINGS).filter(k => k !== 'homeFeeds' && k !== 'teams');
     const clean = {};
     for (const k of Object.keys(patch)) if (ALLOWED.includes(k)) clean[k] = patch[k];
+    if ('skin' in clean && !['classico', 'olimpo'].includes(clean.skin)) delete clean.skin;
+    if ('skinCor' in clean && !['olimpo', 'oceano', 'lavanda', 'aurora', 'floresta', 'poente', 'rubi', 'areia', 'grafite'].includes(clean.skinCor)) delete clean.skinCor;
+    if ('skin' in clean && !('theme' in clean)) clean.theme = S.settings.theme;   // a skin muda o tema das apps internas (escuro)
     if ('barColor' in clean && !['neutro', 'cinza', 'ardosia', 'salva', 'areia', 'noite', 'vinho', 'custom'].includes(clean.barColor)) delete clean.barColor;
     if ('barCustom' in clean) {
       const bc = clean.barCustom || {}, hex = v => (/^#[0-9a-f]{6}$/i.test(v || '') ? v : undefined);
@@ -3285,7 +3305,7 @@ function setupIPC() {
     if ('updateRepo' in clean) clean.updateRepo = String(clean.updateRepo || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '');
     S.settings = Object.assign({}, S.settings, clean);
     if ('tabMode' in clean || 'rightWide' in clean || 'rightZoom' in clean) setTimeout(applyLayout, 50);
-    if (clean.theme) nativeTheme.themeSource = clean.theme === 'system' ? 'system' : clean.theme;
+    if (clean.theme) nativeTheme.themeSource = themeSource();
     if (clean.theme && radarWC && !radarWC.isDestroyed()) radarWC.send('radar:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && futebolWC && !futebolWC.isDestroyed()) futebolWC.send('futebol:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && zoomWC && !zoomWC.isDestroyed()) zoomWC.send('zoomapp:theme', isDark() ? 'dark' : 'light');
@@ -3358,7 +3378,7 @@ function setupScores() {
 
 function updateOverlayColors() {
   if (!win || isMac) return;
-  const dark = S.settings.theme === 'dark' || (S.settings.theme === 'system' && nativeTheme.shouldUseDarkColors);
+  const dark = isDark();
   try { win.setTitleBarOverlay({ color: dark ? '#0b0b0c' : '#ffffff', symbolColor: dark ? '#f6f6f4' : '#0b0b0c' }); } catch (e) { /* ok */ }
 }
 
@@ -3507,7 +3527,8 @@ app.on('open-file', (e, p) => {
 app.whenReady().then(async () => {
   loadState();
   zoom = new Zoom(app.getPath('userData'), zoomChanged);
-  nativeTheme.themeSource = S.settings.theme === 'system' ? 'system' : S.settings.theme;
+  nativeTheme.themeSource = themeSource();
+  vigiarOlimpo();
   app.userAgentFallback = chromeUA();
   zeusSession = session.fromPartition(PARTITION);
   zeusSession.setUserAgent(chromeUA());

@@ -146,9 +146,33 @@ Z.on('toast', toast);
 /* Tema                                                                 */
 /* ------------------------------------------------------------------ */
 const mq = window.matchMedia('(prefers-color-scheme: dark)');
+/* Skin Olimpo: as cores dos espaços do Olimpo (três luzes de fundo e a cor de destaque). */
+const SKIN_CORES = {
+  oceano:   ['Oceano',   [[32, 128, 170], [88, 82, 170], [40, 140, 110]],  [124, 200, 245]],
+  lavanda:  ['Lavanda',  [[110, 80, 190], [170, 90, 180], [70, 100, 190]],  [185, 163, 247]],
+  aurora:   ['Aurora',   [[30, 150, 120], [30, 110, 150], [110, 180, 80]],  [127, 224, 181]],
+  floresta: ['Floresta', [[40, 110, 60], [90, 120, 40], [30, 100, 100]],    [159, 213, 138]],
+  poente:   ['Poente',   [[200, 90, 60], [170, 60, 120], [220, 150, 60]],   [245, 169, 124]],
+  rubi:     ['Rubi',     [[170, 40, 70], [120, 40, 140], [200, 90, 60]],    [245, 138, 160]],
+  areia:    ['Areia',    [[170, 130, 70], [140, 100, 60], [110, 120, 90]],  [230, 201, 138]],
+  grafite:  ['Grafite',  [[90, 100, 115], [70, 75, 90], [110, 110, 120]],   [201, 210, 222]]
+};
+const skinCorAtual = () => { const c = (S && S.settings.skinCor) || 'olimpo'; return SKIN_CORES[c] ? c : (S && SKIN_CORES[S.olimpoCor] ? S.olimpoCor : 'oceano'); };
 function applyTheme() {
   const t = S ? S.settings.theme : 'dark';
-  document.documentElement.setAttribute('data-zeus', t === 'system' ? (mq.matches ? 'dark' : 'light') : t);
+  const olimpo = !!(S && S.settings.skin === 'olimpo');
+  const root = document.documentElement;
+  root.setAttribute('data-zeus', olimpo ? 'dark' : t === 'system' ? (mq.matches ? 'dark' : 'light') : t);
+  if (olimpo) {
+    root.setAttribute('data-skin', 'olimpo');
+    const [, [a, b, c], ac] = SKIN_CORES[skinCorAtual()];
+    root.style.setProperty('--luz1', `rgba(${a},.5)`);
+    root.style.setProperty('--luz1b', `rgba(${a.map(v => Math.round(v * 0.62))},.2)`);
+    root.style.setProperty('--luz2', `rgba(${b},.4)`);
+    root.style.setProperty('--luz3', `rgba(${c},.3)`);
+    root.style.setProperty('--acento', `rgb(${ac})`);
+    root.style.setProperty('--acento-rgb', ac.join(','));
+  } else root.removeAttribute('data-skin');
   applyBarColor();
 }
 /* Cor das barras (cima, apps, separadores à direita, resultados). Cada cor tem uma versão para o tema claro e outra para o escuro. */
@@ -171,7 +195,7 @@ function barColorFor(theme) {
 function applyBarColor() {
   let el = document.getElementById('barColorCSS');
   if (!el) { el = document.createElement('style'); el.id = 'barColorCSS'; document.head.append(el); }
-  const theme = curTheme(), c = barColorFor(theme);
+  const theme = curTheme(), c = S && S.settings.skin === 'olimpo' ? null : barColorFor(theme);   // a skin Olimpo tem as suas cores
   if (!c) { el.textContent = ''; return; }
   const light = theme === 'light';
   const mix = light ? 'white 65%' : 'white 9%', on = light ? 'white 85%' : 'white 14%';
@@ -2104,7 +2128,9 @@ async function openSettings() {
   openModal('settings', `${modalHead('Definições')}
     <div class="set-sec" style="border-top:0;padding-top:0"><h3>Aspeto</h3>
       <div class="set-row"><span>Separadores</span>${segHTML('tabMode', st.tabMode, [['mosaic', 'Mosaico'], ['top', 'Em cima'], ['right', 'À direita']])}</div>
-      <div class="set-row"><span>Tema</span>${segHTML('theme', st.theme, [['dark', 'Escuro'], ['light', 'Claro'], ['system', 'Sistema']])}</div>
+      <div class="set-row"><span>Estilo</span>${segHTML('skin', st.skin || 'classico', [['classico', 'Clássico (preto e branco)'], ['olimpo', 'Olimpo (vidro e cor)']])}</div>
+      <div class="set-row" style="align-items:flex-start" id="skinRow" ${st.skin === 'olimpo' ? '' : 'hidden'}><span>Cor do Olimpo</span><div class="barpick skinpick" id="skinPick">${[['olimpo', 'Do espaço', null]].concat(Object.entries(SKIN_CORES).map(([id, [n, l, ac]]) => [id, n, [l, ac]])).map(([id, n, p]) => `<button type="button" data-skincor="${id}" class="${(st.skinCor || 'olimpo') === id ? 'on' : ''}" title="${id === 'olimpo' ? 'Segue a cor do espaço atual do Olimpo' : esc(n)}"><span style="background:${p ? `radial-gradient(circle at 30% 30%, rgb(${p[0][0]}) 0, transparent 70%), radial-gradient(circle at 75% 75%, rgb(${p[0][1]}) 0, transparent 70%), #04060a` : 'conic-gradient(from 0deg, #7cc8f5, #b9a3f7, #f5a97c, #7fe0b5, #7cc8f5)'}">${p ? `<b style="background:rgb(${p[1]})"></b>` : ''}</span>${esc(n)}</button>`).join('')}</div></div>
+      <div class="set-row" id="themeRow" ${st.skin === 'olimpo' ? 'hidden' : ''}><span>Tema</span>${segHTML('theme', st.theme, [['dark', 'Escuro'], ['light', 'Claro'], ['system', 'Sistema']])}</div>
       <div class="set-row" style="align-items:flex-start"><span>Cor das barras</span><div class="barpick" id="barPick">${BAR_COLORS.map(([id, n, l, d]) => `<button type="button" data-bar="${id}" class="${(st.barColor || 'neutro') === id ? 'on' : ''}" title="${esc(n)}"><span><i style="background:${l || '#ffffff'}"></i><i style="background:${d || '#0b0b0c'}"></i></span>${esc(n)}</button>`).join('')}</div></div>
       <div class="set-row"><span>Ou uma cor à tua escolha <small class="hint" style="margin:0">(para o tema ${curTheme() === 'light' ? 'claro' : 'escuro'})</small></span><label class="barcustom ${st.barColor === 'custom' ? 'on' : ''}"><span id="barSw" style="background:${esc((st.barCustom || {})[curTheme()] || (curTheme() === 'light' ? '#e8e8eb' : '#1c1c1f'))}"></span><span class="linkbtn">Escolher cor…</span><input type="color" id="barCustom" value="${esc((st.barCustom || {})[curTheme()] || (curTheme() === 'light' ? '#e8e8eb' : '#1c1c1f'))}"></label></div>
       <div class="set-row"><span>Com os títulos à direita</span>${segHTML('rightZoom', String(st.rightZoom !== false), [['true', 'Manter aspeto de computador'], ['false', 'Zoom normal']])}</div>
@@ -2154,7 +2180,20 @@ async function openSettings() {
     seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
     const v = b.dataset.v === 'true' ? true : b.dataset.v === 'false' ? false : b.dataset.v;
     Z.invoke('settings:set', { [seg.dataset.setting]: v });
+    if (seg.dataset.setting === 'skin') {
+      $('#skinRow').hidden = v !== 'olimpo'; $('#themeRow').hidden = v === 'olimpo';
+      // a cor das barras não se aplica à skin Olimpo
+      const bp = $('#barPick'); if (bp) bp.closest('.set-row').hidden = v === 'olimpo';
+      const bc = $('.barcustom'); if (bc) bc.closest('.set-row').hidden = v === 'olimpo';
+    }
   }));
+  $('#skinPick').addEventListener('click', e => {
+    const b = e.target.closest('[data-skincor]'); if (!b) return;
+    $('#skinPick').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    S.settings.skinCor = b.dataset.skincor; applyTheme();
+    Z.invoke('settings:set', { skinCor: b.dataset.skincor });
+  });
+  if (st.skin === 'olimpo') { $('#barPick').closest('.set-row').hidden = true; $('.barcustom').closest('.set-row').hidden = true; }
   $('#setCity').addEventListener('click', openCity);
   $('#barPick').addEventListener('click', e => {
     const b = e.target.closest('[data-bar]'); if (!b) return;
