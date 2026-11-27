@@ -2,7 +2,7 @@
 
 Browser pessoal do João, feito com Electron (Chromium).
 
-> O **Olimpo** (a interface que substitui a secretária do Mac) vive na pasta [`olimpo/`](olimpo/README.md): é uma app separada, feita a partir da base do Zeus.
+> O **Olimpo** (a interface que substitui a secretária do Mac) tem repositório próprio: [jds-dev-gen/Olimpo](https://github.com/jds-dev-gen/Olimpo). É uma app separada, feita a partir da base do Zeus.
 
 ## Como sai uma versão nova
 1. Muda-se o código e sobe-se a versão em `package.json` (ex.: 0.2.0 → 0.2.1).
