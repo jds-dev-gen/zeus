@@ -697,7 +697,17 @@ pop.addEventListener('click', e => {
   else if ('hl' in b.dataset) { applyHl(b.dataset.hl); closePop(); }
   else if (b.id === 'unlink') { restoreRange(); const a = closestIn(getSelection().anchorNode, 'a'); if (a) { const r = document.createRange(); r.selectNodeContents(a); getSelection().removeAllRanges(); getSelection().addRange(r); } exec('unlink'); touch(); closePop(); }
   else if (b.dataset.zi) { insertZoom(+b.dataset.zi); closePop(); }
+  else if (b.dataset.tema) { setTema(b.dataset.tema); closePop(); }
 });
+/* aspeto das Notas: claro ou escuro, mesmo com a skin Olimpo do Zeus */
+let tema = 'zeus';
+const TEMAS = [['zeus', 'Como o Zeus', 'tema/skin'], ['claro', 'Claro', ''], ['escuro', 'Escuro', '']];
+function temaPop(b) {
+  if (popFor === b) return closePop();
+  openPop(b, `<div class="temas">${TEMAS.map(([id, n, d]) => `<button type="button" data-tema="${id}" class="${tema === id ? 'on' : ''}"><i>${tema === id ? '✓' : ''}</i>${n}${d ? `<small>${d}</small>` : ''}</button>`).join('')}</div>`);
+}
+async function setTema(v) { tema = await Z.setTema(v) || v; }
+$('#temaBtn').addEventListener('click', e => temaPop(e.currentTarget));
 pop.addEventListener('submit', e => {
   e.preventDefault();
   if (e.target.id === 'linkF') {
@@ -1100,6 +1110,7 @@ Z.onChanged(() => { clearTimeout(window.__lt); window.__lt = setTimeout(() => lo
 
 (async () => {
   setTheme(await Z.theme());
+  tema = await Z.getTema() || 'zeus';
   try { if (localStorage.getItem('notas.focus')) setFocusMode(true); } catch (e) { /* ok */ }
   jobs = await Z.jobs() || [];
   model = await Z.modelState() || model;

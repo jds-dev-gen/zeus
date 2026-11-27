@@ -69,6 +69,7 @@ const DEFAULT_SETTINGS = {
   rightZoom: true,            // com os títulos à direita, reduzir o zoom das páginas para manterem o aspeto de computador
   theme: 'dark',              // dark | light | system
   skin: 'classico',           // classico (preto e branco) | olimpo (vidro, luzes e cor, como o Olimpo)
+  notasTema: 'zeus',          // tema das Notas: zeus (segue o tema/skin do Zeus) | claro | escuro — dá para ter Notas claras mesmo com a skin Olimpo
   skinCor: 'olimpo',          // cor da skin Olimpo: olimpo (segue o espaço atual do Olimpo) | oceano | lavanda | aurora | floresta | poente | rubi | areia | grafite
   barColor: 'neutro',         // cor das barras (cima, apps, separadores, resultados): neutro | cinza | ardosia | salva | areia | noite | vinho | custom
   barCustom: {},              // cor escolhida à mão, por tema: { light: '#rrggbb', dark: '#rrggbb' }
@@ -1447,6 +1448,9 @@ let ecoApp = null;
 let orfeuApp = null;
 let notasApp = null;
 const isDark = () => S.settings.skin === 'olimpo' || S.settings.theme === 'dark' || (S.settings.theme === 'system' && nativeTheme.shouldUseDarkColors);
+// as Notas podem ter o seu próprio tema (claro/escuro), mesmo com a skin Olimpo
+const notasDark = () => (S.settings.notasTema === 'claro' ? false : S.settings.notasTema === 'escuro' ? true : isDark());
+const notasTheme = () => (notasDark() ? 'dark' : 'light');
 const themeSource = () => (S.settings.skin === 'olimpo' ? 'dark' : S.settings.theme === 'system' ? 'system' : S.settings.theme);
 /*
  * Skin Olimpo: a cor pode seguir o espaço atual do Olimpo (lido do ficheiro do Olimpo; muda sozinha
@@ -1468,7 +1472,7 @@ function ensureInternalView(a) {
     sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, spellcheck: true
   } });
   view.__internal = true;
-  view.setBackgroundColor(isDark() ? '#0b0b0c' : '#ffffff');
+  view.setBackgroundColor((a.internal === 'notas' ? notasDark() : isDark()) ? '#0b0b0c' : '#ffffff');
   appViews.set(a.id, view);
   win.contentView.addChildView(view);
   view.setVisible(false);
@@ -3120,6 +3124,16 @@ function setupIPC() {
     app, ipcMain, dialog, shell, Menu, BrowserWindow, net, safeStorage, Notification, systemPreferences,
     getWC: () => notasWC, getUi: () => ui, getWin: () => win, getView: () => appViews.get('notas'),
     getZoom: () => zoom, isDark, openTab: url => newTab({ url, space: spaceForOpener() }),
+    notasTheme,
+    getTema: () => S.settings.notasTema || 'zeus',
+    setTema: v => {
+      if (!['zeus', 'claro', 'escuro'].includes(v)) return S.settings.notasTema || 'zeus';
+      S.settings = Object.assign({}, S.settings, { notasTema: v });
+      const vw = appViews.get('notas'); if (vw) vw.setBackgroundColor(notasDark() ? '#0b0b0c' : '#ffffff');
+      if (notasWC && !notasWC.isDestroyed()) notasWC.send('notas:theme', notasTheme());
+      pushState(true); saveState();
+      return v;
+    },
     onStatus: () => pushState(true),
     onNotasChange: () => { if (sync) sync.touch(); }
   });
@@ -3295,6 +3309,7 @@ function setupIPC() {
     for (const k of Object.keys(patch)) if (ALLOWED.includes(k)) clean[k] = patch[k];
     if ('skin' in clean && !['classico', 'olimpo'].includes(clean.skin)) delete clean.skin;
     if ('skinCor' in clean && !['olimpo', 'oceano', 'lavanda', 'aurora', 'floresta', 'poente', 'rubi', 'areia', 'grafite'].includes(clean.skinCor)) delete clean.skinCor;
+    if ('notasTema' in clean && !['zeus', 'claro', 'escuro'].includes(clean.notasTema)) delete clean.notasTema;
     if ('skin' in clean && !('theme' in clean)) clean.theme = S.settings.theme;   // a skin muda o tema das apps internas (escuro)
     if ('barColor' in clean && !['neutro', 'cinza', 'ardosia', 'salva', 'areia', 'noite', 'vinho', 'custom'].includes(clean.barColor)) delete clean.barColor;
     if ('barCustom' in clean) {
@@ -3309,7 +3324,7 @@ function setupIPC() {
     if (clean.theme && radarWC && !radarWC.isDestroyed()) radarWC.send('radar:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && futebolWC && !futebolWC.isDestroyed()) futebolWC.send('futebol:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && zoomWC && !zoomWC.isDestroyed()) zoomWC.send('zoomapp:theme', isDark() ? 'dark' : 'light');
-    if (clean.theme && notasWC && !notasWC.isDestroyed()) notasWC.send('notas:theme', isDark() ? 'dark' : 'light');
+    if ((clean.theme || 'notasTema' in clean) && notasWC && !notasWC.isDestroyed()) notasWC.send('notas:theme', notasTheme());
     if (clean.theme && orfeuWC && !orfeuWC.isDestroyed()) orfeuWC.send('orfeu:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && hermesWC && !hermesWC.isDestroyed()) hermesWC.send('hermes:theme', isDark() ? 'dark' : 'light');
     if (clean.theme && ecoWC && !ecoWC.isDestroyed()) ecoWC.send('eco:theme', isDark() ? 'dark' : 'light');
