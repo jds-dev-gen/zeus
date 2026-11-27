@@ -34,7 +34,10 @@ function setupNotas(x) {
   const str = (v, n = 200) => String(v == null ? '' : v).slice(0, n);
 
   /* ---------- notas e pastas ---------- */
-  h('theme', () => (x.isDark() ? 'dark' : 'light'));
+  h('theme', () => (x.notasTheme ? x.notasTheme() : x.isDark() ? 'dark' : 'light'));
+  // tema próprio das Notas: 'zeus' (segue o Zeus/skin) | 'claro' | 'escuro'
+  h('getTema', () => (x.getTema ? x.getTema() : 'zeus'));
+  h('setTema', v => (x.setTema ? x.setTema(str(v, 10)) : 'zeus'));
   h('list', () => serial(() => notas.scan()));
   h('search', q => notas.search(str(q, 200)));
   h('read', async id => { const n = await notas.read(str(id, 40)); if (n && n.audio) n.audioUrl = fs.existsSync(n.audio) ? pathToFileURL(n.audio).href : ''; return n; });

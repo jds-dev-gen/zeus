@@ -182,6 +182,13 @@ body.focus .docwrap { max-width: 760px; padding-top: 56px; }
 .pop .swc.auto { background: var(--fg); }
 .pop .lnk { border: 0; background: transparent; color: var(--muted); padding: 3px 8px; border-radius: 6px; font-size: 12.5px; border-left: 1px solid var(--line2); }
 .pop .lnk:hover { color: var(--fg); }
+.pop .temas { display: flex; flex-direction: column; min-width: 190px; }
+.pop .temas button { border: 0; background: transparent; text-align: left; padding: 7px 10px; border-radius: 7px; display: flex; align-items: center; gap: 9px; }
+.pop .temas button:hover { background: var(--surface2); }
+.pop .temas button i { width: 14px; font-style: normal; color: var(--muted); }
+.pop .temas button.on i { color: var(--fg); }
+.pop .temas small { color: var(--muted); font-size: 11.5px; margin-left: auto; padding-left: 10px; }
+.icon.tema { width: 32px; height: 32px; }
 .pop form { display: flex; gap: 6px; }
 .pop input[type=text], .pop input[type=url], .pop input[type=search] { height: 32px; border-radius: 8px; border: 1px solid var(--line2); background: var(--surface); padding: 0 10px; outline: none; font-size: 13px; }
 .pop.zoomhl { width: 420px; max-height: 420px; display: flex; flex-direction: column; gap: 8px; }
