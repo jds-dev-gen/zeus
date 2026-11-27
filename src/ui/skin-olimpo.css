@@ -1,0 +1,97 @@
+/*
+ * Skin "Olimpo": o Zeus com o aspeto do Olimpo. Fundo escuro com três luzes de cor a mover-se devagar,
+ * barras e painéis em vidro, letra Inter / Space Grotesk e uma cor de destaque (a do espaço do Olimpo,
+ * ou a escolhida nas Definições). Só se aplica com <html data-skin="olimpo">; o resto do Zeus não muda.
+ */
+@font-face { font-family: 'Inter'; src: url('fonts/Inter.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+@font-face { font-family: 'Space Grotesk'; src: url('fonts/SpaceGrotesk.woff2') format('woff2'); font-weight: 300 700; font-display: block; }
+
+.luzes { display: none; }
+
+:root[data-skin="olimpo"] {
+  --acento: rgb(124, 200, 245); --acento-rgb: 124, 200, 245;
+  --luz1: rgba(32,128,170,.5); --luz1b: rgba(20,80,120,.2); --luz2: rgba(88,82,170,.4); --luz3: rgba(40,140,110,.3);
+  --vidro-blur: blur(32px) saturate(150%);
+  --bg: #04060a;
+  --chrome: rgba(10, 14, 22, .42); --rail: rgba(10, 14, 22, .32);
+  --surface: rgba(255, 255, 255, .07); --surface2: rgba(255, 255, 255, .11);
+  --line: rgba(255, 255, 255, .09); --line2: rgba(255, 255, 255, .15);
+  --fg: #ffffff; --soft: rgba(255, 255, 255, .8); --muted: rgba(255, 255, 255, .6);
+  --inv-bg: var(--acento); --inv-fg: #04060a;
+  --veil: rgba(4, 6, 10, .55); --veil-line: rgba(255, 255, 255, .14); --veil-fill: rgba(255, 255, 255, .07);
+  --zone-line: rgba(var(--acento-rgb), .4); --zone-fill: rgba(var(--acento-rgb), .05); --zone-cur: var(--acento);
+  --shadow: rgba(0, 0, 0, .5);
+  --sph-bg: rgba(var(--acento-rgb), .25); --sph-fg: #ffffff;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+/* fundo: três luzes (como no Olimpo) */
+@keyframes zoDrift { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(50px, 30px) scale(1.12); } }
+[data-skin="olimpo"] .luzes { display: block; position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+[data-skin="olimpo"] .luzes i { position: absolute; border-radius: 50%; will-change: transform; transition: background 1.2s ease; }
+[data-skin="olimpo"] .luzes i:nth-child(1) { left: -15vw; top: -29vh; width: 62vw; height: 91vh; background: radial-gradient(circle, var(--luz1) 0%, var(--luz1b) 40%, transparent 70%); animation: zoDrift 26s ease-in-out infinite; }
+[data-skin="olimpo"] .luzes i:nth-child(2) { right: -18vw; top: 24vh; width: 57vw; height: 91vh; background: radial-gradient(circle, var(--luz2) 0%, transparent 70%); animation: zoDrift 32s ease-in-out infinite reverse; }
+[data-skin="olimpo"] .luzes i:nth-child(3) { left: 29vw; bottom: -42vh; width: 53vw; height: 69vh; background: radial-gradient(circle, var(--luz3) 0%, transparent 68%); animation: zoDrift 38s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { [data-skin="olimpo"] .luzes i { animation: none; } }
+[data-skin="olimpo"] .app { position: relative; z-index: 1; }
+
+/* barras e painéis em vidro */
+[data-skin="olimpo"] .top { background: var(--chrome); backdrop-filter: var(--vidro-blur); border-bottom-color: var(--line); }
+[data-skin="olimpo"] .rail { background: var(--rail); backdrop-filter: var(--vidro-blur); }
+[data-skin="olimpo"] .right { background: rgba(10, 14, 22, .32); backdrop-filter: var(--vidro-blur); }
+[data-skin="olimpo"] .viewport { background: transparent; }
+[data-skin="olimpo"] .panel, [data-skin="olimpo"] .claude { background: rgba(10, 14, 22, .5); backdrop-filter: var(--vidro-blur); }
+[data-skin="olimpo"] .brand { font-family: var(--display); font-weight: 600; letter-spacing: .01em; }
+[data-skin="olimpo"] .brand svg { color: var(--acento); filter: drop-shadow(0 0 6px rgba(var(--acento-rgb), .6)); }
+
+/* janelas por cima (sugestões, partilha, definições…) */
+[data-skin="olimpo"] .sugg, [data-skin="olimpo"] .sharepop, [data-skin="olimpo"] .modal, [data-skin="olimpo"] .dl-peek {
+  background: rgba(16, 20, 30, .78); backdrop-filter: blur(40px) saturate(160%);
+  border-color: rgba(255, 255, 255, .16); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 30px 80px rgba(0, 0, 0, .5);
+}
+[data-skin="olimpo"] .modal { border-radius: 22px; }
+[data-skin="olimpo"] .modal-wrap { backdrop-filter: blur(6px); }
+[data-skin="olimpo"] .sugg button.sel { background: rgba(var(--acento-rgb), .16); }
+
+/* apps (coluna da esquerda) e separadores (à direita) */
+[data-skin="olimpo"] .app-btn { background: rgba(255, 255, 255, .07); border-color: rgba(255, 255, 255, .14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1); border-radius: 17px; }
+[data-skin="olimpo"] .app-btn:hover { background: rgba(255, 255, 255, .12); }
+[data-skin="olimpo"] .app-item.on .app-btn, [data-skin="olimpo"] .app-btn.on, [data-skin="olimpo"] .app-btn[aria-pressed="true"] { border-color: rgba(var(--acento-rgb), .7); box-shadow: 0 0 0 1px rgba(var(--acento-rgb), .4), 0 0 18px rgba(var(--acento-rgb), .25); }
+[data-skin="olimpo"] .rt.on { background: rgba(var(--acento-rgb), .16); color: #fff; box-shadow: inset 2px 0 0 var(--acento); }
+[data-skin="olimpo"] .rt:hover { background: rgba(255, 255, 255, .07); }
+[data-skin="olimpo"] .progress { background: var(--acento) !important; box-shadow: 0 0 8px rgba(var(--acento-rgb), .7); }
+
+/* barra de endereço e botões de cima */
+[data-skin="olimpo"] .addr { background: rgba(255, 255, 255, .07); border-color: rgba(var(--acento-rgb), .45); border-radius: 10px; }
+[data-skin="olimpo"] .title-btn:hover { background: rgba(255, 255, 255, .07); }
+[data-skin="olimpo"] .tbtn { border-color: rgba(255, 255, 255, .14); background: rgba(255, 255, 255, .05); border-radius: 10px; }
+[data-skin="olimpo"] .tbtn:hover { background: rgba(255, 255, 255, .1); }
+
+/* página inicial */
+[data-skin="olimpo"] .nt-time { font-family: var(--display); font-weight: 300; letter-spacing: -.04em; text-shadow: 0 0 40px rgba(var(--acento-rgb), .25); }
+[data-skin="olimpo"] .ask { background: rgba(255, 255, 255, .07); border-color: rgba(255, 255, 255, .16); border-radius: 20px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 20px 50px rgba(0, 0, 0, .25); backdrop-filter: var(--vidro-blur); }
+[data-skin="olimpo"] .ask:focus-within { border-color: rgba(var(--acento-rgb), .6); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 0 0 4px rgba(var(--acento-rgb), .12); }
+[data-skin="olimpo"] .go { border-radius: 13px; box-shadow: 0 0 18px rgba(var(--acento-rgb), .35); }
+[data-skin="olimpo"] .short span { background: rgba(255, 255, 255, .07); border-color: rgba(255, 255, 255, .14); border-radius: 18px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1); font-family: var(--display); }
+[data-skin="olimpo"] .short:hover span { background: rgba(var(--acento-rgb), .16); border-color: rgba(var(--acento-rgb), .5); }
+[data-skin="olimpo"] .today-empty, [data-skin="olimpo"] .fc, [data-skin="olimpo"] .hourly { background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .12); border-radius: 18px; backdrop-filter: var(--vidro-blur); }
+[data-skin="olimpo"] .chip { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .14); }
+[data-skin="olimpo"] .lbl-mono { color: rgba(var(--acento-rgb), .85); }
+[data-skin="olimpo"] a, [data-skin="olimpo"] .linkbtn { color: var(--acento); }
+
+/* botões e escolhas */
+[data-skin="olimpo"] .seg { background: rgba(255, 255, 255, .07); border-radius: 12px; }
+[data-skin="olimpo"] .seg button.on { box-shadow: 0 0 14px rgba(var(--acento-rgb), .3); }
+[data-skin="olimpo"] .btn { border-radius: 12px; }
+[data-skin="olimpo"] .btn.ghost { border-color: rgba(255, 255, 255, .18); background: rgba(255, 255, 255, .05); }
+[data-skin="olimpo"] button:focus-visible, [data-skin="olimpo"] input:focus-visible, [data-skin="olimpo"] [tabindex]:focus-visible { outline-color: var(--acento); }
+[data-skin="olimpo"] ::-webkit-scrollbar { width: 10px; height: 10px; }
+[data-skin="olimpo"] ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .14); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+[data-skin="olimpo"] ::-webkit-scrollbar-track { background: transparent; }
+
+/* escolha da cor nas Definições (vale nos dois estilos) */
+.skinpick { max-width: 560px; gap: 8px; }
+.skinpick button > span { position: relative; border-radius: 50%; width: 34px; height: 34px; outline-offset: 2px; }
+.skinpick button > span b { position: absolute; right: 2px; bottom: 2px; width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 6px rgba(0, 0, 0, .5); }
