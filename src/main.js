@@ -21,6 +21,7 @@ const fs = require('fs');
 const { ElectronChromeExtensions } = require('electron-chrome-extensions');
 const { installChromeWebStore, uninstallExtension, loadAllExtensions } = require('electron-chrome-web-store');
 const { Updater } = require('./updater');
+const { setupEncaixe } = require('./encaixe');
 const { Scores } = require('./scores');
 const { Zoom, mergeZoom } = require('./zoom');
 const { Sync } = require('./sync');
@@ -314,7 +315,7 @@ function saveNow() {
       currentIndex: Math.max(0, S.tabs.findIndex(t => t.id === S.currentId)),
       spaces: S.spaces, later: S.later.slice(0, 40), closed: S.closed.slice(0, 15),
       pendingKey: S.pendingKey || null, apps: S.apps, groups: S.groups || [], favMigrated: !!S.favMigrated, removedApps: S.removedApps || [], waLinks: true, gmailLinks: true, protonLinks: true, driveLinks: true, newestFirst: true, rightWideV: true, settings: S.settings, permissions: S.permissions,
-      siteZoom: S.siteZoom || {}, downloads: (S.downloads || []).slice(0, DL_MAX).map(d => d.state === 'progressing' ? { ...d, state: 'interrupted', paused: false } : d), visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds,
+      siteZoom: S.siteZoom || {}, downloads: (S.downloads || []).slice(0, DL_MAX).map(d => d.state === 'progressing' ? { ...d, state: 'interrupted', paused: false } : d), visits: S.visits, history: S.history.slice(0, HISTORY_MAX), appLast: S.appLast, bounds: (encaixe && encaixe.boundsGuardar()) || (win && !win.isDestroyed() ? win.getNormalBounds() : S.bounds),
       claudeOpen: S.claudeOpen
     };
     fs.mkdirSync(path.dirname(stateFile()), { recursive: true });
@@ -326,6 +327,7 @@ function saveNow() {
 /* Janela, vistas e disposição                                         */
 /* ------------------------------------------------------------------ */
 let win = null;
+let encaixe = null;   // Zeus encaixado num painel do Olimpo (ver encaixe.js)
 let ui = null;
 let zeusSession = null;
 let videoDL = null;
@@ -3484,6 +3486,19 @@ function authReply(id, user, pass) {
   p.callback(String(user), String(pass || ''));
 }
 
+/*
+ * Endereços enviados por outras apps (ex.: o Olimpo faz "open -a Zeus <endereço>" quando se
+ * clica num link do Apolo): abrem num separador novo. Só http/https.
+ */
+const pendingURLs = [];
+function openFromOutside(url) {
+  if (!/^https?:\/\//i.test(String(url || ''))) return;
+  if (!app.isReady() || !win) { pendingURLs.push(url); return; }
+  newTab({ url });
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus();
+}
+app.on('open-url', (e, url) => { e.preventDefault(); openFromOutside(url); });
 app.on('open-file', (e, p) => {
   if (!isOrfeuMedia(p)) return;
   e.preventDefault();
@@ -3508,6 +3523,7 @@ app.whenReady().then(async () => {
   if (!S.favMigrated) setTimeout(() => useSiteIcons(false).then(r => { S.favMigrated = true; saveState(); }).catch(() => {}), 8000);
   buildMenu();
   createWindow();
+  encaixe = setupEncaixe({ app, getWin: () => (win && !win.isDestroyed() ? win : null), versao: PKG.version });
   await setupExtensions();
   setupUpdater();
   setupScores();
@@ -3519,6 +3535,8 @@ app.whenReady().then(async () => {
   if (S.claudeOpen) ensureClaudeView();
   // ficheiros abertos no Finder antes de o Zeus estar pronto
   if (pendingMedia.length) setTimeout(() => { const q = pendingMedia.splice(0); if (q.length) orfeuOpenPaths(q); }, 1200);
+  // endereços recebidos antes de o Zeus estar pronto
+  if (pendingURLs.length) setTimeout(() => pendingURLs.splice(0).forEach(openFromOutside), 800);
   applyLayout();
   pushState(true);
   if (Notification.isSupported()) { /* notificações nativas das páginas ficam ativas */ }

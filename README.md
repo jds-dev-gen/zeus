@@ -2,6 +2,8 @@
 
 Browser pessoal do João, feito com Electron (Chromium).
 
+> O **Olimpo** (a interface que substitui a secretária do Mac) tem repositório próprio: [jds-dev-gen/Olimpo](https://github.com/jds-dev-gen/Olimpo). É uma app separada, feita a partir da base do Zeus.
+
 ## Como sai uma versão nova
 1. Muda-se o código e sobe-se a versão em `package.json` (ex.: 0.2.0 → 0.2.1).
 2. Ao chegar ao ramo `main`, o GitHub Actions (`.github/workflows/release.yml`) compila o Zeus para Mac (Apple Silicon e Intel), assina-o ad-hoc e publica a versão em *Releases*, com um `SHA256SUMS.txt`.
